@@ -1,4 +1,3 @@
-javascript
 import pkg from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
 import ollama from 'ollama';
