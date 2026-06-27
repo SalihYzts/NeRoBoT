@@ -80,7 +80,7 @@ Başlamadan önce şunların kurulu olduğundan emin olun:
 ### 1. Depoyu Klonlayın
 
 ```bash
-git clone https://github.com/kullanici/nerobot.git
+git clone https://github.com/SalihYzts/NeRoBoT.git
 cd nerobot
 ```
 

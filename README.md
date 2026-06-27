@@ -79,7 +79,7 @@ Make sure you have the following installed before getting started:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/user/nerobot.git
+git clone https://github.com/SalihYzts/NeRoBoT.git
 cd nerobot
 ```
 
