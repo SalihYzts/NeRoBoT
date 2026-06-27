@@ -1,4 +1,4 @@
-```                                                                                                      
+```                                                                                                         
                                                                                                       
                                                                                                       
         :                                                                                          :  
@@ -23,71 +23,75 @@
                                                                                                       
                                                                                                       
                                                                                                     
-```   
+```
 
-**NeRoBoT**, [Ollama](https://ollama.com/) ile çalışan yapay zeka modellerini **WhatsApp** üzerinden kullanmanızı sağlayan bir bottur. `whatsapp-web.js` kütüphanesi kullanılarak geliştirilmiştir.
+**NeRoBoT** is a bot that lets you use AI models powered by [Ollama](https://ollama.com/) through **WhatsApp**. It is built using the `whatsapp-web.js` library.
 
-Geliştirici: **TheSalHeLP**
+Developer: **TheSalHeLP**
+
+---
+## Documentation
+- [Türkçe README](READMETR.md)
+- Türkçe README dosyasına ulaşmak için.
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Commands](#commands)
+- [Default Configuration](#default-configuration)
+- [Troubleshooting](#troubleshooting)
+- [Security Notes](#security-notes)
+- [License](#license)
 
 ---
 
-## İçindekiler
+## Features
 
-- [Özellikler](#özellikler)
-- [Gereksinimler](#gereksinimler)
-- [Kurulum](#kurulum)
-- [Komutlar](#komutlar)
-- [Varsayılan Yapılandırma](#varsayılan-yapılandırma)
-- [Sık Karşılaşılan Sorunlar](#sık-karşılaşılan-sorunlar)
-- [Güvenlik Notları](#güvenlik-notları)
-- [Lisans](#lisans)
-
----
-
-## Özellikler
-
-- Yerel YZ Desteği — Ollama üzerinden istediğin modeli kullanın
-- Sohbet Hafızası — Her sohbet için ayrı bağlam (ID tabanlı)
-- Whitelist Sistemi — İstemediğiniz kişilerin botu kullanmasını engelleyin
-- Admin Paneli — Sadece yetkili kişiler yönetim komutlarını kullanabilir
-- Kişilik (Personality) — Botun sistem mesajını değiştirin
-- Özelleştirilebilir Prefix'ler — Hem normal hem debug prefix ayarlanabilir
-- Sabit Sohbet Modu — Botu tek bir sohbete kilitleyin
-- Debug Kanalı — Yeni mesajları ayrı bir sohbete bildirin
-- Bilgi Komutu — Tüm sistem durumunu tek mesajda görün
+- Local AI Support — Use any model you want through Ollama
+- Chat Memory — Separate context for each chat (ID-based)
+- Whitelist System — Prevent unwanted people from using the bot
+- Admin Panel — Only authorized users can run management commands
+- Personality — Change the bot's system prompt
+- Customizable Prefixes — Both normal and debug prefixes can be changed
+- Fixed Chat Mode — Lock the bot to a single chat
+- Debug Channel — Forward new messages to a separate chat
+- Info Command — View the entire system status in a single message
 
 ---
 
-## Gereksinimler
+## Requirements
 
-Başlamadan önce şunların kurulu olduğundan emin olun:
+Make sure you have the following installed before getting started:
 
 - **Node.js** >= 18.x
 - **npm** >= 9.x
-- **Ollama** (güncel)
-- **Google Chrome** (güncel)
-- **İşletim Sistemi:** Windows / Linux / macOS
+- **Ollama** (latest)
+- **Google Chrome** (latest)
+- **Operating System:** Windows / Linux / macOS
 
 ---
 
-## Kurulum
+## Installation
 
-### 1. Depoyu Klonlayın
+### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/kullanici/nerobot.git
+git clone https://github.com/user/nerobot.git
 cd nerobot
 ```
 
-### 2. Bağımlılıkları Kurun
+### 2. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 3. Ollama'yı Kurun ve Bir Model İndirin
+### 3. Install Ollama and Pull a Model
 
-[Ollama](https://ollama.com/) sitesinden uygulamayı indirip kurun, ardından kullanmak istediğiniz modeli indirin:
+Download and install Ollama from [ollama.com](https://ollama.com/), then pull the model you want to use:
 
 ```bash
 ollama pull minimax-m3:cloud
@@ -96,25 +100,25 @@ ollama pull mistral
 ollama pull gemma2
 ```
 
-### 4. Yapılandırma
+### 4. Configuration
 
 <details>
-<summary><b>Chrome Yolu Ayarı (Windows)</b></summary>
+<summary><b>Chrome Path Setting (Windows)</b></summary>
 
-Kod içinde `PUPPETEER_EXECUTABLE_PATH` kısmını kendi sisteminize göre ayarlayın:
+Adjust the `PUPPETEER_EXECUTABLE_PATH` in the code to match your system:
 
 javascript
 process.env.PUPPETEER_EXECUTABLE_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 
 
-Linux/Mac kullanıyorsanız bu satırı yorum satırı yapabilir veya silebilirsiniz.
+If you are on Linux/Mac, you can comment out or remove this line.
 
 </details>
 
 <details>
-<summary><b>Boş Yapılandırma Dosyaları</b></summary>
+<summary><b>Empty Configuration Files</b></summary>
 
-Kod otomatik olarak oluşturur ama isterseniz kendiniz de oluşturabilirsiniz:
+The code creates these automatically, but you can create them manually if you prefer:
 
 ```bash
 echo "[]" > whitelist.json
@@ -123,169 +127,169 @@ echo "[]" > admin.json
 
 </details>
 
-### 5. Botu Başlatın
+### 5. Start the Bot
 
 ```bash
 node NeRoBoT.js
 ```
 
-> **Not:** Chrome penceresi görünür olarak açılacak (`headless: false`). QR kodu terminalde görünecek.
+> **Note:** The Chrome window will open visibly (`headless: false`). The QR code will appear in the terminal.
 
-### 6. WhatsApp'a Başlanın
+### 6. Connect to WhatsApp
 
-1. Terminalde çıkan QR kodu telefonunuzla okutun
-2. WhatsApp > Ayarlar > Bağlı Cihazlar > Cihaz Bağla
-
----
-
-## Komutlar
-
-<details>
-<summary><b>Yönetim Komutları</b></summary>
-
-| Komut | Açıklama |
-|---|---|
-| `!adminadd [ID]` | Sohbeti veya belirtilen ID'yi admin listesine ekler. |
-| `!adminremove [ID]` | Sohbeti veya belirtilen ID'yi admin listesinden siler. |
-| `!adminlist` | Tüm adminleri listeler. |
-| `!adminreset` | Admin listesini tamamen temizler. |
-
-</details>
-
-<details>
-<summary><b>Beyaz Liste Komutları</b></summary>
-
-| Komut | Açıklama |
-|---|---|
-| `!whitelistadd [ID]` | Sohbeti veya belirtilen ID'yi beyaz listeye ekler. |
-| `!whitelistremove [ID]` | Sohbeti veya belirtilen ID'yi beyaz listeden siler. |
-| `!whitelist` | Beyaz listedeki sohbetleri gösterir. |
-| `!whitelistreset` | Beyaz listeyi tamamen temizler. |
-| `!whitelistcontrol` | Yeni sohbet kontrolünü aç/kapat. |
-
-</details>
-
-<details>
-<summary><b>Sistem Ayarları</b></summary>
-
-| Komut | Açıklama |
-|---|---|
-| `!prefix [yeniPrefix]` | Normal komut prefix'ini değiştirir. |
-| `!debugprefix [yeniDebug]` | Debug komut prefix'ini değiştirir. |
-| `!fixedchat` | Botu sadece bulunduğun sohbette çalışacak şekilde sabitler veya serbest bırakır. |
-| `!debugchat` | Sohbeti debug kanalı olarak kaydeder. |
-
-</details>
-
-<details>
-<summary><b>AI Yönetimi</b></summary>
-
-| Komut | Açıklama |
-|---|---|
-| `!aichat` | AI sohbeti açar/kapatır. |
-| `!personality [prompt]` | Botun kişilik promptunu gösterir veya günceller. |
-| `!model [isim]` | AI modelini değiştirir veya mevcut modeli gösterir. |
-| `!clear [ID]` | Sohbetin hafızasını temizler. |
-| `!clearall` | Tüm sohbetlerin hafızasını temizler. |
-
-</details>
-
-<details>
-<summary><b>Bilgi ve Yardım</b></summary>
-
-| Komut | Açıklama |
-|---|---|
-| `!info` | Sistem ve sohbet durumunu gösterir (prefix, AI durumu, admin/beyaz liste sayısı vb.). |
-| `!help` | Bu yardım menüsünü gösterir. |
-| `!helplanguage tr/en` | Yardım dilini değiştirir. |
-
-</details>
+1. Scan the QR code in the terminal with your phone
+2. WhatsApp > Settings > Linked Devices > Link a Device
 
 ---
 
-## Varsayılan Yapılandırma
+## Commands
 
 <details>
-<summary><b>Yapılandırma Detayları</b></summary>
+<summary><b>Management Commands</b></summary>
 
-| Değişken | Varsayılan Değer |
+| Command | Description |
+|---|---|
+| `!adminadd [ID]` | Adds the current chat or specified ID to the admin list. |
+| `!adminremove [ID]` | Removes the current chat or specified ID from the admin list. |
+| `!adminlist` | Lists all admins. |
+| `!adminreset` | Completely clears the admin list. |
+
+</details>
+
+<details>
+<summary><b>Whitelist Commands</b></summary>
+
+| Command | Description |
+|---|---|
+| `!whitelistadd [ID]` | Adds the current chat or specified ID to the whitelist. |
+| `!whitelistremove [ID]` | Removes the current chat or specified ID from the whitelist. |
+| `!whitelist` | Shows the chats in the whitelist. |
+| `!whitelistreset` | Completely clears the whitelist. |
+| `!whitelistcontrol` | Toggles new chat control on/off. |
+
+</details>
+
+<details>
+<summary><b>System Settings</b></summary>
+
+| Command | Description |
+|---|---|
+| `!prefix [newPrefix]` | Changes the normal command prefix. |
+| `!debugprefix [newDebug]` | Changes the debug command prefix. |
+| `!fixedchat` | Locks the bot to work only in the current chat, or releases it. |
+| `!debugchat` | Registers the current chat as the debug channel. |
+
+</details>
+
+<details>
+<summary><b>AI Management</b></summary>
+
+| Command | Description |
+|---|---|
+| `!aichat` | Toggles AI chat on/off. |
+| `!personality [prompt]` | Shows or updates the bot's personality prompt. |
+| `!model [name]` | Changes the AI model or shows the current one. |
+| `!clear [ID]` | Clears the chat memory. |
+| `!clearall` | Clears memory for all chats. |
+
+</details>
+
+<details>
+<summary><b>Info and Help</b></summary>
+
+| Command | Description |
+|---|---|
+| `!info` | Shows system and chat status (prefix, AI state, admin/whitelist count, etc.). |
+| `!help` | Shows the help menu. |
+| `!helplanguage tr/en` | Changes the help language. |
+
+</details>
+
+---
+
+## Default Configuration
+
+<details>
+<summary><b>Configuration Details</b></summary>
+
+| Variable | Default Value |
 |---|---|
 | Normal Prefix | `.` |
 | Debug Prefix | `!` |
 | AI Model | `minimax-m3:cloud` |
-| Sistem Promptu | `Your name is NeRoBoT. You were created by Salih Yazıtaş.` |
-| Yardım Dili | `en` (İngilizce) |
+| System Prompt | `Your name is NeRoBoT. You were created by Salih Yazıtaş.` |
+| Help Language | `en` (English) |
 | AI Chat | Enabled |
-| Whitelist Kontrolü | Disabled |
-| Sabit Sohbet | Disabled |
-| Debug Kanal | None |
+| Whitelist Control | Disabled |
+| Fixed Chat | Disabled |
+| Debug Channel | None |
 
 </details>
 
 ---
 
-## Sık Karşılaşılan Sorunlar
+## Troubleshooting
 
 <details>
-<summary><b>Chrome not found hatası</b></summary>
+<summary><b>Chrome not found error</b></summary>
 
-`PUPPETEER_EXECUTABLE_PATH` yolunu kontrol edin. Linux'ta `/usr/bin/google-chrome`, macOS'ta `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` olabilir.
+Check the `PUPPETEER_EXECUTABLE_PATH` value. On Linux it is usually `/usr/bin/google-chrome`, on macOS `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`.
 
 </details>
 
 <details>
 <summary><b>ECONNREFUSED 127.0.0.1:11434</b></summary>
 
-Ollama çalışmıyor. Terminalde `ollama serve` komutunu çalıştırın veya Ollama uygulamasını açın.
+Ollama is not running. Run `ollama serve` in your terminal, or open the Ollama app.
 
 </details>
 
 <details>
-<summary><b>QR kodu gelmiyor</b></summary>
+<summary><b>QR code does not appear</b></summary>
 
-Terminal çıktısını kontrol edin. Bazen QR yerine hata mesajı yazılır. Chrome'un güncel olduğundan emin olun.
-
-</details>
-
-<details>
-<summary><b>Mesajlara cevap vermiyor</b></summary>
-
-- AI Chat açık mı? → `!aichat`
-- Whitelist kontrolü açık ve siz ekli değil misiniz? → `!whitelistadd`
-- Sabit sohbet modu açık ve siz o sohbette değil misiniz? → `!fixedchat`
+Check the terminal output. Sometimes an error message is shown instead of the QR code. Make sure Chrome is up to date.
 
 </details>
 
 <details>
-<summary><b>Bot sürekli QR istiyor</b></summary>
+<summary><b>Bot does not reply to messages</b></summary>
 
-`.wwebjs_auth/` klasörü silinmiş olabilir. Bu klasörü yedekleyin (commit etmeyin ama yerel olarak saklayın).
+- Is AI Chat enabled? → `!aichat`
+- Is whitelist control enabled and you are not on the list? → `!whitelistadd`
+- Is fixed chat mode enabled and you are not in that chat? → `!fixedchat`
+
+</details>
+
+<details>
+<summary><b>Bot keeps asking for QR code</b></summary>
+
+The `.wwebjs_auth/` folder may have been deleted. Back it up locally (do not commit it).
 
 </details>
 
 ---
 
-## Güvenlik Notları
+## Security Notes
 
-> Bu bot kişisel bir WhatsApp hesabı kullanır. Dikkat edilmesi gerekenler:
+> This bot uses a personal WhatsApp account. Keep the following in mind:
 
 <details>
-<summary><b>Detaylar</b></summary>
+<summary><b>Details</b></summary>
 
-- `whitelist.json` ve `admin.json` dosyalarını **asla** GitHub'a yüklemeyin
-- Botu tamamen anonim olmayan gruplarda kullanmayın
+- Never upload `whitelist.json` and `admin.json` to GitHub
+- Do not use the bot in non-anonymous public groups
 
 </details>
 
 ---
 
-## Lisans
+## License
 
-Bu proje kişisel kullanım içindir. Lütfen WhatsApp'ın [Hizmet Şartları](https://www.whatsapp.com/legal/terms-of-service)'na uygun şekilde kullanın.
+This project is for personal use. Please use it in compliance with WhatsApp's [Terms of Service](https://www.whatsapp.com/legal/terms-of-service).
 
 ---
 
-## Teşekkürler
+## Acknowledgements
 
 - [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js/)
 - [Ollama](https://ollama.com/)
