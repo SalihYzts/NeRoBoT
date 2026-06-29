@@ -923,7 +923,7 @@ export async function Help(msg, targetId) {
         return sendText(targetId, `NeRoBoT v${getVersion()} — GitHub:\nhttps://github.com/SalihYzts/NeRoBoT`);
     }
 
-    const helpText  = fs.readFileSync('./NeRoBoT_db/help.txt', 'utf8');
+    const helpText  = fs.readFileSync('./help.txt', 'utf8');
     const trMatch   = helpText.match(/===TR===\s*([\s\S]*?)(?====EN===|$)/);
     const enMatch   = helpText.match(/===EN===\s*([\s\S]*?)$/);
     const trSection = trMatch ? trMatch[1].trim() : 'TR bölümü bulunamadı.';
