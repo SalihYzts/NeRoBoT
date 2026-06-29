@@ -1,4 +1,5 @@
-```                                                                                                      
+```
+                                                                                                      
                                                                                                       
                                                                                                       
         :                                                                                          :  
@@ -30,8 +31,7 @@
 Geliştirici: **TheSalHeLP**
 
 ---
-To access the English README file
-## Documentation
+## Belgeler
 - [English README](README.md)
 - To access the English README file
 ---
@@ -40,6 +40,7 @@ To access the English README file
 
 - [Özellikler](#özellikler)
 - [Gereksinimler](#gereksinimler)
+- [Proje Yapısı](#proje-yapısı)
 - [Kurulum](#kurulum)
 - [Komutlar](#komutlar)
 - [Varsayılan Yapılandırma](#varsayılan-yapılandırma)
@@ -51,15 +52,19 @@ To access the English README file
 
 ## Özellikler
 
-- Yerel YZ Desteği — Ollama üzerinden istediğin modeli kullanın
-- Sohbet Hafızası — Her sohbet için ayrı bağlam (ID tabanlı)
-- Whitelist Sistemi — İstemediğiniz kişilerin botu kullanmasını engelleyin
-- Admin Paneli — Sadece yetkili kişiler yönetim komutlarını kullanabilir
-- Kişilik (Personality) — Botun sistem mesajını değiştirin
-- Özelleştirilebilir Prefix'ler — Hem normal hem debug prefix ayarlanabilir
+- Yerel YZ Desteği — Ollama üzerinden istediğiniz modeli (görsel destekli modeller dahil) kullanın
+- Sohbet Hafızası — Her sohbet/kullanıcı için ayrı bağlam, isteğe bağlı ortak hafızalı grup modu
+- Görsel & Dosya Okuma — Görselleri (vision), PDF, Word ve düz metin/kod dosyalarını okuyup modele aktarır
+- Beyaz Liste Sistemi — İstemediğiniz kişilerin botu kullanmasını engelleyin
+- Admin Paneli — Sadece yetkili kişiler yönetim komutlarını kullanabilir; geri alınamaz işlemler onay gerektirir
+- Kişilik (Personality) — Botun sistem mesajını global veya sohbet bazında değiştirin
+- Özelleştirilebilir Prefix'ler — Ana, debug ve yoksayma prefix'leri ayrı ayrı ayarlanabilir
+- No-Prefix Modu — Bir sohbette prefix kullanmadan her mesaja yanıt verilmesini sağlayın
 - Sabit Sohbet Modu — Botu tek bir sohbete kilitleyin
-- Debug Kanalı — Yeni mesajları ayrı bir sohbete bildirin
+- Hız Sınırlama — Spam/kötüye kullanımı önlemek için kullanıcı bazlı token-bucket limiter
+- Debug Kanalı — Hataları ve yeni mesaj bildirimlerini ayrı bir sohbete yönlendirin
 - Bilgi Komutu — Tüm sistem durumunu tek mesajda görün
+- İki Dilli Yardım — Yardım menüsü Türkçe ve İngilizce olarak mevcut
 
 ---
 
@@ -72,6 +77,31 @@ Başlamadan önce şunların kurulu olduğundan emin olun:
 - **Ollama** (güncel)
 - **Google Chrome** (güncel)
 - **İşletim Sistemi:** Windows / Linux / macOS
+
+---
+
+## Proje Yapısı
+
+```
+nerobot/
+├── NeRoBoT.js              # Giriş noktası — WhatsApp istemcisi & mesaj yönlendirme
+├── package.json
+└── project_scripts/
+    ├── ai.js               # Ollama entegrasyonu
+    ├── config.js           # Durum, ayar kalıcılığı, dosya yolları
+    ├── commands.js         # Tüm !komutlar
+    ├── ratelimit.js         # Token-bucket hız sınırlayıcı
+    ├── utils.js            # Mesaj gönderme yardımcıları
+    ├── ascii.txt           # Başlangıç banner'ı
+    ├── help.txt            # Yardım menüsü metni (TR/EN)
+    ├── settings.json       # Çalışma zamanında otomatik oluşur
+    ├── whitelist.json      # Çalışma zamanında otomatik oluşur
+    ├── admin.json          # Çalışma zamanında otomatik oluşur
+    ├── noprefix.json       # Çalışma zamanında otomatik oluşur
+    └── groupchat.json      # Çalışma zamanında otomatik oluşur
+```
+
+`project_scripts/*.json` dosyaları ilk çalıştırmada otomatik olarak oluşturulur ve git'e **commit edilmez** (bkz. `.gitignore`).
 
 ---
 
@@ -104,27 +134,27 @@ ollama pull gemma2
 ### 4. Yapılandırma
 
 <details>
-<summary><b>Chrome Yolu Ayarı (Windows)</b></summary>
+<summary><b>Chrome Yolu Ayarı</b></summary>
 
-Kod içinde `PUPPETEER_EXECUTABLE_PATH` kısmını kendi sisteminize göre ayarlayın:
+Chrome çalıştırılabilir dosya yolu şu anda `project_scripts/config.js` içinde **Windows'a sabit** olarak tanımlı:
 
-javascript
-process.env.PUPPETEER_EXECUTABLE_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+```javascript
+export const CHROME_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+```
 
+Linux veya macOS kullanıyorsanız bu satırı kendi sisteminizdeki Chrome/Chromium yoluna göre düzenleyin, örneğin:
 
-Linux/Mac kullanıyorsanız bu satırı yorum satırı yapabilir veya silebilirsiniz.
+- Linux: `/usr/bin/google-chrome`
+- macOS: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
+
+> ⚠️ Bu değer henüz bir ortam değişkeninden okunmuyor — şimdilik doğrudan kod içinde değiştirilmesi gerekiyor.
 
 </details>
 
 <details>
-<summary><b>Boş Yapılandırma Dosyaları</b></summary>
+<summary><b>Yapılandırma Dosyaları Otomatiktir</b></summary>
 
-Kod otomatik olarak oluşturur ama isterseniz kendiniz de oluşturabilirsiniz:
-
-```bash
-echo "[]" > whitelist.json
-echo "[]" > admin.json
-```
+`project_scripts/config.js`, ilk çalıştırmada `settings.json`, `whitelist.json`, `admin.json`, `noprefix.json` ve `groupchat.json` dosyalarını otomatik olarak oluşturur. Bunları elle oluşturmanıza gerek yoktur.
 
 </details>
 
@@ -145,40 +175,30 @@ node NeRoBoT.js
 
 ## Komutlar
 
+Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut destekler (örn. `!admin add`).
+
 <details>
-<summary><b>Yönetim Komutları</b></summary>
+<summary><b>Admin Yönetimi</b></summary>
 
 | Komut | Açıklama |
 |---|---|
-| `!adminadd [ID]` | Sohbeti veya belirtilen ID'yi admin listesine ekler. |
-| `!adminremove [ID]` | Sohbeti veya belirtilen ID'yi admin listesinden siler. |
-| `!adminlist` | Tüm adminleri listeler. |
-| `!adminreset` | Admin listesini tamamen temizler. |
+| `!admin` / `!admin list` | Admin listesini gösterir. |
+| `!admin add [ID]` | Bu sohbeti veya belirtilen ID'yi admin yapar. |
+| `!admin remove [ID]` | Admin listesinden çıkarır. |
+| `!admin reset` | Tüm admin listesini temizler. *(Onay gerekir.)* |
 
 </details>
 
 <details>
-<summary><b>Beyaz Liste Komutları</b></summary>
+<summary><b>Beyaz Liste Yönetimi</b></summary>
 
 | Komut | Açıklama |
 |---|---|
-| `!whitelistadd [ID]` | Sohbeti veya belirtilen ID'yi beyaz listeye ekler. |
-| `!whitelistremove [ID]` | Sohbeti veya belirtilen ID'yi beyaz listeden siler. |
-| `!whitelist` | Beyaz listedeki sohbetleri gösterir. |
-| `!whitelistreset` | Beyaz listeyi tamamen temizler. |
-| `!whitelistcontrol` | Yeni sohbet kontrolünü aç/kapat. |
-
-</details>
-
-<details>
-<summary><b>Sistem Ayarları</b></summary>
-
-| Komut | Açıklama |
-|---|---|
-| `!prefix [yeniPrefix]` | Normal komut prefix'ini değiştirir. |
-| `!debugprefix [yeniDebug]` | Debug komut prefix'ini değiştirir. |
-| `!fixedchat` | Botu sadece bulunduğun sohbette çalışacak şekilde sabitler veya serbest bırakır. |
-| `!debugchat` | Sohbeti debug kanalı olarak kaydeder. |
+| `!whitelist` / `!whitelist list` | Beyaz listedeki sohbetleri gösterir. |
+| `!whitelist add [ID]` | Beyaz listeye ekler. |
+| `!whitelist remove [ID]` | Beyaz listeden çıkarır. |
+| `!whitelist reset` | Beyaz listeyi tamamen temizler. *(Onay gerekir.)* |
+| `!whitelist control` | Yeni sohbet kontrolünü aç/kapat. |
 
 </details>
 
@@ -187,11 +207,62 @@ node NeRoBoT.js
 
 | Komut | Açıklama |
 |---|---|
-| `!aichat` | AI sohbeti açar/kapatır. |
-| `!personality [prompt]` | Botun kişilik promptunu gösterir veya günceller. |
-| `!model [isim]` | AI modelini değiştirir veya mevcut modeli gösterir. |
-| `!clear [ID]` | Sohbetin hafızasını temizler. |
-| `!clearall` | Tüm sohbetlerin hafızasını temizler. |
+| `!aichat` | AI sohbetini aç/kapat. |
+| `!model [isim]` | Mevcut modeli ve yüklü Ollama modellerini gösterir; isim verilirse modeli değiştirir. |
+| `!personality` | Bu sohbetin aktif kişiliğini ve global kişiliği gösterir. |
+| `!personality chat <metin>` | Sadece bu sohbet için kişiliği günceller. |
+| `!personality global <metin>` | Global kişiliği günceller (yeni/temizlenmiş sohbetlere uygulanır). |
+| `!think` | Düşünme mesajı durumunu ve metnini gösterir. |
+| `!think on` / `!think off` | Düşünme mesajını aç/kapat. |
+| `!think <metin>` | Düşünme mesajı metnini günceller. |
+| `!replymode` | AI yanıtları için alıntılı yanıt modunu aç/kapat. |
+| `!media` | Görsel/dosya okuma durumunu gösterir. |
+| `!media image` | Görsel okumayı (vision) aç/kapat. |
+| `!media file` | Dosya okumayı (PDF, Word, TXT, JSON, JS...) aç/kapat. |
+| `!aierror <metin>` | AI hata verince kullanıcıya gösterilecek mesajı gösterir veya değiştirir. |
+
+</details>
+
+<details>
+<summary><b>Hız Sınırlama</b></summary>
+
+| Komut | Açıklama |
+|---|---|
+| `!ratelimit` | Hız limiti ayarlarını gösterir. |
+| `!ratelimit on` / `!ratelimit off` | Hız limitini aç/kapat. |
+| `!ratelimit tokens <n>` | Maksimum token sayısını ayarlar. |
+| `!ratelimit refill <sn>` | Token yenileme süresini (saniye) ayarlar. |
+| `!ratelimit warn <sn>` | Uyarı cooldown süresini ayarlar. |
+| `!ratelimit message <metin>` | Hız limitine giren kullanıcıya gösterilecek uyarı metnini değiştirir. |
+
+</details>
+
+<details>
+<summary><b>Hafıza</b></summary>
+
+| Komut | Açıklama |
+|---|---|
+| `!clear` | Bu sohbetin hafızasını temizler. |
+| `!clear <ID>` | Belirtilen sohbetin hafızasını temizler. |
+| `!clear all` | Tüm sohbetlerin hafızasını temizler. *(Onay gerekir.)* |
+
+</details>
+
+<details>
+<summary><b>Sistem Ayarları</b></summary>
+
+| Komut | Açıklama |
+|---|---|
+| `!prefix` | Mevcut prefix'leri gösterir. |
+| `!prefix main <p>` | Ana (kullanıcıya dönük) prefix'i değiştirir. |
+| `!prefix debug <p>` | Debug/komut prefix'ini değiştirir. |
+| `!prefix ignore <p>` | Yoksayma prefix'ini değiştirir (sadece no-prefix sohbetlerde). |
+| `!fixedchat` | Botu sadece bu sohbete kilitler veya serbest bırakır. |
+| `!noprefix` | Bu sohbette no-prefix modunu aç/kapat. |
+| `!groupchat` | Bu grubu ortak hafıza modunda aç/kapat. |
+| `!groupchat [ID]` | Belirtilen grup ID'si için ortak hafıza modunu aç/kapat. |
+| `!groupchat list` | Ortak hafıza modu açık olan tüm grupları listeler. |
+| `!debugchat` | Bu sohbeti debug kanalı olarak ayarlar. |
 
 </details>
 
@@ -200,11 +271,16 @@ node NeRoBoT.js
 
 | Komut | Açıklama |
 |---|---|
-| `!info` | Sistem ve sohbet durumunu gösterir (prefix, AI durumu, admin/beyaz liste sayısı vb.). |
+| `!info` | Genel durum özetini gösterir. |
+| `!info chat` | Bu sohbetin detaylarını gösterir. |
+| `!info ai` | AI ve rate limit ayarlarını gösterir. |
+| `!info system` | Sistem, prefix ve whitelist bilgilerini gösterir. |
 | `!help` | Bu yardım menüsünü gösterir. |
-| `!helplanguage tr/en` | Yardım dilini değiştirir. |
+| `!helplang tr` / `!helplang en` | Yardım dilini değiştirir. |
 
 </details>
+
+> 💡 Herhangi bir komutu argümansız çalıştırarak kullanım talimatını görebilirsiniz, örn. `!admin`, `!prefix`, `!ratelimit`.
 
 ---
 
@@ -215,15 +291,19 @@ node NeRoBoT.js
 
 | Değişken | Varsayılan Değer |
 |---|---|
-| Normal Prefix | `.` |
+| Ana Prefix | `.` |
 | Debug Prefix | `!` |
+| Yoksayma Prefix | `/` |
 | AI Model | `minimax-m3:cloud` |
 | Sistem Promptu | `Your name is NeRoBoT. You were created by Salih Yazıtaş.` |
 | Yardım Dili | `en` (İngilizce) |
-| AI Chat | Enabled |
-| Whitelist Kontrolü | Disabled |
-| Sabit Sohbet | Disabled |
-| Debug Kanal | None |
+| AI Chat | Açık |
+| Whitelist Kontrolü | Kapalı |
+| Sabit Sohbet | Kapalı |
+| Hız Sınırlama | Açık (3 burst token, 15s'de 1 yenileme) |
+| Reply Mode | Kapalı |
+| Görsel / Dosya Okuma | Açık |
+| Debug Kanal | Yok |
 
 </details>
 
@@ -234,7 +314,7 @@ node NeRoBoT.js
 <details>
 <summary><b>Chrome not found hatası</b></summary>
 
-`PUPPETEER_EXECUTABLE_PATH` yolunu kontrol edin. Linux'ta `/usr/bin/google-chrome`, macOS'ta `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` olabilir.
+`project_scripts/config.js` içindeki `CHROME_PATH` değerini kontrol edin. Linux'ta `/usr/bin/google-chrome`, macOS'ta `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` olabilir.
 
 </details>
 
@@ -256,8 +336,9 @@ Terminal çıktısını kontrol edin. Bazen QR yerine hata mesajı yazılır. Ch
 <summary><b>Mesajlara cevap vermiyor</b></summary>
 
 - AI Chat açık mı? → `!aichat`
-- Whitelist kontrolü açık ve siz ekli değil misiniz? → `!whitelistadd`
+- Whitelist kontrolü açık ve siz ekli değil misiniz? → `!whitelist add`
 - Sabit sohbet modu açık ve siz o sohbette değil misiniz? → `!fixedchat`
+- Hız limitine mi girdiniz? → `!ratelimit`
 
 </details>
 
@@ -277,8 +358,9 @@ Terminal çıktısını kontrol edin. Bazen QR yerine hata mesajı yazılır. Ch
 <details>
 <summary><b>Detaylar</b></summary>
 
-- `whitelist.json` ve `admin.json` dosyalarını **asla** GitHub'a yüklemeyin
-- Botu tamamen anonim olmayan gruplarda kullanmayın
+- Otomatik oluşan `project_scripts/whitelist.json`, `project_scripts/admin.json`, `project_scripts/settings.json`, `project_scripts/noprefix.json` ve `project_scripts/groupchat.json` dosyalarını **asla** GitHub'a yüklemeyin — bunlar `.gitignore` ile zaten hariç tutulmuştur.
+- Botu tamamen anonim olmayan gruplarda kullanmayın.
+- Admin yapılan herkes bot genelindeki ayarları değiştirebilir — admin yetkisini sadece güvendiğiniz kişilere verin.
 
 </details>
 

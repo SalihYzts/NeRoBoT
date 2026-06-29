@@ -1,5 +1,5 @@
 # ============
-# Node.js (mevcut kısımlar aynen kalıyor)
+# Node.js
 # ============
 # Logs
 logs
@@ -123,17 +123,21 @@ dist
 # 📱 WhatsApp Web.js (proje özel)
 # ===================================
 # Oturum verileri (QR tekrar okutmamak için bunları COMMIT'LEYEBİLİRSİN)
-# Eğer commit'lemek istersen başına # koy:
+# Eğer commit'lemek istersen aşağıdaki satırların başına # koy:
 .wwebjs_auth/
 .wwebjs_cache/
 session/
 
 # ===================================
-# ⚙️ Proje özel dosyalar
+# ⚙️ Proje özel dosyalar (runtime'da otomatik oluşur)
 # ===================================
-# Kişisel yapılandırma — commit'leme
-whitelist.json
-admin.json
+# Bunlar config.js tarafından ./project_scripts/ altında
+# otomatik üretilir — kişisel/hassas veri içerdiği için commit'lenmez.
+project_scripts/whitelist.json
+project_scripts/admin.json
+project_scripts/noprefix.json
+project_scripts/groupchat.json
+project_scripts/settings.json
 
 # ===================================
 # 💻 IDE & Editor
@@ -148,7 +152,7 @@ Thumbs.db
 desktop.ini
 
 # ===================================
-# 🪟 Windows (senin için)
+# 🪟 Windows
 # ====================================
 # Windows explorer metadata
 Desktop.ini
@@ -159,7 +163,7 @@ ehthumbs.db
 ehthumbs_vista.db
 
 # ===================================
-# 🐧 Linux / macOS (ihtimale karşı)
+# 🐧 Linux / macOS
 # ===================================
 .DS_Store
 .AppleDouble
