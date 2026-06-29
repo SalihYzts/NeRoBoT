@@ -51,7 +51,7 @@ const DEFAULTS = {
 
     // Reply mode — when enabled, AI responses are sent as a quoted reply
     // to the user's original message instead of a plain message.
-    replyMode:             false,
+    replyMode:             true,
 
     // Media toggles — control whether images / files are forwarded to the AI.
     imageEnabled:          true,   // görsel okuma (vision)

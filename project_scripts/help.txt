@@ -5,13 +5,13 @@ Admin Yönetimi
 - admin list              → Admin listesini gösterir.
 - admin add [ID]          → Bu sohbeti veya belirtilen ID'yi admin yapar.
 - admin remove [ID]       → Admin listesinden çıkarır.
-- admin reset             → Tüm admin listesini temizler. (Onay gerekir, bkz. not.)
+- admin reset             → Tüm admin listesini temizler. (Onay gerekir)
 
 Beyaz Liste Yönetimi
 - whitelist list          → Beyaz listedeki sohbetleri gösterir.
 - whitelist add [ID]      → Beyaz listeye ekler.
 - whitelist remove [ID]   → Beyaz listeden çıkarır.
-- whitelist reset         → Beyaz listeyi tamamen temizler. (Onay gerekir, bkz. not.)
+- whitelist reset         → Beyaz listeyi tamamen temizler. (Onay gerekir)
 - whitelist control       → Yeni sohbet kontrolünü aç/kapat.
 
 AI Yönetimi
@@ -19,44 +19,40 @@ AI Yönetimi
 - model [isim]            → Mevcut modeli ve yüklü Ollama modellerini gösterir; isim verilirse modeli değiştirir.
 - personality             → Bu sohbetin aktif kişiliğini ve global kişiliği gösterir.
 - personality chat [metin]→ Sadece bu sohbet için kişiliği günceller.
-- personality global [metin]→ Global kişiliği günceller (yeni/temizlenmiş sohbetlere uygulanır).
+- personality global [metin]→ Global kişiliği günceller.
 - think                   → Düşünme mesajı durumunu ve metnini gösterir.
 - think on/off            → Düşünme mesajını aç/kapat.
 - think [metin]           → Düşünme mesajı metnini günceller.
-- ratelimit               → Hız limiti ayarlarını gösterir.
-- ratelimit on/off        → Hız limitini aç/kapat.
-- ratelimit tokens <n>    → Maksimum token sayısını ayarlar.
-- ratelimit refill <sn>   → Token yenileme süresini (saniye) ayarlar.
-- ratelimit warn <sn>     → Uyarı cooldown süresini ayarlar.
-- ratelimit message <...> → Kullanıcıya gösterilecek uyarı metnini değiştirir.
-- aierror                 → AI hata mesajını gösterir veya değiştirir (AI hata verince kullanıcıya gönderilir, detaylı hata debug kanalına gider).
+- aierror                 → AI hata mesajını gösterir veya değiştirir.
+- replymode               → AI yanıtlarını quoted-reply modunda aç/kapat.
 - media                   → Görsel ve dosya okuma durumunu gösterir.
-- media image             → Görsel okumayı (vision) aç/kapat.
-- media file              → Dosya okumayı (PDF, Word, TXT, JSON, JS...) aç/kapat.
+- media image             → Görsel okumayı aç/kapat.
+- media file              → Dosya okumayı aç/kapat.
 
 Hafıza
 - clear                   → Bu sohbetin hafızasını temizler.
 - clear <ID>              → Belirtilen sohbetin hafızasını temizler.
-- clear all               → Tüm sohbetlerin hafızasını temizler. (Onay gerekir, bkz. not.)
-
-Not: Onay Gerektiren Komutlar
-- admin reset, whitelist reset ve clear all gibi geri alınamaz komutlar
-  doğrudan çalışmaz. Komutu ilk yazdığınızda bot bir uyarı gösterir;
-  aynı komutu 30 saniye içinde tekrar yazarsanız işlem onaylanıp uygulanır.
-  30 saniye içinde tekrar yazmazsanız onay isteği iptal olur ve komutu
-  baştan çalıştırmanız gerekir.
+- clear all               → Tüm sohbetlerin hafızasını temizler. (Onay gerekir)
 
 Sistem Ayarları
 - prefix                  → Mevcut prefix'leri gösterir.
 - prefix main <p>         → Ana prefix'i değiştirir.
 - prefix debug <p>        → Debug prefix'ini değiştirir.
-- prefix ignore <p>       → Yoksayma prefix'ini değiştirir (sadece no-prefix sohbetlerde).
+- prefix ignore <p>       → Yoksayma prefix'ini değiştirir.
 - fixedchat               → Botu sadece bu sohbete kilitler veya serbest bırakır.
-- noprefix                → Bu sohbette prefix olmadan her mesaja yanıt verme modunu aç/kapat.
-- groupchat                → Bu gurubu ortak hafıza modunda aç/kapat (herkes aynı sohbetmiş gibi yazar).
-- groupchat [ID]           → Belirtilen gurup ID'si için ortak hafıza modunu aç/kapat.
-- groupchat list           → Ortak hafıza modu açık olan tüm gurupları listeler.
+- noprefix                → Prefix olmadan her mesaja yanıt verme modunu aç/kapat.
+- groupchat               → Ortak hafıza grup modunu aç/kapat.
+- groupchat [ID]          → Belirtilen grup için ortak hafıza modunu aç/kapat.
+- groupchat list          → Ortak hafıza modu açık olan grupları listeler.
 - debugchat               → Bu sohbeti debug kanalı olarak ayarlar.
+
+Rate Limit
+- ratelimit               → Hız limiti ayarlarını gösterir.
+- ratelimit on/off        → Hız limitini aç/kapat.
+- ratelimit tokens <n>    → Maksimum token sayısını ayarlar.
+- ratelimit refill <sn>   → Token yenileme süresini ayarlar.
+- ratelimit warn <sn>     → Uyarı cooldown süresini ayarlar.
+- ratelimit message <...> → Uyarı mesajını değiştirir.
 
 Bilgi
 - info                    → Genel durum özetini gösterir.
@@ -73,13 +69,13 @@ Admin Management
 - admin list              → Shows the admin list.
 - admin add [ID]          → Adds this chat or the given ID to admins.
 - admin remove [ID]       → Removes from the admin list.
-- admin reset             → Clears the entire admin list. (Requires confirmation, see note.)
+- admin reset             → Clears the entire admin list. (Requires confirmation)
 
 Whitelist Management
 - whitelist list          → Shows the whitelist.
 - whitelist add [ID]      → Adds to the whitelist.
 - whitelist remove [ID]   → Removes from the whitelist.
-- whitelist reset         → Clears the entire whitelist. (Requires confirmation, see note.)
+- whitelist reset         → Clears the entire whitelist. (Requires confirmation)
 - whitelist control       → Enables/disables new chat control.
 
 AI Management
@@ -87,45 +83,40 @@ AI Management
 - model [name]            → Shows current model and lists installed Ollama models; changes model if name given.
 - personality             → Shows this chat's active personality and the global personality.
 - personality chat [text] → Sets this chat's personality only.
-- personality global [text]→ Sets the global personality (applies to new/cleared chats).
+- personality global [text]→ Sets the global personality.
 - think                   → Shows think message status and text.
 - think on/off            → Enables/disables the think message.
 - think [text]            → Updates the think message text.
-- ratelimit               → Shows rate limit settings.
-- ratelimit on/off        → Enables/disables rate limiting.
-- ratelimit tokens <n>    → Sets the max burst token count.
-- ratelimit refill <sec>  → Sets the token refill interval in seconds.
-- ratelimit warn <sec>    → Sets the warning cooldown in seconds.
-- ratelimit message <...> → Updates the warning text shown to users.
-- aierror                 → Shows or updates the AI error message (sent to the user when the AI fails; detailed error goes to the debug channel).
+- aierror                 → Shows or updates the AI error message.
+- replymode               → Enables/disables quoted-reply mode for AI responses.
 - media                   → Shows image and file reading status.
-- media image             → Enables/disables image reading (vision).
-- media file              → Enables/disables file reading (PDF, Word, TXT, JSON, JS...).
+- media image             → Enables/disables image reading.
+- media file              → Enables/disables file reading.
 
 Memory
 - clear                   → Clears this chat's memory.
 - clear <ID>              → Clears a specific chat's memory.
-- clear all               → Clears all chat memories. (Requires confirmation, see note.)
-
-Note: Commands That Require Confirmation
-- Irreversible commands like admin reset, whitelist reset, and clear all
-  do not run immediately. The first time you send the command, the bot
-  shows a warning; if you send the exact same command again within 30
-  seconds, the action is confirmed and carried out. If you don't repeat
-  it within 30 seconds, the confirmation request expires and you'll need
-  to start over.
+- clear all               → Clears all chat memories. (Requires confirmation)
 
 System Settings
 - prefix                  → Shows current prefixes.
 - prefix main <p>         → Changes the main prefix.
 - prefix debug <p>        → Changes the debug prefix.
-- prefix ignore <p>       → Changes the ignore prefix (no-prefix chats only).
+- prefix ignore <p>       → Changes the ignore prefix.
 - fixedchat               → Locks the bot to this chat or releases it.
 - noprefix                → Enables/disables no-prefix mode for this chat.
-- groupchat                → Toggles shared-memory group chat mode for this group (everyone writes as if it's one chat).
-- groupchat [ID]           → Toggles shared-memory mode for the given group ID instead.
-- groupchat list           → Lists all groups with shared-memory mode enabled.
+- groupchat               → Toggles shared-memory group chat mode.
+- groupchat [ID]          → Toggles shared-memory mode for the given group ID.
+- groupchat list          → Lists all groups with shared-memory mode enabled.
 - debugchat               → Sets this chat as the debug channel.
+
+Rate Limit
+- ratelimit               → Shows rate limit settings.
+- ratelimit on/off        → Enables/disables rate limiting.
+- ratelimit tokens <n>    → Sets the max burst token count.
+- ratelimit refill <sec>  → Sets the token refill interval.
+- ratelimit warn <sec>    → Sets the warning cooldown.
+- ratelimit message <...> → Updates the warning text.
 
 Info
 - info                    → Shows a quick status overview.

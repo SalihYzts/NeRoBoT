@@ -301,7 +301,7 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 | Whitelist Control | Disabled |
 | Fixed Chat | Disabled |
 | Rate Limiting | Enabled (3 burst tokens, 1 per 15s refill) |
-| Reply Mode | Disabled |
+| Reply Mode | Enabled |
 | Image / File Reading | Enabled |
 | Debug Channel | None |
 

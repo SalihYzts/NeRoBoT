@@ -301,7 +301,7 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 | Whitelist Kontrolü | Kapalı |
 | Sabit Sohbet | Kapalı |
 | Hız Sınırlama | Açık (3 burst token, 15s'de 1 yenileme) |
-| Reply Mode | Kapalı |
+| Reply Mode | Açık |
 | Görsel / Dosya Okuma | Açık |
 | Debug Kanal | Yok |
 
