@@ -16,7 +16,13 @@ Beyaz Liste Yönetimi
 
 AI Yönetimi
 - aichat                  → AI sohbetini aç/kapat.
-- model [isim]            → Mevcut modeli ve yüklü Ollama modellerini gösterir; isim verilirse modeli değiştirir.
+- model                    → Model komutları için kullanım yardımı gösterir.
+- model list               → Global modeli ve sohbet bazlı override'ları listeler.
+- model global [isim]      → Ana (global) modeli değiştirir.
+- model chat [isim]        → Bu sohbetin modelini değiştirir.
+- model chat [ID] [isim]   → Belirtilen sohbetin modelini değiştirir.
+- model chat reset [ID]    → Sohbetin override'ını kaldırır, global'e döner.
+- model installed          → Yüklü Ollama modellerini listeler.
 - personality             → Bu sohbetin aktif kişiliğini ve global kişiliği gösterir.
 - personality chat [metin]→ Sadece bu sohbet için kişiliği günceller.
 - personality global [metin]→ Global kişiliği günceller.
@@ -30,9 +36,17 @@ AI Yönetimi
 - media file              → Dosya okumayı aç/kapat.
 
 Hafıza
-- clear                   → Bu sohbetin hafızasını temizler.
-- clear <ID>              → Belirtilen sohbetin hafızasını temizler.
+- clear                   → Kullanım listesini gösterir, hiçbir şey silmez.
+- clear chat              → Bu sohbetin hafızasını temizler.
+- clear chat [ID]         → Belirtilen sohbetin hafızasını temizler.
 - clear all               → Tüm sohbetlerin hafızasını temizler. (Onay gerekir)
+
+Sıfırlama
+- reset                   → Kullanım listesini gösterir, hiçbir şey sıfırlamaz.
+- reset settings          → Bu sohbetin TÜM özel ayarlarını global'e çevirir. (Onay gerekir)
+- reset settings [ad]     → Tek bir ayarı sıfırlar (onay istemez).
+                             ad: model, personality, noprefix, groupchat, debugchat, fixedchat
+- reset all settings      → Her şeyi proje varsayılanlarına döndürür. (Onay gerekir)
 
 Sistem Ayarları
 - prefix                  → Mevcut prefix'leri gösterir.
@@ -41,6 +55,8 @@ Sistem Ayarları
 - prefix ignore <p>       → Yoksayma prefix'ini değiştirir.
 - fixedchat               → Botu sadece bu sohbete kilitler veya serbest bırakır.
 - noprefix                → Prefix olmadan her mesaja yanıt verme modunu aç/kapat.
+- noprefixall             → Tüm sohbetler için prefix'siz modu aç/kapat. (Whitelist kapalıyken açmak veya
+                             açıkken whitelist'i kapatmak tehlikeli olduğu için onay gerekir.)
 - groupchat               → Ortak hafıza grup modunu aç/kapat.
 - groupchat [ID]          → Belirtilen grup için ortak hafıza modunu aç/kapat.
 - groupchat list          → Ortak hafıza modu açık olan grupları listeler.
@@ -60,6 +76,7 @@ Bilgi
 - info ai                 → AI ve rate limit ayarlarını gösterir.
 - info system             → Sistem, prefix ve whitelist bilgilerini gösterir.
 - help                    → Bu yardım menüsünü gösterir.
+- help github             → Projenin GitHub linkini gönderir.
 - helplang tr/en          → Yardım dilini değiştirir.
 
 ===EN===
@@ -80,7 +97,13 @@ Whitelist Management
 
 AI Management
 - aichat                  → Enables/disables AI chat.
-- model [name]            → Shows current model and lists installed Ollama models; changes model if name given.
+- model                    → Shows usage help for model commands.
+- model list               → Lists the global model and per-chat overrides.
+- model global [name]      → Changes the main (global) model.
+- model chat [name]        → Changes this chat's model.
+- model chat [ID] [name]   → Changes a specific chat's model.
+- model chat reset [ID]    → Removes a chat's override, falls back to global.
+- model installed          → Lists installed Ollama models.
 - personality             → Shows this chat's active personality and the global personality.
 - personality chat [text] → Sets this chat's personality only.
 - personality global [text]→ Sets the global personality.
@@ -94,9 +117,17 @@ AI Management
 - media file              → Enables/disables file reading.
 
 Memory
-- clear                   → Clears this chat's memory.
-- clear <ID>              → Clears a specific chat's memory.
+- clear                   → Shows usage list, clears nothing.
+- clear chat              → Clears this chat's memory.
+- clear chat [ID]         → Clears a specific chat's memory.
 - clear all               → Clears all chat memories. (Requires confirmation)
+
+Reset
+- reset                   → Shows usage list, resets nothing.
+- reset settings          → Resets ALL of this chat's own overrides to global. (Requires confirmation)
+- reset settings [name]   → Resets a single setting (no confirmation needed).
+                             name: model, personality, noprefix, groupchat, debugchat, fixedchat
+- reset all settings      → Factory-resets everything to project defaults. (Requires confirmation)
 
 System Settings
 - prefix                  → Shows current prefixes.
@@ -105,6 +136,8 @@ System Settings
 - prefix ignore <p>       → Changes the ignore prefix.
 - fixedchat               → Locks the bot to this chat or releases it.
 - noprefix                → Enables/disables no-prefix mode for this chat.
+- noprefixall             → Enables/disables no-prefix mode for ALL chats. (Requires confirmation when
+                             enabling while whitelist is off, or when disabling the whitelist while this is on.)
 - groupchat               → Toggles shared-memory group chat mode.
 - groupchat [ID]          → Toggles shared-memory mode for the given group ID.
 - groupchat list          → Lists all groups with shared-memory mode enabled.
@@ -124,4 +157,5 @@ Info
 - info ai                 → Shows AI and rate limit settings.
 - info system             → Shows system, prefix, and whitelist info.
 - help                    → Shows this help menu.
+- help github             → Sends the project's GitHub link.
 - helplang tr/en          → Changes the help language.

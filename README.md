@@ -84,24 +84,26 @@ Make sure you have the following installed before getting started:
 
 ```
 nerobot/
-├── NeRoBoT.js              # Entry point — WhatsApp client & message routing
+├── NeRoBoT.js                      # Entry point — WhatsApp client & message routing
 ├── package.json
-└── project_scripts/
-    ├── ai.js               # Ollama integration
-    ├── config.js           # State, settings persistence, file paths
-    ├── commands.js         # All !commands
-    ├── ratelimit.js         # Token-bucket rate limiter
-    ├── utils.js            # Message sending helpers
-    ├── ascii.txt           # Startup banner
-    ├── help.txt            # Help menu text (TR/EN)
-    ├── settings.json       # Generated at runtime
-    ├── whitelist.json      # Generated at runtime
-    ├── admin.json          # Generated at runtime
-    ├── noprefix.json       # Generated at runtime
-    └── groupchat.json      # Generated at runtime
+├── project_scripts/
+│   ├── ai.js                       # Ollama integration
+│   ├── config.js                   # State, settings persistence, file paths
+│   ├── commands.js                 # All !commands
+│   ├── ratelimit.js                # Token-bucket rate limiter
+│   └── utils.js                    # Message sending helpers
+└── NeRoBoT_db/
+    ├── ascii.txt                   # Startup banner
+    ├── help.txt                    # Help menu text (TR/EN)
+    ├── chatmodels.json             # Per-chat model overrides (committed)
+    ├── settings.json               # Generated at runtime
+    ├── whitelist.json              # Generated at runtime
+    ├── admin.json                  # Generated at runtime
+    ├── noprefix.json               # Generated at runtime
+    └── groupchat.json              # Generated at runtime
 ```
 
-The `project_scripts/*.json` files are created automatically on first run and are **not** committed to git (see `.gitignore`).
+The `NeRoBoT_db/*.json` runtime files are created automatically on first run and are **not** committed to git (see `.gitignore`).
 
 ---
 
@@ -119,6 +121,8 @@ cd nerobot
 ```bash
 npm install
 ```
+
+
 
 ### 3. Install Ollama and Pull a Model
 
@@ -310,6 +314,16 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 ---
 
 ## Troubleshooting
+
+<details>
+<summary><b>npm install fails with a Puppeteer/Chrome error</b></summary>
+
+Puppeteer keeps a cached copy of Chrome under your user folder. If that cache is corrupted (folder exists but the executable inside is missing), `npm install` will fail. Fix it by deleting the cache and running `npm install` again:
+
+- **Windows:** delete 
+- **Linux / macOS:** delete 
+
+</details>
 
 <details>
 <summary><b>Chrome not found error</b></summary>

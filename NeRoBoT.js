@@ -1,7 +1,7 @@
 import pkg from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
-import * as pdfParse from "pdf-parse";
+import { createRequire } from 'module';
 import mammoth from 'mammoth';
 
 import { state, whitelist, admins, noPrefixChats, groupChats, CHROME_PATH } from './project_scripts/config.js';
@@ -9,6 +9,11 @@ import { setClient, sendText, replyText, isBotSentMessage } from './project_scri
 import { commands } from './project_scripts/commands.js';
 import { askModel } from './project_scripts/ai.js';
 import { checkRateLimit } from './project_scripts/ratelimit.js';
+
+// pdf-parse v2 exposes a PDFParse class (pdf.js based) instead of the old
+// v1 callable function — see https://github.com/mehmet-kozan/pdf-parse
+const require = createRequire(import.meta.url);
+const { PDFParse } = require('pdf-parse');
 
 const { Client } = pkg;
 
@@ -25,7 +30,7 @@ client.on('qr', qr => qrcode.generate(qr, { small: true }));
 
 client.on('ready', () => {
     process.stdout.write('\x1Bc');
-    const asciiArt = fs.readFileSync('./project_scripts/ascii.txt', 'utf8');
+    const asciiArt = fs.readFileSync('./NeRoBoT_db/ascii.txt', 'utf8');
     console.log(asciiArt);
 });
 
@@ -66,6 +71,11 @@ async function handleAiMessage(msg, from, to, userId, body, fromMe, noPrefix = f
         // Images are sent to Ollama as base64 (vision models).
         // PDF, Word, and text-based files are extracted to plain text
         // and prepended to the prompt so any model can read them.
+        //
+        // NOTE: WhatsApp/whatsapp-web.js doesn't always report an accurate
+        // mimetype (sometimes it's missing or comes through as the generic
+        // "application/octet-stream"). To stay robust against that, every
+        // type check below also falls back to the file's extension.
         // ============================
         const images = [];
         let fileContext = '';
@@ -77,6 +87,12 @@ async function handleAiMessage(msg, from, to, userId, body, fromMe, noPrefix = f
 
                 const mime = media.mimetype || '';
                 const buffer = Buffer.from(media.data, 'base64');
+                const filename = (media.filename || '').toLowerCase();
+
+                const isPdf  = mime === 'application/pdf' || filename.endsWith('.pdf');
+                const isWord = mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                    || mime === 'application/msword'
+                    || filename.endsWith('.docx') || filename.endsWith('.doc');
 
                 if (mime.startsWith('image/')) {
                     // Görsel → Ollama vision
@@ -87,25 +103,28 @@ async function handleAiMessage(msg, from, to, userId, body, fromMe, noPrefix = f
                         images.push(media.data);
                     }
 
-                } else if (mime === 'application/pdf') {
+                } else if (isPdf) {
                     // PDF → metin çıkar
                     if (!state.fileEnabled) {
                         await sendText(chatId, '⚠️ File reading is currently disabled. To enable: !media file');
                         if (!rawPrompt) return;
                     } else {
                         try {
-                            const parsed = await pdfParse(buffer);
-                            fileContext = `[PDF content]\n${parsed.text.trim()}`;
+                            const parser = new PDFParse({ data: buffer });
+                            try {
+                                const result = await parser.getText();
+                                fileContext = `[PDF content]\n${result.text.trim()}`;
+                            } finally {
+                                await parser.destroy();
+                            }
                         } catch (e) {
+                            await reportError('pdf-parse', e);
                             await sendText(chatId, '⚠️ Could not read the PDF.');
                             if (!rawPrompt) return;
                         }
                     }
 
-                } else if (
-                    mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                    mime === 'application/msword'
-                ) {
+                } else if (isWord) {
                     // Word (.docx / .doc) → metin çıkar
                     if (!state.fileEnabled) {
                         await sendText(chatId, '⚠️ File reading is currently disabled. To enable: !media file');
@@ -131,8 +150,13 @@ async function handleAiMessage(msg, from, to, userId, body, fromMe, noPrefix = f
                         'application/x-sh',
                         'application/x-yaml',
                         'application/yaml',
-                        'application/octet-stream', // uzantı bilinmiyorsa UTF-8 olarak dene
-                    ].includes(mime)
+                    ].includes(mime) ||
+                    // Mimetype belirsiz/octet-stream geldiğinde sadece
+                    // bilinen metin uzantılarında bu yola düş — aksi halde
+                    // PDF/Word gibi binary dosyalar yanlışlıkla burada
+                    // UTF-8'e çevrilmeye çalışılırdı.
+                    (mime === 'application/octet-stream' &&
+                        /\.(txt|json|js|ts|csv|xml|sh|ya?ml|md|log)$/.test(filename))
                 ) {
                     // Düz metin dosyaları (txt, json, js, ts, csv, xml, sh, yaml...)
                     if (!state.fileEnabled) {
@@ -156,7 +180,7 @@ async function handleAiMessage(msg, from, to, userId, body, fromMe, noPrefix = f
                 } else {
                     // Desteklenmeyen format
                     await sendText(chatId,
-                        `⚠️ This file type is not supported (${mime}).\n` +
+                        `⚠️ This file type is not supported (${mime || 'unknown'}).\n` +
                         `Supported: image, PDF, Word, TXT, JSON, JS, TS, CSV, XML, YAML, SH`
                     );
                     if (!rawPrompt) return;
@@ -240,7 +264,7 @@ client.on('message', async msg => {
 
         if (state.aiChatEnabled) {
             const userId = msg.author || msg.from;
-            const isNoPrefixChat = noPrefixChats.has(msg.from);
+            const isNoPrefixChat = state.noPrefixAll || noPrefixChats.has(msg.from);
             const hasPrefix = text.startsWith(state.prefix);
 
             // Skip if neither no-prefix mode nor prefix match
@@ -298,7 +322,7 @@ client.on('message_create', async (msg) => {
         }
 
         if (state.aiChatEnabled) {
-            const isNoPrefixChat = noPrefixChats.has(msg.to);
+            const isNoPrefixChat = state.noPrefixAll || noPrefixChats.has(msg.to);
             const hasPrefix = text.startsWith(state.prefix);
 
             // In no-prefix chats, let people "speak" without triggering the AI

@@ -131,13 +131,13 @@ session/
 # ===================================
 # ⚙️ Proje özel dosyalar (runtime'da otomatik oluşur)
 # ===================================
-# Bunlar config.js tarafından ./project_scripts/ altında
+# Bunlar config.js tarafından ./NeRoBoT_db/ altında
 # otomatik üretilir — kişisel/hassas veri içerdiği için commit'lenmez.
-project_scripts/whitelist.json
-project_scripts/admin.json
-project_scripts/noprefix.json
-project_scripts/groupchat.json
-project_scripts/settings.json
+NeRoBoT_db/whitelist.json
+NeRoBoT_db/admin.json
+NeRoBoT_db/noprefix.json
+NeRoBoT_db/groupchat.json
+NeRoBoT_db/settings.json
 
 # ===================================
 # 💻 IDE & Editor

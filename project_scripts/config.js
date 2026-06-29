@@ -4,11 +4,12 @@ import fs from 'fs';
 // File paths
 // ============================
 const PATHS = {
-    whitelist:   './project_scripts/whitelist.json',
-    admins:      './project_scripts/admin.json',
-    noPrefixChats: './project_scripts/noprefix.json',
-    groupChats:  './project_scripts/groupchat.json',
-    settings:    './project_scripts/settings.json',
+    whitelist:   './NeRoBoT_db/whitelist.json',
+    admins:      './NeRoBoT_db/admin.json',
+    noPrefixChats: './NeRoBoT_db/noprefix.json',
+    groupChats:  './NeRoBoT_db/groupchat.json',
+    settings:    './NeRoBoT_db/settings.json',
+    chatModels:  './NeRoBoT_db/chatmodels.json',
 };
 
 // ============================
@@ -21,6 +22,16 @@ const DEFAULTS = {
     debugChatId:           null,
     whitelistMode:         false,
     aiChatEnabled:         true,
+
+    // No-prefix-all — when enabled, EVERY chat is treated as no-prefix
+    // (no need to be in the noPrefixChats set). Which chats actually get
+    // a response is still gated by whitelistMode:
+    //   - whitelistMode ON  → only whitelisted chats respond (now no-prefix)
+    //   - whitelistMode OFF → literally every incoming message gets a
+    //     no-prefix response — dangerous, so toggling this on/off is
+    //     guarded (see commands.js NoPrefixAll / Whitelist control).
+    // Defaults to OFF.
+    noPrefixAll:           false,
 
     // Prefixes
     prefix:                ".",
@@ -84,6 +95,7 @@ function saveJson(path, data) {
 // ============================
 const PERSISTENT_KEYS = [
     'prefix', 'debugPrefix', 'ignorePrefix', 'whitelistMode', 'aiChatEnabled',
+    'noPrefixAll',
     'aiModel', 'systemPrompt',
     'thinkEnabled', 'thinkMessage',
     'rateLimitEnabled', 'rateLimitMaxTokens', 'rateLimitRefillMs',
@@ -99,6 +111,17 @@ export function saveSettings() {
     const snapshot = {};
     for (const key of PERSISTENT_KEYS) snapshot[key] = state[key];
     saveJson(PATHS.settings, snapshot);
+}
+
+// Resets every persistent setting back to its DEFAULTS value (in place,
+// so other modules' references to `state` stay valid) and saves.
+// Runtime-only fields (activeChatId, debugChatId, fixedMode) are also
+// reset here since "reset all" should fully restore a fresh-install state.
+export function resetStateToDefaults() {
+    for (const key of Object.keys(DEFAULTS)) {
+        state[key] = DEFAULTS[key];
+    }
+    saveSettings();
 }
 
 // ============================
@@ -137,6 +160,19 @@ export const groupChats = new Set(loadJson(PATHS.groupChats, []));
 
 export function saveGroupChats() {
     saveJson(PATHS.groupChats, [...groupChats]);
+}
+
+// ============================
+// Chat-specific model overrides
+// chatModels[chatId] = "model-name"
+// Chats without an entry here fall back to state.aiModel (the global/main model).
+// Persisted separately from settings.json — kept independent of !clear,
+// since clearing a chat's memory shouldn't also reset its model choice.
+// ============================
+export const chatModels = loadJson(PATHS.chatModels, {});
+
+export function saveChatModels() {
+    saveJson(PATHS.chatModels, chatModels);
 }
 
 // ============================

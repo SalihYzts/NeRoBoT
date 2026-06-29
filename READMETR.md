@@ -84,24 +84,26 @@ Başlamadan önce şunların kurulu olduğundan emin olun:
 
 ```
 nerobot/
-├── NeRoBoT.js              # Giriş noktası — WhatsApp istemcisi & mesaj yönlendirme
+├── NeRoBoT.js                      # Giriş noktası — WhatsApp istemcisi & mesaj yönlendirme
 ├── package.json
-└── project_scripts/
-    ├── ai.js               # Ollama entegrasyonu
-    ├── config.js           # Durum, ayar kalıcılığı, dosya yolları
-    ├── commands.js         # Tüm !komutlar
-    ├── ratelimit.js         # Token-bucket hız sınırlayıcı
-    ├── utils.js            # Mesaj gönderme yardımcıları
-    ├── ascii.txt           # Başlangıç banner'ı
-    ├── help.txt            # Yardım menüsü metni (TR/EN)
-    ├── settings.json       # Çalışma zamanında otomatik oluşur
-    ├── whitelist.json      # Çalışma zamanında otomatik oluşur
-    ├── admin.json          # Çalışma zamanında otomatik oluşur
-    ├── noprefix.json       # Çalışma zamanında otomatik oluşur
-    └── groupchat.json      # Çalışma zamanında otomatik oluşur
+├── project_scripts/
+│   ├── ai.js                       # Ollama entegrasyonu
+│   ├── config.js                   # Durum, ayar kalıcılığı, dosya yolları
+│   ├── commands.js                 # Tüm !komutlar
+│   ├── ratelimit.js                # Token-bucket hız sınırlayıcı
+│   └── utils.js                    # Mesaj gönderme yardımcıları
+└── NeRoBoT_db/
+    ├── ascii.txt                   # Başlangıç banner'ı
+    ├── help.txt                    # Yardım menüsü metni (TR/EN)
+    ├── chatmodels.json             # Sohbet bazlı model ayarları (commit'lenir)
+    ├── settings.json               # Çalışma zamanında otomatik oluşur
+    ├── whitelist.json              # Çalışma zamanında otomatik oluşur
+    ├── admin.json                  # Çalışma zamanında otomatik oluşur
+    ├── noprefix.json               # Çalışma zamanında otomatik oluşur
+    └── groupchat.json              # Çalışma zamanında otomatik oluşur
 ```
 
-`project_scripts/*.json` dosyaları ilk çalıştırmada otomatik olarak oluşturulur ve git'e **commit edilmez** (bkz. `.gitignore`).
+`NeRoBoT_db/*.json` dosyaları ilk çalıştırmada otomatik olarak oluşturulur ve git'e **commit edilmez** (bkz. `.gitignore`).
 
 ---
 
@@ -119,6 +121,8 @@ cd nerobot
 ```bash
 npm install
 ```
+
+
 
 ### 3. Ollama'yı Kurun ve Bir Model İndirin
 
@@ -310,6 +314,16 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 ---
 
 ## Sık Karşılaşılan Sorunlar
+
+<details>
+<summary><b>npm install Puppeteer/Chrome hatası veriyor</b></summary>
+
+Puppeteer, Chrome'un bir kopyasını kullanıcı klasörünüzde önbelleğe alır. Bu önbellek bozulursa (klasör var ama içindeki `chrome.exe` eksikse) `npm install` hata verir. Önbelleği silip `npm install` komutunu tekrar çalıştırın:
+
+- **Windows:** `C:\Users\<kullanıcı adınız>\.cache\puppeteer` klasörünü silin
+- **Linux / macOS:** `~/.cache/puppeteer` klasörünü silin
+
+</details>
 
 <details>
 <summary><b>Chrome not found hatası</b></summary>

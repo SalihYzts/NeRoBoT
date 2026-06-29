@@ -1,14 +1,29 @@
 import fs from 'fs';
 import { sendText } from './utils.js';
 import {
-    state, saveSettings,
+    state, saveSettings, resetStateToDefaults,
     chatHistories,
     whitelist, saveWhitelist,
     admins, saveAdmins,
     noPrefixChats, saveNoPrefixChats,
     groupChats, saveGroupChats,
+    chatModels, saveChatModels,
 } from './config.js';
 import { resetRateLimitBucket, resetAllRateLimitBuckets } from './ratelimit.js';
+
+// ============================
+// Project version — read from package.json (project root, one level up
+// from this file's project_scripts/ folder). Falls back gracefully if
+// the file is missing or malformed, so this never crashes Info/Help.
+// ============================
+function getVersion() {
+    try {
+        const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+        return pkg.version || 'unknown';
+    } catch (_) {
+        return 'unknown';
+    }
+}
 
 // ============================
 // Confirmation gate
@@ -134,6 +149,21 @@ export async function Whitelist(msg, targetId) {
     }
 
     if (sub === 'control') {
+        // Turning OFF the whitelist gate while noPrefixAll is on means
+        // EVERY incoming message would get a no-prefix AI response —
+        // guard this specific transition with a confirmation.
+        if (state.whitelistMode && state.noPrefixAll) {
+            return requireConfirm(`whitelist:control:${targetId}`, targetId,
+                `⚠️ No-prefix-all is currently ON. Disabling the whitelist gate ` +
+                `will make the bot respond to EVERY incoming message from anyone, with no prefix needed.`,
+                async () => {
+                    state.whitelistMode = false;
+                    saveSettings();
+                    await sendText(targetId, `New-chat whitelist gate disabled.`);
+                }
+            );
+        }
+
         state.whitelistMode = !state.whitelistMode;
         saveSettings();
         return sendText(targetId, `New-chat whitelist gate ${state.whitelistMode ? 'enabled' : 'disabled'}.`);
@@ -298,19 +328,23 @@ export async function Prefix(msg, targetId) {
 
 // ============================
 // !clear  —  clear chat memory
-//   (no args)  → clear this chat
-//   <ID>       → clear specific chat
-//   all        → clear ALL chats (requires confirm)
+//   (no args)     → usage hint, clears nothing
+//   chat          → clear this chat's memory
+//   chat <ID>     → clear a specific chat's memory
+//   all           → clear ALL chats' memory (requires confirm)
 // ============================
 export async function Clear(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
     const sub   = parts[1]?.toLowerCase();
 
-    if (!sub) {
-        if (!chatHistories[targetId]) return sendText(targetId, `No memory for this chat.`);
-        delete chatHistories[targetId];
-        resetRateLimitBucket(targetId);
-        return sendText(targetId, `Memory cleared for this chat.`);
+    if (sub === 'chat') {
+        const id = parts[2] || targetId;
+        if (!chatHistories[id]) {
+            return sendText(targetId, id === targetId ? `No memory for this chat.` : `No memory for: ${id}`);
+        }
+        delete chatHistories[id];
+        resetRateLimitBucket(id);
+        return sendText(targetId, id === targetId ? `Memory cleared for this chat.` : `Memory cleared for: ${id}`);
     }
 
     if (sub === 'all') {
@@ -325,57 +359,247 @@ export async function Clear(msg, targetId) {
         );
     }
 
-    // Treat sub as a chat ID
-    const id = parts[1];
-    if (!chatHistories[id]) return sendText(targetId, `No memory for: ${id}`);
-    delete chatHistories[id];
-    resetRateLimitBucket(id);
-    await sendText(targetId, `Memory cleared for: ${id}`);
+    // (no args) / unknown sub — usage hint only, nothing is deleted
+    await sendText(targetId,
+        `Usage:\n` +
+        `${state.debugPrefix}clear chat          — clear this chat's memory\n` +
+        `${state.debugPrefix}clear chat <ID>     — clear a specific chat's memory\n` +
+        `${state.debugPrefix}clear all           — clear ALL chats' memory`
+    );
 }
 
 // ============================
-// !model  —  AI model selection
-//   (no args)   → show current model + list installed Ollama models
-//   <name>      → change model
+// !reset  —  reset settings back to defaults
+//   (no args)                  → usage hint, resets nothing
+//   settings                   → reset ALL of this chat's own overrides to global (requires confirm)
+//   settings <name>            → reset a single chat-level setting (no confirm needed)
+//                                 names: model, personality, noprefix, groupchat, debugchat, fixedchat
+//   all settings               → factory-reset EVERYTHING (global state + all lists) (requires confirm)
+// ============================
+
+// Resets a single chat-level setting for `targetId`. Returns a status line.
+function resetSingleChatSetting(targetId, name) {
+    switch (name) {
+        case 'model': {
+            if (!chatModels[targetId]) return `This chat had no model override.`;
+            delete chatModels[targetId];
+            saveChatModels();
+            return `Model override removed — back to global model: ${state.aiModel}`;
+        }
+        case 'personality': {
+            if (!chatHistories[targetId]) return `This chat had no custom personality.`;
+            chatHistories[targetId][0].content = state.systemPrompt;
+            return `Personality reset to global for this chat.`;
+        }
+        case 'noprefix': {
+            if (!noPrefixChats.has(targetId)) return `No-prefix mode was already off for this chat.`;
+            noPrefixChats.delete(targetId);
+            saveNoPrefixChats();
+            return `No-prefix mode disabled for this chat.`;
+        }
+        case 'groupchat': {
+            if (!groupChats.has(targetId)) return `Group chat mode was already off for this chat.`;
+            groupChats.delete(targetId);
+            saveGroupChats();
+            return `Group chat mode disabled for this chat.`;
+        }
+        case 'debugchat': {
+            if (state.debugChatId !== targetId) return `This chat wasn't the debug channel.`;
+            state.debugChatId = null;
+            return `Debug channel cleared (was this chat).`;
+        }
+        case 'fixedchat': {
+            if (!(state.fixedMode && state.activeChatId === targetId)) return `Bot wasn't fixed to this chat.`;
+            state.fixedMode = false;
+            state.activeChatId = null;
+            return `Bot unlocked from this chat.`;
+        }
+        default:
+            return null; // unknown name
+    }
+}
+
+const CHAT_SETTING_NAMES = ['model', 'personality', 'noprefix', 'groupchat', 'debugchat', 'fixedchat'];
+
+export async function Reset(msg, targetId) {
+    const parts = msg.body.trim().split(/\s+/);
+    const sub   = parts[1]?.toLowerCase();
+    const arg2  = parts[2]?.toLowerCase();
+
+    // ---- reset all settings  (factory reset — global state + all lists) ----
+    if (sub === 'all' && arg2 === 'settings') {
+        return requireConfirm(`reset:all:${targetId}`, targetId,
+            `This will reset EVERYTHING to the project's default config: ` +
+            `all settings, the whitelist, admins, no-prefix chats, group chats, ` +
+            `per-chat model overrides, and all chat memories.`,
+            async () => {
+                resetStateToDefaults();
+                whitelist.clear();      saveWhitelist();
+                admins.clear();         saveAdmins();
+                noPrefixChats.clear();  saveNoPrefixChats();
+                groupChats.clear();     saveGroupChats();
+                for (const key in chatModels) delete chatModels[key];
+                saveChatModels();
+                for (const key in chatHistories) delete chatHistories[key];
+                resetAllRateLimitBuckets();
+                await sendText(targetId, `Everything has been reset to the project defaults.`);
+            }
+        );
+    }
+
+    // ---- reset settings [name] ----
+    if (sub === 'settings') {
+        // reset settings <name> — single chat-level setting, no confirm
+        if (arg2) {
+            if (!CHAT_SETTING_NAMES.includes(arg2)) {
+                return sendText(targetId,
+                    `Unknown setting "${arg2}".\n` +
+                    `Available: ${CHAT_SETTING_NAMES.join(', ')}`
+                );
+            }
+            const result = resetSingleChatSetting(targetId, arg2);
+            return sendText(targetId, result);
+        }
+
+        // reset settings (no name) — reset ALL of this chat's overrides, requires confirm
+        return requireConfirm(`reset:settings:${targetId}`, targetId,
+            `This will reset ALL of this chat's own settings back to global ` +
+            `(model, personality, no-prefix, group chat, debug channel, fixed chat — whichever apply).`,
+            async () => {
+                const lines = CHAT_SETTING_NAMES.map(name => resetSingleChatSetting(targetId, name));
+                await sendText(targetId, `This chat's settings have been reset to global:\n` + lines.join('\n'));
+            }
+        );
+    }
+
+    // ---- (no args) / unknown sub — usage hint, nothing is reset ----
+    await sendText(targetId,
+        `Usage:\n` +
+        `${state.debugPrefix}reset settings              — reset all of THIS chat's overrides to global\n` +
+        `${state.debugPrefix}reset settings <name>       — reset a single setting (no confirm)\n` +
+        `   names: ${CHAT_SETTING_NAMES.join(', ')}\n` +
+        `${state.debugPrefix}reset all settings          — factory-reset EVERYTHING (global)`
+    );
+}
+
+
+//   (no args)              → usage hint (ambiguous — use global or chat)
+//   list                    → show global model + every chat override
+//   global <name>           → change the main/global model
+//   chat <name>             → change this chat's model override
+//   chat <ID> <name>        → change the given chat's model override
+//   chat reset              → remove this chat's override (falls back to global)
+//   chat reset <ID>         → remove the given chat's override
+//   installed               → list installed Ollama models
 // ============================
 export async function Model(msg, targetId) {
-    const newModel = msg.body.trim().split(/\s+/)[1];
-    if (newModel) {
-        const old = state.aiModel;
-        state.aiModel = newModel;
-        saveSettings();
-        return sendText(targetId, `Model changed:\n${old} → ${state.aiModel}`);
-    }
+    const parts = msg.body.trim().split(/\s+/);
+    const sub   = parts[1]?.toLowerCase();
 
-    // No args — show current model and list available Ollama models
-    let modelList = '';
-    try {
-        const { default: ollama } = await import('ollama');
-        const result = await ollama.list();
-        const models = result.models || [];
-        if (models.length === 0) {
-            modelList = '(no models found — is Ollama running?)';
+    // ---- model list ----
+    if (sub === 'list') {
+        const entries = Object.entries(chatModels);
+        let body = `Global model (default for new/cleared chats): ${state.aiModel}\n\n`;
+        if (entries.length === 0) {
+            body += `No per-chat overrides set.`;
         } else {
-            modelList = models
-                .map(m => {
-                    const name     = m.name || m.model || '?';
-                    const sizeMb   = m.size ? (m.size / 1024 / 1024 / 1024).toFixed(1) + ' GB' : '';
-                    const modified = m.modified_at
-                        ? new Date(m.modified_at).toLocaleDateString()
-                        : '';
-                    const tag = name === state.aiModel ? ' ← active' : '';
-                    return `• ${name}${sizeMb ? '  [' + sizeMb + ']' : ''}${modified ? '  ' + modified : ''}${tag}`;
-                })
-                .join('\n');
+            body += `Per-chat overrides (${entries.length}):\n` +
+                entries.map(([id, m]) => `• ${id} → ${m}`).join('\n');
         }
-    } catch (err) {
-        modelList = `(could not fetch model list: ${err.message || err})`;
+        return sendText(targetId, body);
     }
 
+    // ---- model installed ----
+    if (sub === 'installed') {
+        let modelList = '';
+        try {
+            const { default: ollama } = await import('ollama');
+            const result = await ollama.list();
+            const models = result.models || [];
+            if (models.length === 0) {
+                modelList = '(no models found — is Ollama running?)';
+            } else {
+                modelList = models
+                    .map(m => {
+                        const name     = m.name || m.model || '?';
+                        const sizeMb   = m.size ? (m.size / 1024 / 1024 / 1024).toFixed(1) + ' GB' : '';
+                        const modified = m.modified_at
+                            ? new Date(m.modified_at).toLocaleDateString()
+                            : '';
+                        const tag = name === state.aiModel
+                            ? ' ← global'
+                            : (Object.values(chatModels).includes(name) ? ' ← used by a chat' : '');
+                        return `• ${name}${sizeMb ? '  [' + sizeMb + ']' : ''}${modified ? '  ' + modified : ''}${tag}`;
+                    })
+                    .join('\n');
+            }
+        } catch (err) {
+            modelList = `(could not fetch model list: ${err.message || err})`;
+        }
+        return sendText(targetId, `Installed Ollama models:\n${modelList}`);
+    }
+
+    // ---- model global <name> ----
+    if (sub === 'global') {
+        const name = parts[2];
+        if (!name) return sendText(targetId, `Usage: ${state.debugPrefix}model global <name>`);
+        const old = state.aiModel;
+        state.aiModel = name;
+        saveSettings();
+        return sendText(targetId, `Global model changed:\n${old} → ${state.aiModel}\n(Used by chats without their own override.)`);
+    }
+
+    // ---- model chat ... ----
+    if (sub === 'chat') {
+        const arg2 = parts[2];
+        const arg3 = parts[3];
+
+        // model chat reset [ID]
+        if (arg2?.toLowerCase() === 'reset') {
+            const id = arg3 || targetId;
+            if (!chatModels[id]) return sendText(targetId, `${id} has no model override (already using global).`);
+            delete chatModels[id];
+            saveChatModels();
+            return sendText(targetId, `Model override removed for: ${id}\nNow using global model: ${state.aiModel}`);
+        }
+
+        // model chat <name>            → this chat
+        // model chat <ID> <name>       → given chat
+        let id, name;
+        if (arg3) {
+            id = arg2;
+            name = arg3;
+        } else {
+            id = targetId;
+            name = arg2;
+        }
+
+        if (!name) {
+            return sendText(targetId,
+                `Usage:\n` +
+                `${state.debugPrefix}model chat <name>          — set this chat's model\n` +
+                `${state.debugPrefix}model chat <ID> <name>     — set a specific chat's model\n` +
+                `${state.debugPrefix}model chat reset [ID]      — remove override, fall back to global`
+            );
+        }
+
+        const old = chatModels[id] || `${state.aiModel} (global)`;
+        chatModels[id] = name;
+        saveChatModels();
+        return sendText(targetId, `Model for ${id}:\n${old} → ${name}`);
+    }
+
+    // ---- model (no args) / unknown sub ----
+    const hasOverride = !!chatModels[targetId];
     await sendText(targetId,
-        `Current model: ${state.aiModel}\n\n` +
-        `Installed Ollama models:\n${modelList}\n\n` +
-        `Usage: ${state.debugPrefix}model <name>`
+        `Model commands are split into global vs. per-chat — please specify:\n\n` +
+        `${state.debugPrefix}model global <name>        — change the main model (default for all chats)\n` +
+        `${state.debugPrefix}model chat <name>          — change this chat's model only\n` +
+        `${state.debugPrefix}model chat <ID> <name>     — change a specific chat's model\n` +
+        `${state.debugPrefix}model chat reset [ID]      — remove a chat's override\n` +
+        `${state.debugPrefix}model list                 — show global model + all overrides\n` +
+        `${state.debugPrefix}model installed            — list installed Ollama models\n\n` +
+        `This chat is currently using: ${hasOverride ? chatModels[targetId] + ' (override)' : state.aiModel + ' (global)'}`
     );
 }
 
@@ -417,6 +641,42 @@ export async function NoPrefix(msg, targetId) {
             `Start a message with "${state.ignorePrefix}" to skip the AI for that message.`
         );
     }
+}
+
+// ============================
+// !noprefixall  —  toggle no-prefix mode globally for every chat
+// Which chats actually get a response still depends on whitelistMode:
+//   - whitelistMode ON  → only whitelisted chats respond (no-prefix)
+//   - whitelistMode OFF → every incoming message gets a no-prefix
+//     response — dangerous, so turning this ON while whitelist is OFF
+//     requires confirmation. Turning it back OFF is always immediate.
+// ============================
+export async function NoPrefixAll(msg, targetId) {
+    if (state.noPrefixAll) {
+        state.noPrefixAll = false;
+        saveSettings();
+        return sendText(targetId, `No-prefix-all disabled. Prefix (or per-chat no-prefix mode) required again.`);
+    }
+
+    if (!state.whitelistMode) {
+        return requireConfirm(`noprefixall:enable:${targetId}`, targetId,
+            `⚠️ Whitelist mode is currently OFF. Enabling no-prefix-all ` +
+            `will make the bot respond to EVERY incoming message from anyone, with no prefix needed.`,
+            async () => {
+                state.noPrefixAll = true;
+                saveSettings();
+                await sendText(targetId,
+                    `No-prefix-all enabled. Bot will respond to every message in every chat — no prefix needed.`
+                );
+            }
+        );
+    }
+
+    state.noPrefixAll = true;
+    saveSettings();
+    await sendText(targetId,
+        `No-prefix-all enabled. Whitelisted chats will respond to every message — no prefix needed.`
+    );
 }
 
 // ============================
@@ -543,14 +803,14 @@ export async function Info(msg, targetId) {
 
     if (!sub) {
         return sendText(targetId,
-            `NeRoBoT — Status Overview\n` +
+            `NeRoBoT v${getVersion()} — Status Overview\n` +
             `\n[Chat]\n` +
             `ID: ${chatId}  |  ${chat.isGroup ? 'Group' : 'DM'}\n` +
             `No-prefix: ${noPrefixChats.has(targetId) ? 'on' : 'off'}  |  ` +
             `Group chat: ${groupChats.has(targetId) ? 'on' : 'off'}  |  ` +
             `Memory: ${chatHistories[targetId] ? 'active' : 'none'}\n` +
             `\n[AI]\n` +
-            `Enabled: ${state.aiChatEnabled}  |  Model: ${state.aiModel}\n` +
+            `Enabled: ${state.aiChatEnabled}  |  Model: ${chatModels[targetId] || state.aiModel}${chatModels[targetId] ? ' (override)' : ' (global)'}\n` +
             `Fixed chat: ${state.fixedMode ? `on (${state.activeChatId})` : 'off'}\n` +
             `Think: ${state.thinkEnabled ? 'on' : 'off'}  |  ` +
             `Rate limit: ${state.rateLimitEnabled ? `on (${state.rateLimitMaxTokens}t / ${state.rateLimitRefillMs/1000}s)` : 'off'}  |  ` +
@@ -558,6 +818,7 @@ export async function Info(msg, targetId) {
             `\n[System]\n` +
             `Prefix: ${state.prefix}  |  Debug: ${state.debugPrefix}\n` +
             `Whitelist mode: ${state.whitelistMode ? 'on' : 'off'}  |  ` +
+            `No-prefix-all: ${state.noPrefixAll ? 'on' : 'off'}  |  ` +
             `Admins: ${admins.size}  |  Whitelist: ${whitelist.size}\n` +
             `\nUse ${state.debugPrefix}info ai / chat / system for details.`
         );
@@ -572,6 +833,7 @@ export async function Info(msg, targetId) {
             `Type: ${chat.isGroup ? 'Group' : 'DM'}\n` +
             `No-prefix mode: ${noPrefixChats.has(targetId) ? 'Enabled' : 'Disabled'}\n` +
             `Group chat mode: ${groupChats.has(targetId) ? 'Enabled (shared memory)' : 'Disabled'}\n` +
+            `Model: ${chatModels[targetId] || state.aiModel}${chatModels[targetId] ? ' (override)' : ' (global)'}\n` +
             `Memory: ${hasCustom ? `Active (${chatHistories[targetId].length - 1} messages)` : 'None'}\n` +
             `Personality: ${hasCustom ? '(custom)' : '(global)'}\n` +
             `${personality}`
@@ -583,7 +845,8 @@ export async function Info(msg, targetId) {
         const personality = hasCustom ? chatHistories[targetId][0].content : state.systemPrompt;
         return sendText(targetId,
             `[AI Info]\n` +
-            `Enabled: ${state.aiChatEnabled}  |  Model: ${state.aiModel}\n` +
+            `Enabled: ${state.aiChatEnabled}  |  Global model: ${state.aiModel}\n` +
+            `This chat's model: ${chatModels[targetId] || state.aiModel}${chatModels[targetId] ? ' (override)' : ' (using global)'}\n` +
             `Fixed chat: ${state.fixedMode ? `Enabled (${state.activeChatId})` : 'Disabled'}\n` +
             `\n` +
             `Think message: ${state.thinkEnabled ? 'Enabled' : 'Disabled'}\n` +
@@ -605,6 +868,7 @@ export async function Info(msg, targetId) {
     if (sub === 'system') {
         return sendText(targetId,
             `[System Info]\n` +
+            `Version: v${getVersion()}\n` +
             `Main prefix:   ${state.prefix}\n` +
             `Debug prefix:  ${state.debugPrefix}\n` +
             `Ignore prefix: ${state.ignorePrefix}\n` +
@@ -612,6 +876,7 @@ export async function Info(msg, targetId) {
             `Debug channel: ${state.debugChatId || 'None'}\n` +
             `\n` +
             `Whitelist mode:  ${state.whitelistMode ? 'Enabled' : 'Disabled'}\n` +
+            `No-prefix-all:   ${state.noPrefixAll ? 'Enabled' : 'Disabled'}\n` +
             `Whitelist count: ${whitelist.size}\n` +
             `Admin count:     ${admins.size}`
         );
@@ -648,9 +913,17 @@ export async function AiError(msg, targetId) {
 
 // ============================
 // !help
+//   (no args)  → full help menu (TR or EN, based on helpLanguage)
+//   github     → sends the project's GitHub link
 // ============================
 export async function Help(msg, targetId) {
-    const helpText  = fs.readFileSync('./project_scripts/help.txt', 'utf8');
+    const sub = msg.body.trim().split(/\s+/)[1]?.toLowerCase();
+
+    if (sub === 'github') {
+        return sendText(targetId, `NeRoBoT v${getVersion()} — GitHub:\nhttps://github.com/SalihYzts/NeRoBoT`);
+    }
+
+    const helpText  = fs.readFileSync('./NeRoBoT_db/help.txt', 'utf8');
     const trMatch   = helpText.match(/===TR===\s*([\s\S]*?)(?====EN===|$)/);
     const enMatch   = helpText.match(/===EN===\s*([\s\S]*?)$/);
     const trSection = trMatch ? trMatch[1].trim() : 'TR bölümü bulunamadı.';
@@ -732,10 +1005,12 @@ export const commands = {
     'think':       Think,
     'prefix':      Prefix,
     'clear':       Clear,
+    'reset':       Reset,
     'model':       Model,
     'aichat':      AiChat,
     'fixedchat':   FixedChat,
     'noprefix':    NoPrefix,
+    'noprefixall': NoPrefixAll,
     'groupchat':   GroupChat,
     'debugchat':   DebugChat,
     'ratelimit':   RateLimit,

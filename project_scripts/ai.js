@@ -1,5 +1,5 @@
 import ollama from 'ollama';
-import { state, chatHistories } from './config.js';
+import { state, chatHistories, chatModels } from './config.js';
 
 export async function askModel(userId, prompt, images = []) {
     if (!chatHistories[userId]) {
@@ -17,9 +17,13 @@ export async function askModel(userId, prompt, images = []) {
     }
     chatHistories[userId].push(userMessage);
 
+    // Use this chat's model override if one is set, otherwise fall back
+    // to the global/main model.
+    const modelToUse = chatModels[userId] || state.aiModel;
+
     try {
         const response = await ollama.chat({
-            model: state.aiModel,
+            model: modelToUse,
             messages: chatHistories[userId]
         });
 
@@ -33,7 +37,7 @@ export async function askModel(userId, prompt, images = []) {
 
         // Re-throw with context so the caller can route this to the
         // debug channel instead of the active chat.
-        const wrapped = new Error(`AI failed to respond.\nModel: ${state.aiModel}\nReason: ${err.message || err}`);
+        const wrapped = new Error(`AI failed to respond.\nModel: ${modelToUse}\nReason: ${err.message || err}`);
         wrapped.cause = err;
         throw wrapped;
     }
