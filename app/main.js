@@ -2426,12 +2426,21 @@ ipcMain.handle('chat:idVariants', (_e, profileId, chatId) => {
 // ============================
 app.whenReady().then(async () => {
     // Headless hook for the NSIS installer's best-effort Ollama install
-    // (see build/installer.nsh's customInstall macro) — no window, just try
-    // the download+silent-install and exit. Safe to no-op: if this fails or
-    // is skipped, the in-app "AI Bot" toggle / Ollama tile gate (renderer's
+    // (see build/installer.nsh's customInstall macro — Exec, not ExecWait,
+    // so a slow/absent network or a stuck install HERE can never stall the
+    // main installer window). Safe to no-op: if this fails or is skipped,
+    // the in-app "AI Bot" toggle / Ollama tile gate (renderer's
     // ensureOllamaOrPrompt) prompts the user to install it later anyway.
+    // installOllama() has its own internal timeouts now (see
+    // ollama-installer.js), but this outer race is a second safety net so
+    // THIS headless process specifically can never outlive its usefulness
+    // sitting in the background, even if some future change to that
+    // function reintroduces a hang.
     if (process.argv.includes('--install-ollama')) {
-        await installOllama();
+        await Promise.race([
+            installOllama(),
+            new Promise((resolve) => setTimeout(resolve, 3 * 60 * 1000)),
+        ]);
         app.quit();
         return;
     }

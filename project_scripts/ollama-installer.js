@@ -33,7 +33,18 @@ export async function isOllamaInstalled() {
 function downloadTo(url, destPath, onProgress) {
     return new Promise((resolve, reject) => {
         const file = fs.createWriteStream(destPath);
-        const request = https.get(url, (res) => {
+        // No network activity (not even a connection) for 30s → treat as
+        // dead and bail instead of hanging forever. This is an INACTIVITY
+        // timeout (resets on any data), not a total-duration cap, so a
+        // slow-but-still-moving download is never cut short by it — only a
+        // truly stalled one (no internet, DNS black hole, firewall drop).
+        // A stall here used to hang the whole NeRoBoT installer, since
+        // build/installer.nsh used to ExecWait on this — see its own
+        // comment for why that's fixed now, but this is worth having
+        // regardless: the in-app "AI Bot"/Ollama tile install button awaits
+        // this same function directly and would otherwise show a frozen
+        // progress bar just the same.
+        const request = https.get(url, { timeout: 30000 }, (res) => {
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                 file.close();
                 fs.unlink(destPath, () => {});
@@ -55,6 +66,7 @@ function downloadTo(url, destPath, onProgress) {
             res.pipe(file);
             file.on('finish', () => file.close(() => resolve()));
         });
+        request.on('timeout', () => request.destroy(new Error('İndirme zaman aşımına uğradı — internet bağlantısı yanıt vermiyor.')));
         request.on('error', (err) => {
             file.close();
             fs.unlink(destPath, () => {});
@@ -83,8 +95,18 @@ export async function installOllama(onProgress) {
         onProgress?.({ phase: 'installing', percent: null });
         await new Promise((resolve, reject) => {
             const child = spawn(tmpPath, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'], { stdio: 'ignore', windowsHide: true });
-            child.on('error', reject);
+            // /VERYSILENT suppresses Inno Setup's OWN UI, but not a Windows
+            // UAC elevation prompt if the installer needs admin rights —
+            // that prompt has nowhere to render in this headless/background
+            // context (no one's there to click it), so without this cap a
+            // stuck elevation request would hang here indefinitely.
+            const timer = setTimeout(() => {
+                child.kill();
+                reject(new Error('Ollama kurulumu zaman aşımına uğradı (görünmez bir onay penceresinde beklemiş olabilir).'));
+            }, 2 * 60 * 1000);
+            child.on('error', (err) => { clearTimeout(timer); reject(err); });
             child.on('exit', (code) => {
+                clearTimeout(timer);
                 if (code === 0) resolve();
                 else reject(new Error(`Ollama kurulumu ${code} koduyla sonlandı.`));
             });
