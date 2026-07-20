@@ -24,11 +24,11 @@
                                                                                                       
                                                                                                       
                                                                                                     
-```   
+```
 
-**NeRoBoT**, [Ollama](https://ollama.com/) ile çalışan yapay zeka modellerini **WhatsApp** üzerinden kullanmanızı sağlayan bir bottur. `whatsapp-web.js` kütüphanesi kullanılarak geliştirilmiştir.
+**NeRoBoT**, **WhatsApp** ve **Telegram** üzerinde yerel yapay zeka destekli botlar çalıştıran bir Windows masaüstü uygulamasıdır — aynı anda birden fazla hesap/platform, her biri tamamen izole — ayrıca hiçbir sohbet hesabına bağlı olmayan bağımsız bir AI sohbeti (**NeRoChAt**) de içerir. Her şey kendi bilgisayarındaki [Ollama](https://ollama.com/) modelleri üzerinde çalışır.
 
-Geliştirici: **TheSalHeLP**
+Geliştirici: **Salih Yazıtaş**
 
 ---
 ## Belgeler
@@ -42,6 +42,7 @@ Geliştirici: **TheSalHeLP**
 - [Gereksinimler](#gereksinimler)
 - [Proje Yapısı](#proje-yapısı)
 - [Kurulum](#kurulum)
+- [Derleme ve Yayınlama](#derleme-ve-yayınlama)
 - [Komutlar](#komutlar)
 - [Varsayılan Yapılandırma](#varsayılan-yapılandırma)
 - [Sık Karşılaşılan Sorunlar](#sık-karşılaşılan-sorunlar)
@@ -52,32 +53,41 @@ Geliştirici: **TheSalHeLP**
 
 ## Özellikler
 
-- Masaüstü Uygulaması — Tek pencerelik Electron uygulaması: WhatsApp Web, bot konsol logları ve tam ayar paneli (genel, sohbet bazlı ve liste yönetimi) hepsi bir arada
-- Kalıcı Oturum — QR kodu bir kez okutun; oturum yeniden başlatmalarda korunur
-- Yerel YZ Desteği — Ollama üzerinden istediğiniz modeli (görsel destekli modeller dahil) kullanın
-- Sohbet Hafızası — Her sohbet/kullanıcı için ayrı bağlam, isteğe bağlı ortak hafızalı grup modu
-- Görsel & Dosya Okuma — Görselleri (vision), PDF, Word ve düz metin/kod dosyalarını okuyup modele aktarır
-- Beyaz Liste Sistemi — İstemediğiniz kişilerin botu kullanmasını engelleyin
-- Admin Paneli — Sadece yetkili kişiler yönetim komutlarını kullanabilir; geri alınamaz işlemler onay gerektirir
-- Kişilik (Personality) — Botun sistem mesajını global veya sohbet bazında değiştirin
-- Özelleştirilebilir Prefix'ler — Ana, debug ve yoksayma prefix'leri ayrı ayrı ayarlanabilir
-- No-Prefix Modu — Bir sohbette prefix kullanmadan her mesaja yanıt verilmesini sağlayın
-- Sabit Sohbet Modu — Botu tek bir sohbete kilitleyin
-- Hız Sınırlama — Spam/kötüye kullanımı önlemek için kullanıcı bazlı token-bucket limiter
-- Debug Kanalı — Hataları ve yeni mesaj bildirimlerini ayrı bir sohbete yönlendirin
-- Bilgi Komutu — Tüm sistem durumunu tek mesajda görün
-- İki Dilli Yardım — Yardım menüsü Türkçe ve İngilizce olarak mevcut
+**Uygulama**
+- Çoklu Profil — birden fazla WhatsApp hesabını ve/veya Telegram hesabını yan yana çalıştırın, her biri kendi girişi, ayarları, beyaz listesi, adminleri ve AI hafızasıyla tamamen izole
+- Bildirim Paneli — bir zil ikonu tüm profillerden gelen mesajları (en yeni üstte) topluyor, satır içi hızlı-cevap kutusuyla sekme değiştirmeden yanıt verebiliyorsunuz; bir profilin sekmesi mesajlarını okuyana kadar yanıp sönüyor
+- NeRoChAt — herhangi bir WhatsApp/Telegram botuna bağlı olmayan, tam kapsamlı, genel amaçlı bir AI sohbet sekmesi; kayıtlı konuşmalar, görsel ekleme ve AI görsel üretimi ile
+- NeRoChAt Hızlı Popup — ayarlanabilir bir global klavye kısayolu (varsayılan `Ctrl+Shift+K`) ne yapıyor olursanız olun üzerine küçük, yüzen bir AI sohbeti açıyor; "Bu sohbeti sor" o WhatsApp sohbetinin son mesajlarını bağlam olarak çekiyor
+- Otomatik Güncelleme — her açılışta GitHub Releases'i kontrol edip kendini sessizce güncelliyor (indir → kur → yeniden aç), pencere açılmadan önce
+- Kalıcı Oturumlar — her profilin QR kodunu bir kez okutun; girişler yeniden başlatmalarda korunur
+
+**Bot (her WhatsApp/Telegram profili için)**
+- Yerel YZ Desteği — Ollama üzerinden çektiğiniz istediğiniz modeli (görsel destekli modeller dahil) kullanın
+- Sohbet Hafızası — her sohbet/kullanıcı için ayrı bağlam, isteğe bağlı ortak hafızalı grup modu
+- Görsel & Dosya Okuma — görselleri (vision), PDF, Word ve düz metin/kod dosyalarını okuyup modele aktarır
+- AI Görsel Üretimi — istek üzerine görsel üretip sohbete geri gönderir
+- Beyaz Liste / Kara Liste — belirli sohbetlere botu kullanma izni verin ya da engelleyin
+- Admin Paneli — sadece yetkili kişiler yönetim komutlarını kullanabilir; geri alınamaz işlemler onay gerektirir
+- Kişilik (Personality) — botun sistem mesajını global veya sohbet bazında değiştirin
+- Özelleştirilebilir Prefix'ler — ana, debug ve yoksayma prefix'leri ayrı ayrı ayarlanabilir
+- No-Prefix Modu — bir sohbette (ya da tüm sohbetlerde) prefix kullanmadan her mesaja yanıt verilmesini sağlayın
+- Sabit Sohbet Modu — botu tek bir sohbete kilitleyin
+- Hız Sınırlama — spam/kötüye kullanımı önlemek için kullanıcı bazlı token-bucket limiter
+- Debug Kanalı — hataları ve yeni mesaj bildirimlerini ayrı bir sohbete yönlendirin
+- Bilgi Komutu — tüm sistem durumunu tek mesajda görün
+- İki Dilli Yardım — yardım menüsü Türkçe ve İngilizce olarak mevcut
 
 ---
 
 ## Gereksinimler
 
-Başlamadan önce şunların kurulu olduğundan emin olun:
+**Sadece uygulamayı kullanmak mı istiyorsunuz?** Uygulamanın kendisi dışında hiçbir şey kurmanıza gerek yok — aşağıdaki [Kurulum](#kurulum) bölümüne bakın. [Ollama](https://ollama.com/) sadece AI özelliklerini açtığınızda gerekiyor ve installer sizin için kurmayı teklif ediyor.
+
+**Kaynak koddan çalıştırma/derleme:**
 
 - **Node.js** >= 18.x
 - **npm** >= 9.x
-- **Ollama** (güncel)
-- **İşletim Sistemi:** Windows / Linux / macOS
+- **Windows** (paketlenmiş installer/otomatik güncelleme şu an sadece Windows'ta çalışıyor; kaynak koddan çalıştırmak platformlar arası çalışır)
 
 > Chrome **gerekmez** — uygulama kendi tarayıcı motoruyla (Electron) gelir.
 
@@ -89,29 +99,34 @@ Başlamadan önce şunların kurulu olduğundan emin olun:
 nerobot/
 ├── package.json
 ├── NeRoBoT_App.bat                 # Masaüstü uygulamasını başlatır (Windows)
+├── NeRoBoT_Kurulum.bat             # Kaynak koddan ilk kurulum (npm install + ikonlar)
+├── NeRoBoT_Derle.bat               # Sürüm numaralı bir installer'ı yerelde derler (yayınlamaz)
+├── NeRoBoT_Yayinla.bat             # Kaynağı gönderir + GitHub Release olarak yayınlar (aşağıya bakın)
+├── build.js / release.js           # Yukarıdaki iki .bat dosyasının arkasındaki betikler
 ├── app/
-│   ├── main.js                     # Electron ana süreç — pencere, gömülü WhatsApp Web, IPC
-│   ├── preload.cjs                 # Arayüz köprüsü
-│   └── ui/index.html               # Üst çubuk, log paneli, ayar paneli
+│   ├── main.js                     # Electron ana süreç — pencereler, gömülü WhatsApp/Telegram
+│   │                                #   görünümleri, profil/oturum yönetimi, otomatik güncelleme, tüm IPC
+│   ├── preload.cjs                 # Arayüz ↔ ana süreç köprüsü
+│   └── ui/
+│       ├── index.html              # Üst çubuk, sekme şeridi, bildirim paneli, ayarlar, hızlı popup
+│       └── ollama.html             # NeRoChAt'ın kendi tam sekme penceresi
 ├── project_scripts/
 │   ├── bot.js                      # WhatsApp istemcisi & mesaj yönlendirme
-│   ├── ai.js                       # Ollama entegrasyonu
-│   ├── config.js                   # Durum, ayar kalıcılığı, dosya yolları
+│   ├── telegram-bot.js             # Telegram istemcisi & mesaj yönlendirme (bot.js'in yansıması)
+│   ├── ai.js                       # Ollama entegrasyonu (sohbet, görsel anlama, görsel-niyet sınıflandırma)
+│   ├── imagegen.js                 # AI görsel üretim altyapısı
+│   ├── config.js                   # Profil bazlı durum/ayar kalıcılığı
+│   ├── profiles.js                 # Çoklu profil kayıt defteri (oluştur/yeniden adlandır/sil/dışa-içe aktar)
 │   ├── commands.js                 # Tüm !komutlar
 │   ├── ratelimit.js                # Token-bucket hız sınırlayıcı
-│   └── utils.js                    # Mesaj gönderme yardımcıları
-└── NeRoBoT_db/
-    ├── ascii.txt                   # Başlangıç banner'ı
-    ├── help.txt                    # Yardım menüsü metni (TR/EN)
-    ├── chatmodels.json             # Sohbet bazlı model ayarları (commit'lenir)
-    ├── settings.json               # Çalışma zamanında otomatik oluşur
-    ├── whitelist.json              # Çalışma zamanında otomatik oluşur
-    ├── admin.json                  # Çalışma zamanında otomatik oluşur
-    ├── noprefix.json               # Çalışma zamanında otomatik oluşur
-    └── groupchat.json              # Çalışma zamanında otomatik oluşur
+│   ├── utils.js / telegram-utils.js
+│   ├── file-extract.js             # AI'ın okuyabilmesi için PDF/Word/metin çıkarımı
+│   └── ollama-installer.js         # Windows'ta Ollama'yı algılar/sessizce kurar
+├── build/installer.nsh             # Özel NSIS kurulum-zamanı kancası (en iyi çaba Ollama kurulumu)
+└── scripts/gen-icons.js            # logo.svg'den app/ui/icon.ico + icon.png'yi yeniden üretir
 ```
 
-`NeRoBoT_db/*.json` dosyaları ilk çalıştırmada otomatik olarak oluşturulur ve git'e **commit edilmez** (bkz. `.gitignore`).
+Tüm profil verisi (WhatsApp/Telegram oturumları, profil bazlı ayarlar, NeRoChAt konuşmaları, uygulama config'i) bu klasörün **dışında**, `Documents/NeRoBoT/NeRoBoT_db` altında saklanır — yani uygulamayı kaldırmak/taşımak ona hiç dokunmaz. Altındaki hiçbir şey git'e commit edilmez (bkz. `.gitignore`).
 
 ---
 
@@ -119,9 +134,9 @@ nerobot/
 
 ### Windows: Installer (önerilen)
 
-[GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) sayfasından `NeRoBoT-Setup-x.y.z.exe` dosyasını indirip çalıştırın. NeRoBoT normal bir Windows uygulaması olarak kurulur (Start Menu kısayolu, Windows arama kutusundan bulunabilir, "Program Ekle/Kaldır"da kendi uninstaller'ıyla listelenir) — `git clone`/`npm install` gerekmez. [Ollama](https://ollama.com/) kurulu değilse installer onu da sessizce indirip kurmaya çalışır; bu adım atlanır veya başarısız olursa (örn. kurulum sırasında internet yoksa) NeRoBoT, AI Bot'u ilk açtığınızda kurulumu tekrar teklif eder.
+[GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) sayfasından `NeRoBoT Setup x.y.z.exe` dosyasını indirip çalıştırın. NeRoBoT normal bir Windows uygulaması olarak kurulur (Start Menu kısayolu, Windows arama kutusundan bulunabilir, "Program Ekle/Kaldır"da kendi uninstaller'ıyla listelenir) — `git clone`/`npm install` gerekmez. [Ollama](https://ollama.com/) kurulu değilse installer onu arka planda sessizce indirip kurmayı dener (bu, kurulumun kendisini asla beklemez/geciktirmez); bu adım atlanır veya başarısız olursa (örn. kurulum sırasında internet yoksa) NeRoBoT, AI Bot'u ilk açtığınızda kurulumu tekrar teklif eder. Bundan sonra uygulama her açılışta güncelleme kontrolü yapıp kendini otomatik günceller.
 
-### Kaynak koddan çalıştırma (tüm platformlar / geliştirme)
+### Kaynak koddan çalıştırma (geliştirme)
 
 ### 1. Depoyu Klonlayın
 
@@ -130,58 +145,57 @@ git clone https://github.com/SalihYzts/NeRoBoT.git
 cd nerobot
 ```
 
-### 2. Bağımlılıkları Kurun
+### 2. Kurulum
+
+`NeRoBoT_Kurulum.bat`'a çift tıklayın, ya da elle çalıştırın:
 
 ```bash
 npm install
+npm run gen-icons
 ```
-
-
 
 ### 3. Ollama'yı Kurun ve Bir Model İndirin
 
-[Ollama](https://ollama.com/) sitesinden uygulamayı indirip kurun, ardından kullanmak istediğiniz modeli indirin. (Kaynak yerine paketlenmiş Windows installer'ı kullanıyorsanız bu adım sizin için otomatik denenir — yukarıya bakın.)
+[Ollama](https://ollama.com/) sitesinden uygulamayı indirip kurun, ardından kullanmak istediğiniz modeli/modelleri indirin — bunlardan birini, ya da Ollama'nın desteklediği başka herhangi bir modeli seçebilirsiniz:
 
 ```bash
-ollama pull minimax-m3:cloud
 ollama pull llama3.2
 ollama pull mistral
 ollama pull gemma2
+ollama pull llava
 ```
 
-### 4. Yapılandırma
-
-<details>
-<summary><b>Yapılandırma Dosyaları Otomatiktir</b></summary>
-
-`project_scripts/config.js`, ilk çalıştırmada `settings.json`, `whitelist.json`, `admin.json`, `noprefix.json` ve `groupchat.json` dosyalarını otomatik olarak oluşturur. Bunları elle oluşturmanıza gerek yoktur. Çoğu ayar, uygulama içindeki ayar panelinden de değiştirilebilir.
-
-</details>
-
-### 5. Uygulamayı Başlatın
+### 4. Uygulamayı Başlatın
 
 ```bash
 npm start
 ```
 
-Windows'ta `NeRoBoT_App.bat` dosyasına çift tıklayarak da açabilirsiniz.
+Windows'ta `NeRoBoT_App.bat` dosyasına çift tıklayarak da açabilirsiniz. Home ekranından ilk WhatsApp ya da Telegram profilinizi oluşturabilirsiniz.
 
-WhatsApp Web, durum çubuğu, konsol log paneli ve ayar panelini içeren tek bir pencere açılır.
+### 5. Bir Profili Bağlayın
 
-### Windows installer'ı oluşturma
+1. Home ekranından bir profil oluşturun (WhatsApp ya da Telegram)
+2. **WhatsApp:** Uygulamanın içinde görünen QR kodu telefonunuzla okutun (WhatsApp → Ayarlar → Bağlı Cihazlar → Cihaz Bağla)
+3. **Telegram:** QR kodu telefonunuzla okutun (Telegram → Ayarlar → Cihazlar → Masaüstü Cihazı Bağla)
+
+Bunu her profil için sadece bir kez yapmanız gerekir — oturum kaydedilir ve sonraki açılışta geri yüklenir.
+
+---
+
+## Derleme ve Yayınlama
+
+İki ayrı adım — böylece yayınlamaya karar vermeden önce bir sürümü derleyip test edebilirsiniz:
 
 ```bash
-npm run gen-icons   # logo.svg'den app/ui/icon.ico + icon.png'yi yeniden üretir (sadece logo değiştiğinde gerekir)
-npm run pack        # hızlı, paketlenmemiş build — test için (dist/win-unpacked/)
-npm run dist         # tam NSIS installer, GitHub Release'e yüklemeye hazır (dist/NeRoBoT-Setup-*.exe)
+npm run build     # ya da NeRoBoT_Derle.bat'a çift tıklayın
 ```
+Bir sürüm numarası sorar, `package.json`'a yazar ve `dist/NeRoBoT Setup x.y.z.exe`'yi yerelde derler — bilgisayarınızdan hiçbir şey çıkmaz.
 
-### 6. WhatsApp'a Bağlanın
-
-1. Uygulamanın içinde görünen QR kodu telefonunuzla okutun
-2. WhatsApp > Ayarlar > Bağlı Cihazlar > Cihaz Bağla
-
-Bunu sadece bir kez yapmanız gerekir — oturum kaydedilir ve sonraki açılışta geri yüklenir.
+```bash
+npm run release   # ya da NeRoBoT_Yayinla.bat'a çift tıklayın
+```
+`npm run build`'ın az önce belirlediği sürümü kullanır. Bekleyen kaynak kod değişikliklerini gösterip GitHub'a göndermeden önce onay ister, ardından o sürümü derleyip GitHub Release olarak yayınlamadan önce tekrar onay ister (bu, uygulamanın otomatik güncelleme kontrolünü de besler). İlk seferinde `repo` yetkisine sahip bir GitHub [Personal Access Token](https://github.com/settings/tokens/new) gerektirir — sonrasında yerelde saklanır (`.release-token`, gitignore'da, asla commit'lenmez).
 
 ---
 
@@ -202,7 +216,7 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 </details>
 
 <details>
-<summary><b>Beyaz Liste Yönetimi</b></summary>
+<summary><b>Beyaz Liste / Kara Liste Yönetimi</b></summary>
 
 | Komut | Açıklama |
 |---|---|
@@ -211,6 +225,10 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 | `!whitelist remove [ID]` | Beyaz listeden çıkarır. |
 | `!whitelist reset` | Beyaz listeyi tamamen temizler. *(Onay gerekir.)* |
 | `!whitelist control` | Yeni sohbet kontrolünü aç/kapat. |
+| `!blacklist` / `!blacklist list` | Kara listeyi gösterir. |
+| `!blacklist add [ID]` | Kara listeye ekler (gerekirse önce beyaz listeden çıkarır). |
+| `!blacklist remove [ID]` | Kara listeden çıkarır. |
+| `!blacklist reset` | Kara listeyi tamamen temizler. *(Onay gerekir.)* |
 
 </details>
 
@@ -250,13 +268,16 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 </details>
 
 <details>
-<summary><b>Hafıza</b></summary>
+<summary><b>Hafıza ve Sıfırlama</b></summary>
 
 | Komut | Açıklama |
 |---|---|
 | `!clear` | Bu sohbetin hafızasını temizler. |
 | `!clear <ID>` | Belirtilen sohbetin hafızasını temizler. |
 | `!clear all` | Tüm sohbetlerin hafızasını temizler. *(Onay gerekir.)* |
+| `!reset settings` | Bu sohbetin kendi ayarlarının tümünü global'e sıfırlar. *(Onay gerekir.)* |
+| `!reset settings <isim>` | Bu sohbet için tek bir ayarı sıfırlar, onay gerekmez. |
+| `!reset all settings` | Her şeyi fabrika ayarlarına sıfırlar — ayarlar, beyaz liste, kara liste, adminler, sohbet bazlı ayarlar, hafızalar. *(Onay gerekir.)* |
 
 </details>
 
@@ -271,6 +292,7 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 | `!prefix ignore <p>` | Yoksayma prefix'ini değiştirir (sadece no-prefix sohbetlerde). |
 | `!fixedchat` | Botu sadece bu sohbete kilitler veya serbest bırakır. |
 | `!noprefix` | Bu sohbette no-prefix modunu aç/kapat. |
+| `!noprefixall` | No-prefix modunu **tüm** sohbetler için birden aç/kapat. *(Whitelist modu kapalıyken onay gerekir.)* |
 | `!groupchat` | Bu grubu ortak hafıza modunda aç/kapat. |
 | `!groupchat [ID]` | Belirtilen grup ID'si için ortak hafıza modunu aç/kapat. |
 | `!groupchat list` | Ortak hafıza modu açık olan tüm grupları listeler. |
@@ -306,10 +328,10 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 | Ana Prefix | `.` |
 | Debug Prefix | `!` |
 | Yoksayma Prefix | `/` |
-| AI Model | `minimax-m3:cloud` |
+| AI Model | sabit bir varsayılan yok — çektiğiniz herhangi bir Ollama modelini seçebilirsiniz (sohbet bazlı ya da global, `!model` veya NeRoChAt ayarlarıyla) |
 | Sistem Promptu | `Your name is NeRoBoT. You were created by Salih Yazıtaş.` |
 | Yardım Dili | `en` (İngilizce) |
-| AI Chat | Açık |
+| AI Chat | **Kapalı** — `!aichat` ya da uygulamanın AI Bot anahtarıyla açın |
 | Whitelist Kontrolü | Kapalı |
 | Sabit Sohbet | Kapalı |
 | Hız Sınırlama | Açık (3 burst token, 15s'de 1 yenileme) |
@@ -324,11 +346,11 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 ## Sık Karşılaşılan Sorunlar
 
 <details>
-<summary><b>npm install Puppeteer/Chrome hatası veriyor</b></summary>
+<summary><b>Kaynak koddan derlerken: npm install Puppeteer/Chrome hatası veriyor</b></summary>
 
-Puppeteer, Chrome'un bir kopyasını kullanıcı klasörünüzde önbelleğe alır. Bu önbellek bozulursa (klasör var ama içindeki `chrome.exe` eksikse) `npm install` hata verir. Önbelleği silip `npm install` komutunu tekrar çalıştırın:
+whatsapp-web.js, Puppeteer'a bağımlı — o da sadece `npm install`'ın başarılı olması için kullanıcı klasörünüzde bir Chrome kopyası önbelleğe alıyor (NeRoBoT onu aslında hiç başlatmıyor — bunun yerine Electron'un kendi tarayıcı motoruna bağlanıyor). Bu önbellek bozulursa (klasör var ama içindeki çalıştırılabilir dosya eksikse) `npm install` hata verir. Önbelleği silip `npm install` komutunu tekrar çalıştırın:
 
-- **Windows:** `C:\Users\<kullanıcı adınız>\.cache\puppeteer` klasörünü silin
+- **Windows:** `%USERPROFILE%\.cache\puppeteer` klasörünü silin
 - **Linux / macOS:** `~/.cache/puppeteer` klasörünü silin
 
 </details>
@@ -336,7 +358,7 @@ Puppeteer, Chrome'un bir kopyasını kullanıcı klasörünüzde önbelleğe al�
 <details>
 <summary><b>ECONNREFUSED 127.0.0.1:11434</b></summary>
 
-Ollama çalışmıyor. Terminalde `ollama serve` komutunu çalıştırın veya Ollama uygulamasını açın.
+Ollama çalışmıyor. Terminalde `ollama serve` komutunu çalıştırın, ya da NeRoChAt/AI Bot anahtarının onu sizin için başlatmasına izin verin.
 
 </details>
 
@@ -350,17 +372,25 @@ Log panelini açın (üst çubuktaki "Loglar" düğmesi) ve hata mesajı olup ol
 <details>
 <summary><b>Mesajlara cevap vermiyor</b></summary>
 
-- AI Chat açık mı? → `!aichat`
-- Whitelist kontrolü açık ve siz ekli değil misiniz? → `!whitelist add`
+- O profil için AI Chat açık mı? → `!aichat`
+- Whitelist kontrolü açık ve siz listede değil misiniz? → `!whitelist add`
+- Kara listede misiniz? → `!blacklist remove`
 - Sabit sohbet modu açık ve siz o sohbette değil misiniz? → `!fixedchat`
 - Hız limitine mi girdiniz? → `!ratelimit`
 
 </details>
 
 <details>
-<summary><b>Bot sürekli QR istiyor</b></summary>
+<summary><b>Bir profil sürekli QR istiyor</b></summary>
 
-Oturum, uygulamanın kullanıcı verisi klasöründe saklanır (Windows'ta `%APPDATA%/nerobot`). Bu klasör silindiyse veya cihazı telefonunuzdan çıkardıysanız QR kodu yeniden okutmanız gerekir.
+Her profilin girişi, uygulamanın kullanıcı verisi klasörü (`%APPDATA%/nerobot`) altında kendi izole Electron oturumunda saklanır. Bu klasör silindiyse veya cihazı telefonunuzdan çıkardıysanız, o profil için QR kodunu yeniden okutmanız gerekir.
+
+</details>
+
+<details>
+<summary><b>Uygulama kendini güncellemedi</b></summary>
+
+Güncelleme kontrolü internet gerektirir ve pencere açılmadan önce (kısa bir zaman aşımıyla) çalışır — GitHub'a zamanında ulaşamazsa mevcut sürümü açar ve bir sonraki açılışta tekrar dener. İstediğiniz zaman en son sürümü [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases)'ten elle de indirebilirsiniz.
 
 </details>
 
@@ -368,14 +398,14 @@ Oturum, uygulamanın kullanıcı verisi klasöründe saklanır (Windows'ta `%APP
 
 ## Güvenlik Notları
 
-> Bu bot kişisel bir WhatsApp hesabı kullanır. Dikkat edilmesi gerekenler:
+> Bu uygulama gerçek WhatsApp/Telegram hesaplarına bağlanır. Dikkat edilmesi gerekenler:
 
 <details>
 <summary><b>Detaylar</b></summary>
 
-- Otomatik oluşan `project_scripts/whitelist.json`, `project_scripts/admin.json`, `project_scripts/settings.json`, `project_scripts/noprefix.json` ve `project_scripts/groupchat.json` dosyalarını **asla** GitHub'a yüklemeyin — bunlar `.gitignore` ile zaten hariç tutulmuştur.
+- Her profilin beyaz liste/kara liste/admin/ayarları ve kaydedilmiş Telegram girişleri `Documents/NeRoBoT/NeRoBoT_db` altında yaşar — bu klasörü hiçbir yere yüklemeyin.
 - Botu tamamen anonim olmayan gruplarda kullanmayın.
-- Admin yapılan herkes bot genelindeki ayarları değiştirebilir — admin yetkisini sadece güvendiğiniz kişilere verin.
+- Admin yapılan herkes o profildeki bot genelindeki ayarları değiştirebilir — admin yetkisini sadece güvendiğiniz kişilere verin.
 
 </details>
 
@@ -383,16 +413,17 @@ Oturum, uygulamanın kullanıcı verisi klasöründe saklanır (Windows'ta `%APP
 
 ## Lisans
 
-Bu proje kişisel kullanım içindir. Lütfen WhatsApp'ın [Hizmet Şartları](https://www.whatsapp.com/legal/terms-of-service)'na uygun şekilde kullanın.
+Bu proje kişisel kullanım içindir. Lütfen WhatsApp'ın [Hizmet Şartları](https://www.whatsapp.com/legal/terms-of-service)'na ve Telegram'ın [Hizmet Şartları](https://telegram.org/tos)'na uygun şekilde kullanın.
 
 ---
 
 ## Teşekkürler
 
 - [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js/)
+- [teleproto](https://www.npmjs.com/package/teleproto) (Telegram/MTProto istemcisi)
 - [Ollama](https://ollama.com/)
 - [Puppeteer](https://pptr.dev/)
-- [Electron](https://www.electronjs.org/)
+- [Electron](https://www.electronjs.org/) / [electron-builder](https://www.electron.build/) / [electron-updater](https://www.electron.build/auto-update)
 
 ---
 

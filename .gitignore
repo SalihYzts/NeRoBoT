@@ -120,40 +120,17 @@ dist
 .pnp.*
 
 # ===================================
-# 📱 WhatsApp Web.js (proje özel)
+# ⚙️ Proje özel dosyalar
 # ===================================
-# Oturum verileri (QR tekrar okutmamak için bunları COMMIT'LEYEBİLİRSİN)
-# Eğer commit'lemek istersen aşağıdaki satırların başına # koy:
-.wwebjs_auth/
+# TÜM profil verisi (WhatsApp/Telegram oturum ayarları, whitelist/blacklist/
+# admin listeleri, Telegram giriş oturumu, NeRoChAt konuşmaları, app config)
+# artık bu klasörün dışında yaşıyor — Documents/NeRoBoT/NeRoBoT_db (bkz.
+# app/main.js'in DATA_ROOT/DB_DIR'ı), gerçek WhatsApp Web girişi de Electron'un
+# kendi oturum partition'larında (%APPDATA%/nerobot) — yani burada normalde
+# ignore edilecek hiçbir şey kalmıyor. Eski bir dev checkout'ta hâlâ
+# yerelde bir kopyası kalmışsa diye savunma amaçlı bırakıldı.
+NeRoBoT_db/
 .wwebjs_cache/
-session/
-
-# ===================================
-# ⚙️ Proje özel dosyalar (runtime'da otomatik oluşur)
-# ===================================
-# Eski (tek profilli) düz yerleşim — config.js tarafından ./NeRoBoT_db/
-# altında otomatik üretilir — kişisel/hassas veri içerdiği için commit'lenmez.
-NeRoBoT_db/whitelist.json
-NeRoBoT_db/blacklist.json
-NeRoBoT_db/admin.json
-NeRoBoT_db/noprefix.json
-NeRoBoT_db/groupchat.json
-NeRoBoT_db/settings.json
-NeRoBoT_db/chatprefixes.json
-NeRoBoT_db/ollama.json
-NeRoBoT_db/ollama-chats.json
-
-# Çoklu profil düzeni (project_scripts/profiles.js) — her profilin whitelist/
-# blacklist/admin/settings/vs dosyaları + Telegram profillerinin oturum
-# dosyası (telegram-session.txt — bir Telegram hesabına giriş yapılmış
-# oturum, gerçek bir sır) hep burada. Profil kayıt defteri de (profil
-# isimleri/platformları) kişisel bilgi sayılır.
-NeRoBoT_db/profiles.json
-NeRoBoT_db/profiles/
-
-# Telegram uygulama kimliği (my.telegram.org api_id/api_hash) — bkz.
-# app/main.js'in readTelegramAppConfig()'i / project_scripts/telegram-default-app.js.
-NeRoBoT_db/telegram-app.json
 
 # release.js'in GitHub Release oluşturmak için sakladığı Personal Access
 # Token — gerçek bir sır, ASLA commit'lenmemeli.

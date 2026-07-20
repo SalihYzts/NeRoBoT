@@ -40,6 +40,7 @@ import { createTelegramBot } from '../project_scripts/telegram-bot.js';
 import { getEmbeddedTelegramCredentials } from '../project_scripts/telegram-default-app.js';
 import ollamaClient from 'ollama';
 import QRCode from 'qrcode';
+import { autoUpdater } from 'electron-updater';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // PROJECT_ROOT is the app's OWN install location (where package.json/
@@ -2422,6 +2423,76 @@ ipcMain.handle('chat:idVariants', (_e, profileId, chatId) => {
 });
 
 // ============================
+// Auto-update — checked once at every startup, BEFORE the window opens (see
+// app.whenReady() below), against this repo's GitHub Releases (see
+// package.json's build.publish + release.js, which is what actually
+// uploads a new version there). Two separate timeouts, same reasoning as
+// installOllama's (see ollama-installer.js): a stalled network must never
+// leave the app stuck on a blank screen forever — 15s just to learn WHETHER
+// a newer version exists (give up and open normally if that's slow/
+// unreachable), up to 5 minutes to actually download one once we know it's
+// there (give up and open the CURRENT version if THAT stalls instead).
+// Gated on app.isPackaged in app.whenReady() below: there's no installed
+// NSIS app for electron-updater to update in place during a dev run (`npm
+// start`), and no bundled app-update.yml outside a real build either.
+// ============================
+autoUpdater.autoDownload = false; // this file drives download/install by hand, below
+
+function checkForUpdate() {
+    return new Promise((resolve, reject) => {
+        autoUpdater.once('update-available', () => resolve(true));
+        autoUpdater.once('update-not-available', () => resolve(false));
+        autoUpdater.once('error', reject);
+        autoUpdater.checkForUpdates().catch(reject);
+    });
+}
+
+function downloadAndInstallUpdate() {
+    return new Promise((resolve, reject) => {
+        autoUpdater.once('update-downloaded', () => {
+            // true = silent (no NSIS UI), true = relaunch NeRoBoT once the
+            // update's applied — "kapatıp güncelleyip öyle açsın kendini"
+            // (close it, update it, then open itself).
+            autoUpdater.quitAndInstall(true, true);
+            resolve();
+        });
+        autoUpdater.once('error', reject);
+        autoUpdater.downloadUpdate();
+    });
+}
+
+// Resolves true if an update was found, downloaded, and quitAndInstall()
+// was called — the caller should stop right there, the app's on its way
+// out. Resolves false if there's nothing new, or the check/download
+// failed/timed out for any reason — the caller should just continue
+// starting up normally on the CURRENT version either way, never block on
+// this longer than the timeouts above allow.
+async function checkAndApplyUpdate() {
+    let hasUpdate;
+    try {
+        hasUpdate = await Promise.race([
+            checkForUpdate(),
+            new Promise((resolve) => setTimeout(() => resolve(false), 15000)),
+        ]);
+    } catch (err) {
+        console.error('[NeRoBoT] Güncelleme kontrolü başarısız, normal açılışa devam ediliyor:', err.message || err);
+        return false;
+    }
+    if (!hasUpdate) return false;
+
+    try {
+        await Promise.race([
+            downloadAndInstallUpdate(),
+            new Promise((_resolve, reject) => setTimeout(() => reject(new Error('Güncelleme indirme zaman aşımına uğradı.')), 5 * 60 * 1000)),
+        ]);
+        return true;
+    } catch (err) {
+        console.error('[NeRoBoT] Güncelleme indirilemedi, mevcut sürümle devam ediliyor:', err.message || err);
+        return false;
+    }
+}
+
+// ============================
 // App lifecycle
 // ============================
 app.whenReady().then(async () => {
@@ -2443,6 +2514,14 @@ app.whenReady().then(async () => {
         ]);
         app.quit();
         return;
+    }
+
+    // See checkAndApplyUpdate's own doc above — only meaningful for a real
+    // installed build (app.isPackaged), and skipped for TEST_MODE (headless
+    // test runs shouldn't ever quit-and-relaunch themselves).
+    if (app.isPackaged && !TEST_MODE) {
+        const updating = await checkAndApplyUpdate();
+        if (updating) return; // quitAndInstall() already tore the app down
     }
 
     await createWindow();

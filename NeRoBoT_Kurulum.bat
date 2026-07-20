@@ -2,8 +2,8 @@
 rem Sadece kaynak dosyalarini indirmis (repo'yu klonlamis ya da zip'ini acmis)
 rem biri icin ilk adim: Node.js'i kontrol eder, npm bagimliliklarini kurar ve
 rem uygulama ikonlarini olusturur. Bundan sonra NeRoBoT_App.bat ile uygulamayi
-rem acabilir, ya da NeRoBoT_Yayinla.bat ile bir kurulum paketi (.exe)
-rem derleyip GitHub'a yayinlayabilirsin.
+rem acabilir, NeRoBoT_Derle.bat ile bir kurulum paketi (.exe) derleyebilir,
+rem ya da NeRoBoT_Yayinla.bat ile derlenmis bir surumu GitHub'a yayinlayabilirsin.
 setlocal
 cd /d "%~dp0"
 
@@ -35,6 +35,7 @@ echo.
 echo ================================================
 echo Hazir! Simdi ne yapabilirsin:
 echo   - Uygulamayi acmak icin: NeRoBoT_App.bat
-echo   - Kurulum paketi derleyip GitHub'a yayinlamak icin: NeRoBoT_Yayinla.bat
+echo   - Yeni bir surum derlemek icin: NeRoBoT_Derle.bat
+echo   - Derlenmis bir surumu GitHub'a yayinlamak icin: NeRoBoT_Yayinla.bat
 echo ================================================
 pause

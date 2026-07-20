@@ -1,13 +1,15 @@
-// Sürüm yayınlama betiği — çalıştırıldığında sırayla:
-//   1) Yeni sürüm numarasını sorar (package.json'a yazar)
-//   2) İkonları yeniden oluşturur ve electron-builder ile Windows kurulum
-//      paketini (.exe) derler
-//   3) Değişiklikleri gösterip onay alarak kaynak kodu commit'leyip
+// Sürüm yayınlama betiği — sürüm numarasını SORMAZ, package.json'da zaten
+// yazan sürümü kullanır (onu belirleyen adım build.js/NeRoBoT_Derle.bat —
+// "npm run build" ile bir sürüm derledikten sonra bunu çalıştır). Sırayla:
+//   1) Değişiklikleri gösterip onay alarak kaynak kodu commit'leyip
 //      GitHub'a gönderir, bir sürüm etiketi (tag) oluşturur
-//   4) Yine onay alarak GitHub'da yeni bir Release açar ve derlenen kurulum
-//      paketini oraya ekler — GitHub'ın REST API'siyle doğrudan (bkz.
-//      createGithubRelease altta): ayrı bir "gh" CLI kurulumu gerektirmez,
-//      sadece git zaten kurulu olsun yeter.
+//   2) Yine onay alarak ikonları yeniden oluşturur, electron-builder ile
+//      Windows kurulum paketini (.exe) derler VE GitHub'da yeni bir Release
+//      olarak yayınlar — electron-builder'ın kendi GitHub publisher'ıyla
+//      (bkz. package.json'daki build.publish), elle yüklemek yerine: bu,
+//      autoUpdater'ın (app/main.js) ihtiyaç duyduğu latest.yml/blockmap
+//      dosyalarını da doğru isimlerle otomatik yükler — elle yapılan bir
+//      REST çağrısında bunu doğru tutmak kolayca yanlış gidebiliyordu.
 // Çalıştırma: npm run release  (ya da NeRoBoT_Yayinla.bat'a çift tıkla)
 //
 // git push / GitHub Release oluşturma gibi geri alınması zor, herkese görünür
@@ -56,9 +58,9 @@ function spawn(cmd, args, extraOpts) {
 
 // Alt komutların çıktısını canlı gösterir (electron-builder'ın kendi
 // ilerleme çıktısı gibi) — sessizce arka planda beklemek yerine.
-function run(cmd, args) {
+function run(cmd, args, extraOpts) {
     console.log(`\n> ${cmd} ${args.join(' ')}`);
-    const result = spawn(cmd, args, { stdio: 'inherit' });
+    const result = spawn(cmd, args, { stdio: 'inherit', ...extraOpts });
     if (result.status !== 0) {
         throw new Error(`"${cmd} ${args.join(' ')}" başarısız oldu (çıkış kodu: ${result.status}).`);
     }
@@ -87,6 +89,7 @@ function parseGithubRemote(url) {
 
 async function getGithubToken() {
     if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN.trim();
+    if (process.env.GH_TOKEN) return process.env.GH_TOKEN.trim();
     if (fs.existsSync(TOKEN_FILE)) {
         const saved = fs.readFileSync(TOKEN_FILE, 'utf8').trim();
         if (saved) return saved;
@@ -99,45 +102,6 @@ async function getGithubToken() {
         console.log(`Token kaydedildi: ${TOKEN_FILE} (sadece bu bilgisayarda kalır, git'e asla gönderilmez — .gitignore'da).`);
     }
     return token;
-}
-
-async function githubApi(token, method, urlOrPath, body, extraHeaders = {}) {
-    const url = urlOrPath.startsWith('http') ? urlOrPath : `https://api.github.com${urlOrPath}`;
-    const res = await fetch(url, {
-        method,
-        headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-            'User-Agent': 'NeRoBoT-release-script',
-            ...extraHeaders,
-        },
-        body,
-    });
-    if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`GitHub API hatası (${res.status}): ${text.slice(0, 400)}`);
-    }
-    return res;
-}
-
-async function createGithubRelease(token, owner, repo, tag, installerPath) {
-    const createRes = await githubApi(token, 'POST', `/repos/${owner}/${repo}/releases`, JSON.stringify({
-        tag_name: tag,
-        name: tag,
-        generate_release_notes: true,
-    }), { 'Content-Type': 'application/json' });
-    const release = await createRes.json();
-
-    const fileName = path.basename(installerPath);
-    const fileBuffer = fs.readFileSync(installerPath);
-    const uploadUrl = release.upload_url.replace('{?name,label}', `?name=${encodeURIComponent(fileName)}`);
-    await githubApi(token, 'POST', uploadUrl, fileBuffer, {
-        'Content-Type': 'application/octet-stream',
-        'Content-Length': String(fileBuffer.length),
-    });
-
-    return release.html_url;
 }
 
 async function main() {
@@ -164,45 +128,22 @@ async function main() {
     }
 
     // ============================
-    // 1) Sürüm numarası
+    // 1) Sürüm — build.js zaten belirleyip package.json'a yazmış olmalı;
+    // burada sadece okunur ve o sürüm için bir GitHub Release zaten var mı
+    // diye bakılır (varsa, muhtemelen "npm run build" ile yeni bir sürüm
+    // numarası belirlemeyi unutmuşsundur).
     // ============================
-    console.log(`Mevcut sürüm: ${pkg.version}`);
-    let version;
-    for (;;) {
-        version = await ask('Yeni sürüm numarası (örn: 2.2.0): ');
-        if (!/^\d+\.\d+\.\d+$/.test(version)) {
-            console.log('Geçersiz biçim — "x.y.z" şeklinde olmalı (örn: 2.2.0). Tekrar dene.');
-            continue;
-        }
-        if (runCapture('git', ['tag', '-l', `v${version}`])) {
-            console.log(`"v${version}" etiketi zaten var — başka bir sürüm numarası dene.`);
-            continue;
-        }
-        break;
-    }
+    const version = pkg.version;
     const tag = `v${version}`;
-
-    pkg.version = version;
-    fs.writeFileSync(PKG_PATH, JSON.stringify(pkg, null, 2) + '\n');
-    console.log(`package.json sürümü ${version} olarak güncellendi.`);
-
-    // ============================
-    // 2) Derleme
-    // ============================
-    run('npm', ['run', 'gen-icons']);
-    run('npm', ['run', 'dist']);
-
-    const distDir = path.join(ROOT, 'dist');
-    const exeFiles = fs.existsSync(distDir) ? fs.readdirSync(distDir).filter((f) => f.endsWith('.exe')) : [];
-    if (!exeFiles.length) {
-        throw new Error('dist/ klasöründe bir .exe bulunamadı — derleme sırasında bir şey ters gitmiş olabilir.');
+    console.log(`Yayınlanacak sürüm: ${version} (package.json'dan)`);
+    if (runCapture('git', ['tag', '-l', tag])) {
+        console.error(`[HATA] "${tag}" etiketi zaten var — bu sürüm daha önce yayınlanmış görünüyor.`);
+        console.error('Önce "npm run build" (ya da NeRoBoT_Derle.bat) ile yeni bir sürüm numarası belirle, sonra tekrar dene.');
+        process.exit(1);
     }
-    exeFiles.sort((a, b) => fs.statSync(path.join(distDir, b)).mtimeMs - fs.statSync(path.join(distDir, a)).mtimeMs);
-    const installerPath = path.join(distDir, exeFiles[0]);
-    console.log(`\nKurulum paketi hazır: ${installerPath}`);
 
     // ============================
-    // 3) Kaynak kodu GitHub'a gönder
+    // 2) Kaynak kodu GitHub'a gönder
     // ============================
     console.log('\nKaynak kodda şu değişiklikler var:');
     run('git', ['status', '--short']);
@@ -224,20 +165,28 @@ async function main() {
     }
 
     // ============================
-    // 4) GitHub Release
+    // 3) Derle + GitHub Release olarak yayınla
     // ============================
-    if (await confirm(`GitHub'da "${tag}" adında yeni bir Release açıp kurulum paketini ekleyeyim mi?`)) {
-        const token = await getGithubToken();
-        if (!token) {
-            console.log('Token girilmedi — Release oluşturulmadı. İstediğin zaman betiği tekrar çalıştırıp deneyebilirsin (etiket zaten GitHub\'da).');
-            return;
-        }
-        console.log('\nGitHub Release açılıyor ve kurulum paketi yükleniyor (dosya boyutuna göre biraz sürebilir)...');
-        const releaseUrl = await createGithubRelease(token, parsedRemote.owner, parsedRemote.repo, tag, installerPath);
-        console.log(`\nTamamlandı — ${tag} yayınlandı: ${releaseUrl}`);
-    } else {
-        console.log(`\nEtiket ("${tag}") GitHub'a gönderildi ama Release açılmadı — istediğin zaman betiği tekrar çalıştırıp o adımı yapabilirsin.`);
+    if (!(await confirm(`\nŞimdi kurulum paketini derleyip "${tag}" adıyla GitHub Release olarak yayınlayayım mı? (birkaç dakika sürebilir)`))) {
+        console.log(`\nEtiket ("${tag}") GitHub'a gönderildi ama henüz hiçbir şey derlenmedi/yayınlanmadı — istediğin zaman betiği tekrar çalıştırıp bu adımı yapabilirsin.`);
+        return;
     }
+
+    const token = await getGithubToken();
+    if (!token) {
+        console.log('Token girilmedi — derleme/yayınlama iptal edildi. Etiket zaten GitHub\'da, istediğin zaman tekrar deneyebilirsin.');
+        return;
+    }
+
+    run('npm', ['run', 'gen-icons']);
+    // GH_TOKEN: electron-builder'ın GitHub publisher'ının okuduğu ortam
+    // değişkeni — package.json'daki build.publish (provider: github) ile
+    // birlikte, derlenen .exe'yi VE autoUpdater'ın ihtiyaç duyduğu
+    // latest.yml/.blockmap dosyalarını doğru isimlerle bu release'e yükler.
+    run('npx', ['electron-builder', '--win', '--publish', 'always'], { env: { ...process.env, GH_TOKEN: token } });
+
+    const releaseUrl = `https://github.com/${parsedRemote.owner}/${parsedRemote.repo}/releases/tag/${tag}`;
+    console.log(`\nTamamlandı — ${tag} yayınlandı: ${releaseUrl}`);
 }
 
 main().catch((err) => {

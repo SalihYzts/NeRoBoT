@@ -56,16 +56,25 @@ function migrateLegacyProfile(dbDir) {
     const hasLegacyData = Object.values(PROFILE_DATA_FILES)
         .some(file => fs.existsSync(path.join(dbDir, file)));
 
+    // Nothing to migrate — a genuinely fresh install (no profiles.json AND
+    // no legacy flat files) used to still seed one empty, never-logged-in
+    // "NeRoBoT" WhatsApp profile here unconditionally, so it showed up on
+    // the Home screen the very first time the app was ever opened. Starts
+    // with an empty registry instead — the user creates their own first
+    // profile.
+    if (!hasLegacyData) {
+        writeRegistry(dbDir, []);
+        return [];
+    }
+
     const id = crypto.randomUUID();
     const dir = profileDir(dbDir, id);
     fs.mkdirSync(dir, { recursive: true });
 
-    if (hasLegacyData) {
-        for (const file of Object.values(PROFILE_DATA_FILES)) {
-            const from = path.join(dbDir, file);
-            if (fs.existsSync(from)) {
-                fs.renameSync(from, path.join(dir, file));
-            }
+    for (const file of Object.values(PROFILE_DATA_FILES)) {
+        const from = path.join(dbDir, file);
+        if (fs.existsSync(from)) {
+            fs.renameSync(from, path.join(dir, file));
         }
     }
 

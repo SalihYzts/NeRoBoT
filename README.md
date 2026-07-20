@@ -26,9 +26,9 @@
                                                                                                     
 ```
 
-**NeRoBoT** is a bot that lets you use AI models powered by [Ollama](https://ollama.com/) through **WhatsApp**. It is built using the `whatsapp-web.js` library.
+**NeRoBoT** is a Windows desktop app that runs local-AI-powered bots on top of **WhatsApp** and **Telegram** — multiple accounts/platforms at once, each fully isolated — plus a standalone AI chat (**NeRoChAt**) that isn't tied to any chat account at all. Everything runs on [Ollama](https://ollama.com/) models on your own machine.
 
-Developer: **TheSalHeLP**
+Developer: **Salih Yazıtaş**
 
 ---
 ## Documentation
@@ -42,6 +42,7 @@ Developer: **TheSalHeLP**
 - [Requirements](#requirements)
 - [Project Structure](#project-structure)
 - [Installation](#installation)
+- [Building & Releasing](#building--releasing)
 - [Commands](#commands)
 - [Default Configuration](#default-configuration)
 - [Troubleshooting](#troubleshooting)
@@ -52,32 +53,41 @@ Developer: **TheSalHeLP**
 
 ## Features
 
-- Desktop App — Single-window Electron app: WhatsApp Web, bot console logs, and a full settings panel (general, per-chat, and list management) all in one place
-- Persistent Session — Scan the QR code once; the login survives restarts
-- Local AI Support — Use any model you want through Ollama, including vision models
-- Chat Memory — Separate context per chat/user, with optional shared-memory group mode
-- Image & File Reading — Reads images (vision), PDF, Word, and plain-text/code files and feeds them to the model
-- Whitelist System — Prevent unwanted people from using the bot
-- Admin Panel — Only authorized users can run management commands, with a confirmation gate on destructive actions
-- Personality — Change the bot's system prompt globally or per chat
-- Customizable Prefixes — Main, debug, and ignore prefixes can all be changed
-- No-Prefix Mode — Let the bot respond to every message in a chat without needing a prefix
-- Fixed Chat Mode — Lock the bot to a single chat
-- Rate Limiting — Per-user token-bucket limiter to prevent spam/abuse
-- Debug Channel — Forward errors and new-message notifications to a separate chat
-- Info Command — View the entire system status in a single message
-- Bilingual Help — Help menu available in Turkish and English
+**App**
+- Multi-Profile — run several WhatsApp accounts and/or Telegram accounts side by side, each with its own login, settings, whitelist, admins, and AI memory
+- Notification Panel — a bell icon collects every profile's incoming messages (newest first), with an inline quick-reply box so you can answer without switching tabs; a profile's tab pulses until you've read its messages
+- NeRoChAt — a full, general-purpose AI chat tab (separate from any WhatsApp/Telegram bot), with saved conversations, image attachments, and AI image generation
+- NeRoChAt Quick Popup — a configurable global keyboard shortcut (default `Ctrl+Shift+K`) opens a small floating AI chat on top of whatever you're doing; "Ask about this chat" pulls that WhatsApp chat's recent messages in as context
+- Auto-Update — checks GitHub Releases on every launch and updates itself silently (download → install → relaunch) before the window even opens
+- Persistent Sessions — scan each profile's QR code once; logins survive restarts
+
+**Bot (per WhatsApp/Telegram profile)**
+- Local AI Support — use any model pulled through Ollama, including vision models
+- Chat Memory — separate context per chat/user, with optional shared-memory group mode
+- Image & File Reading — reads images (vision), PDF, Word, and plain-text/code files and feeds them to the model
+- AI Image Generation — generates images on request and sends them back into the chat
+- Whitelist / Blacklist — allow or block specific chats from using the bot
+- Admin Panel — only authorized users can run management commands, with a confirmation gate on destructive actions
+- Personality — change the bot's system prompt globally or per chat
+- Customizable Prefixes — main, debug, and ignore prefixes can all be changed
+- No-Prefix Mode — let the bot respond to every message in a chat (or every chat) without needing a prefix
+- Fixed Chat Mode — lock the bot to a single chat
+- Rate Limiting — per-user token-bucket limiter to prevent spam/abuse
+- Debug Channel — forward errors and new-message notifications to a separate chat
+- Info Command — view the entire system status in a single message
+- Bilingual Help — help menu available in Turkish and English
 
 ---
 
 ## Requirements
 
-Make sure you have the following installed before getting started:
+**Just want to use the app?** Nothing to install beyond the app itself — see [Installation](#installation) below. [Ollama](https://ollama.com/) is only needed once you turn on AI features, and the installer offers to set it up for you.
+
+**Building/running from source:**
 
 - **Node.js** >= 18.x
 - **npm** >= 9.x
-- **Ollama** (latest)
-- **Operating System:** Windows / Linux / macOS
+- **Windows** (the packaged installer/auto-update are Windows-only for now; running from source works cross-platform)
 
 > Chrome is **not** required — the app ships with its own browser engine (Electron).
 
@@ -89,29 +99,34 @@ Make sure you have the following installed before getting started:
 nerobot/
 ├── package.json
 ├── NeRoBoT_App.bat                 # Launches the desktop app (Windows)
+├── NeRoBoT_Kurulum.bat             # First-time setup for a source checkout (npm install + icons)
+├── NeRoBoT_Derle.bat               # Builds a versioned installer locally (no publishing)
+├── NeRoBoT_Yayinla.bat             # Pushes source + publishes a GitHub Release (see below)
+├── build.js / release.js           # Scripts behind the two .bat files above
 ├── app/
-│   ├── main.js                     # Electron main — window, embedded WhatsApp Web, IPC
-│   ├── preload.cjs                 # UI bridge
-│   └── ui/index.html               # Top bar, log panel, settings panel
+│   ├── main.js                     # Electron main — windows, embedded WhatsApp/Telegram views,
+│   │                                #   profile/session management, auto-update, all IPC
+│   ├── preload.cjs                 # Renderer ↔ main bridge
+│   └── ui/
+│       ├── index.html              # Top bar, tab strip, notification panel, settings, quick popup
+│       └── ollama.html             # NeRoChAt's own full-tab window
 ├── project_scripts/
 │   ├── bot.js                      # WhatsApp client & message routing
-│   ├── ai.js                       # Ollama integration
-│   ├── config.js                   # State, settings persistence, file paths
+│   ├── telegram-bot.js             # Telegram client & message routing (mirrors bot.js)
+│   ├── ai.js                       # Ollama integration (chat, vision, image-intent classification)
+│   ├── imagegen.js                 # AI image generation backend
+│   ├── config.js                   # Per-profile state/settings persistence
+│   ├── profiles.js                 # Multi-profile registry (create/rename/delete/export/import)
 │   ├── commands.js                 # All !commands
 │   ├── ratelimit.js                # Token-bucket rate limiter
-│   └── utils.js                    # Message sending helpers
-└── NeRoBoT_db/
-    ├── ascii.txt                   # Startup banner
-    ├── help.txt                    # Help menu text (TR/EN)
-    ├── chatmodels.json             # Per-chat model overrides (committed)
-    ├── settings.json               # Generated at runtime
-    ├── whitelist.json              # Generated at runtime
-    ├── admin.json                  # Generated at runtime
-    ├── noprefix.json               # Generated at runtime
-    └── groupchat.json              # Generated at runtime
+│   ├── utils.js / telegram-utils.js
+│   ├── file-extract.js             # PDF/Word/text extraction for the AI to read
+│   └── ollama-installer.js         # Detects/silently installs Ollama on Windows
+├── build/installer.nsh             # Custom NSIS install-time hook (best-effort Ollama install)
+└── scripts/gen-icons.js            # Regenerates app/ui/icon.ico + icon.png from logo.svg
 ```
 
-The `NeRoBoT_db/*.json` runtime files are created automatically on first run and are **not** committed to git (see `.gitignore`).
+All profile data (WhatsApp/Telegram sessions, per-profile settings, NeRoChAt conversations, app config) is stored **outside** this folder, under `Documents/NeRoBoT/NeRoBoT_db` — so uninstalling/moving the app never touches it. Nothing under it is committed to git (see `.gitignore`).
 
 ---
 
@@ -119,9 +134,9 @@ The `NeRoBoT_db/*.json` runtime files are created automatically on first run and
 
 ### Windows: Installer (recommended)
 
-Download `NeRoBoT-Setup-x.y.z.exe` from the [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) page and run it. It installs NeRoBoT as a normal Windows app (Start Menu shortcut, findable from the Windows search box, with its own uninstaller listed in "Add or Remove Programs") — no `git clone`/`npm install` needed. If [Ollama](https://ollama.com/) isn't already installed, the installer attempts to fetch and install it silently; if that's skipped or fails (e.g. no internet at install time), NeRoBoT will offer to install it the first time you turn on the AI Bot.
+Download `NeRoBoT Setup x.y.z.exe` from the [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) page and run it. It installs NeRoBoT as a normal Windows app (Start Menu shortcut, findable from the Windows search box, with its own uninstaller listed in "Add or Remove Programs") — no `git clone`/`npm install` needed. If [Ollama](https://ollama.com/) isn't already installed, the installer attempts to fetch and install it silently in the background (this never blocks or delays the install itself); if that's skipped or fails (e.g. no internet at install time), NeRoBoT will offer to install it the first time you turn on the AI Bot. From then on, the app checks for updates on every launch and updates itself automatically.
 
-### Running from source (all platforms / development)
+### Running from source (development)
 
 ### 1. Clone the Repository
 
@@ -130,58 +145,57 @@ git clone https://github.com/SalihYzts/NeRoBoT.git
 cd nerobot
 ```
 
-### 2. Install Dependencies
+### 2. Set Up
+
+Double-click `NeRoBoT_Kurulum.bat`, or run manually:
 
 ```bash
 npm install
+npm run gen-icons
 ```
-
-
 
 ### 3. Install Ollama and Pull a Model
 
-Download and install Ollama from [ollama.com](https://ollama.com/), then pull the model you want to use. (When running the packaged Windows installer instead of from source, this step can also be done for you — see above.)
+Download and install Ollama from [ollama.com](https://ollama.com/), then pull whichever model(s) you want to use — pick any of these, or any other model Ollama supports:
 
 ```bash
-ollama pull minimax-m3:cloud
 ollama pull llama3.2
 ollama pull mistral
 ollama pull gemma2
+ollama pull llava
 ```
 
-### 4. Configuration
-
-<details>
-<summary><b>Configuration Files Are Automatic</b></summary>
-
-`project_scripts/config.js` creates `settings.json`, `whitelist.json`, `admin.json`, `noprefix.json`, and `groupchat.json` automatically on first run if they don't already exist. You don't need to create them manually. Most settings can also be changed from the in-app settings panel.
-
-</details>
-
-### 5. Start the App
+### 4. Start the App
 
 ```bash
 npm start
 ```
 
-On Windows you can also double-click `NeRoBoT_App.bat`.
+On Windows you can also double-click `NeRoBoT_App.bat`. The Home screen lets you create your first WhatsApp or Telegram profile.
 
-A single window opens containing WhatsApp Web, a status bar, a console log panel, and the settings panel.
+### 5. Connect a Profile
 
-### Building the Windows installer
+1. Create a profile from the Home screen (WhatsApp or Telegram)
+2. **WhatsApp:** scan the QR code shown inside the app with your phone (WhatsApp → Settings → Linked Devices → Link a Device)
+3. **Telegram:** scan the QR code with your phone (Telegram → Settings → Devices → Link Desktop Device)
+
+You only need to do this once per profile — the session is stored and restored on the next launch.
+
+---
+
+## Building & Releasing
+
+Two separate steps, so you can build and test a version before deciding to publish it:
 
 ```bash
-npm run gen-icons   # regenerate app/ui/icon.ico + icon.png from logo.svg (only needed after changing the logo)
-npm run pack        # quick unpacked build, for testing (dist/win-unpacked/)
-npm run dist         # full NSIS installer, ready to upload to a GitHub Release (dist/NeRoBoT-Setup-*.exe)
+npm run build     # or double-click NeRoBoT_Derle.bat
 ```
+Asks for a version number, writes it to `package.json`, and builds `dist/NeRoBoT Setup x.y.z.exe` locally — nothing leaves your machine.
 
-### 6. Connect to WhatsApp
-
-1. Scan the QR code shown inside the app with your phone
-2. WhatsApp > Settings > Linked Devices > Link a Device
-
-You only need to do this once — the session is stored and restored on the next launch.
+```bash
+npm run release   # or double-click NeRoBoT_Yayinla.bat
+```
+Uses whichever version `npm run build` just set. Shows you the pending source changes and asks for confirmation before pushing to GitHub, then asks again before building and publishing that version as a GitHub Release (which is also what feeds the app's auto-update check). Needs a GitHub [Personal Access Token](https://github.com/settings/tokens/new) with `repo` scope the first time — it's cached locally afterward (`.release-token`, gitignored, never committed).
 
 ---
 
@@ -202,7 +216,7 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 </details>
 
 <details>
-<summary><b>Whitelist Management</b></summary>
+<summary><b>Whitelist / Blacklist Management</b></summary>
 
 | Command | Description |
 |---|---|
@@ -211,6 +225,10 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 | `!whitelist remove [ID]` | Removes from the whitelist. |
 | `!whitelist reset` | Clears the entire whitelist. *(Requires confirmation.)* |
 | `!whitelist control` | Enables/disables the new-chat whitelist gate. |
+| `!blacklist` / `!blacklist list` | Shows the blacklist. |
+| `!blacklist add [ID]` | Adds to the blacklist (moving it off the whitelist first, if needed). |
+| `!blacklist remove [ID]` | Removes from the blacklist. |
+| `!blacklist reset` | Clears the entire blacklist. *(Requires confirmation.)* |
 
 </details>
 
@@ -250,13 +268,16 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 </details>
 
 <details>
-<summary><b>Memory</b></summary>
+<summary><b>Memory & Reset</b></summary>
 
 | Command | Description |
 |---|---|
 | `!clear` | Clears this chat's memory. |
 | `!clear <ID>` | Clears a specific chat's memory. |
 | `!clear all` | Clears all chat memories. *(Requires confirmation.)* |
+| `!reset settings` | Resets all of THIS chat's own overrides back to global. *(Requires confirmation.)* |
+| `!reset settings <name>` | Resets a single setting for this chat, no confirmation needed. |
+| `!reset all settings` | Factory-resets everything — settings, whitelist, blacklist, admins, per-chat overrides, memories. *(Requires confirmation.)* |
 
 </details>
 
@@ -271,6 +292,7 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 | `!prefix ignore <p>` | Changes the ignore prefix (no-prefix chats only). |
 | `!fixedchat` | Locks the bot to this chat, or releases it. |
 | `!noprefix` | Toggles no-prefix mode for this chat. |
+| `!noprefixall` | Toggles no-prefix mode for **every** chat at once. *(Requires confirmation if whitelist mode is off.)* |
 | `!groupchat` | Toggles shared-memory mode for this group. |
 | `!groupchat [ID]` | Toggles shared-memory mode for the given group ID. |
 | `!groupchat list` | Lists all groups with shared-memory mode enabled. |
@@ -306,10 +328,10 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 | Main Prefix | `.` |
 | Debug Prefix | `!` |
 | Ignore Prefix | `/` |
-| AI Model | `minimax-m3:cloud` |
+| AI Model | none fixed — pick any Ollama model you've pulled (per-chat or global, via `!model` or NeRoChAt settings) |
 | System Prompt | `Your name is NeRoBoT. You were created by Salih Yazıtaş.` |
 | Help Language | `en` (English) |
-| AI Chat | Enabled |
+| AI Chat | **Disabled** — turn on with `!aichat` or the app's AI Bot toggle |
 | Whitelist Control | Disabled |
 | Fixed Chat | Disabled |
 | Rate Limiting | Enabled (3 burst tokens, 1 per 15s refill) |
@@ -324,19 +346,19 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 ## Troubleshooting
 
 <details>
-<summary><b>npm install fails with a Puppeteer/Chrome error</b></summary>
+<summary><b>Building from source: npm install fails with a Puppeteer/Chrome error</b></summary>
 
-Puppeteer keeps a cached copy of Chrome under your user folder. If that cache is corrupted (folder exists but the executable inside is missing), `npm install` will fail. Fix it by deleting the cache and running `npm install` again:
+whatsapp-web.js depends on Puppeteer, which caches a copy of Chrome under your user folder purely so `npm install` succeeds (NeRoBoT itself never launches it — it connects to Electron's own browser engine instead). If that cache is corrupted (folder exists but the executable inside is missing), `npm install` will fail. Fix it by deleting the cache and running `npm install` again:
 
-- **Windows:** delete 
-- **Linux / macOS:** delete 
+- **Windows:** delete `%USERPROFILE%\.cache\puppeteer`
+- **Linux / macOS:** delete `~/.cache/puppeteer`
 
 </details>
 
 <details>
 <summary><b>ECONNREFUSED 127.0.0.1:11434</b></summary>
 
-Ollama is not running. Run `ollama serve` in your terminal, or open the Ollama app.
+Ollama is not running. Run `ollama serve` in your terminal, or let NeRoChAt/the AI Bot toggle start it for you.
 
 </details>
 
@@ -350,17 +372,25 @@ Open the log panel (the "Loglar" button in the top bar) and check for error mess
 <details>
 <summary><b>Bot does not reply to messages</b></summary>
 
-- Is AI Chat enabled? → `!aichat`
+- Is AI Chat enabled for that profile? → `!aichat`
 - Is whitelist control enabled and you're not on the list? → `!whitelist add`
+- Are you blacklisted? → `!blacklist remove`
 - Is fixed chat mode enabled and you're not in that chat? → `!fixedchat`
 - Are you rate limited? → `!ratelimit`
 
 </details>
 
 <details>
-<summary><b>Bot keeps asking for QR code</b></summary>
+<summary><b>A profile keeps asking for its QR code again</b></summary>
 
-The session is stored in the app's user-data folder (`%APPDATA%/nerobot` on Windows). If that folder was deleted, or you logged the device out from your phone, you'll need to scan the QR code again.
+Each profile's login lives in its own isolated Electron session, stored under the app's user-data folder (`%APPDATA%/nerobot`). If that folder was deleted, or you unlinked the device from your phone, you'll need to scan the QR code again for that profile.
+
+</details>
+
+<details>
+<summary><b>The app didn't update itself</b></summary>
+
+The update check needs internet access and runs (with a short timeout) before the window opens — if it can't reach GitHub in time, it just opens the current version instead and tries again next launch. You can always grab the latest version manually from [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases).
 
 </details>
 
@@ -368,14 +398,14 @@ The session is stored in the app's user-data folder (`%APPDATA%/nerobot` on Wind
 
 ## Security Notes
 
-> This bot uses a personal WhatsApp account. Keep the following in mind:
+> This app connects real WhatsApp/Telegram accounts. Keep the following in mind:
 
 <details>
 <summary><b>Details</b></summary>
 
-- Never upload the generated `project_scripts/whitelist.json`, `project_scripts/admin.json`, `project_scripts/settings.json`, `project_scripts/noprefix.json`, or `project_scripts/groupchat.json` to GitHub — they are already excluded via `.gitignore`.
+- Every profile's whitelist/blacklist/admin/settings and any saved Telegram login live under `Documents/NeRoBoT/NeRoBoT_db` — never upload that folder anywhere.
 - Do not use the bot in non-anonymous public groups.
-- Anyone added as an admin can change bot-wide settings — only grant admin to people you trust.
+- Anyone added as an admin can change that profile's bot-wide settings — only grant admin to people you trust.
 
 </details>
 
@@ -383,16 +413,17 @@ The session is stored in the app's user-data folder (`%APPDATA%/nerobot` on Wind
 
 ## License
 
-This project is for personal use. Please use it in compliance with WhatsApp's [Terms of Service](https://www.whatsapp.com/legal/terms-of-service).
+This project is for personal use. Please use it in compliance with WhatsApp's [Terms of Service](https://www.whatsapp.com/legal/terms-of-service) and Telegram's [Terms of Service](https://telegram.org/tos).
 
 ---
 
 ## Acknowledgements
 
 - [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js/)
+- [teleproto](https://www.npmjs.com/package/teleproto) (Telegram/MTProto client)
 - [Ollama](https://ollama.com/)
 - [Puppeteer](https://pptr.dev/)
-- [Electron](https://www.electronjs.org/)
+- [Electron](https://www.electronjs.org/) / [electron-builder](https://www.electron.build/) / [electron-updater](https://www.electron.build/auto-update)
 
 ---
 
