@@ -52,6 +52,8 @@ Developer: **TheSalHeLP**
 
 ## Features
 
+- Desktop App — Single-window Electron app: WhatsApp Web, bot console logs, and a full settings panel (general, per-chat, and list management) all in one place
+- Persistent Session — Scan the QR code once; the login survives restarts
 - Local AI Support — Use any model you want through Ollama, including vision models
 - Chat Memory — Separate context per chat/user, with optional shared-memory group mode
 - Image & File Reading — Reads images (vision), PDF, Word, and plain-text/code files and feeds them to the model
@@ -75,8 +77,9 @@ Make sure you have the following installed before getting started:
 - **Node.js** >= 18.x
 - **npm** >= 9.x
 - **Ollama** (latest)
-- **Google Chrome** (latest)
 - **Operating System:** Windows / Linux / macOS
+
+> Chrome is **not** required — the app ships with its own browser engine (Electron).
 
 ---
 
@@ -84,9 +87,14 @@ Make sure you have the following installed before getting started:
 
 ```
 nerobot/
-├── NeRoBoT.js                      # Entry point — WhatsApp client & message routing
 ├── package.json
+├── NeRoBoT_App.bat                 # Launches the desktop app (Windows)
+├── app/
+│   ├── main.js                     # Electron main — window, embedded WhatsApp Web, IPC
+│   ├── preload.cjs                 # UI bridge
+│   └── ui/index.html               # Top bar, log panel, settings panel
 ├── project_scripts/
+│   ├── bot.js                      # WhatsApp client & message routing
 │   ├── ai.js                       # Ollama integration
 │   ├── config.js                   # State, settings persistence, file paths
 │   ├── commands.js                 # All !commands
@@ -109,6 +117,12 @@ The `NeRoBoT_db/*.json` runtime files are created automatically on first run and
 
 ## Installation
 
+### Windows: Installer (recommended)
+
+Download `NeRoBoT-Setup-x.y.z.exe` from the [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) page and run it. It installs NeRoBoT as a normal Windows app (Start Menu shortcut, findable from the Windows search box, with its own uninstaller listed in "Add or Remove Programs") — no `git clone`/`npm install` needed. If [Ollama](https://ollama.com/) isn't already installed, the installer attempts to fetch and install it silently; if that's skipped or fails (e.g. no internet at install time), NeRoBoT will offer to install it the first time you turn on the AI Bot.
+
+### Running from source (all platforms / development)
+
 ### 1. Clone the Repository
 
 ```bash
@@ -126,7 +140,7 @@ npm install
 
 ### 3. Install Ollama and Pull a Model
 
-Download and install Ollama from [ollama.com](https://ollama.com/), then pull the model you want to use:
+Download and install Ollama from [ollama.com](https://ollama.com/), then pull the model you want to use. (When running the packaged Windows installer instead of from source, this step can also be done for you — see above.)
 
 ```bash
 ollama pull minimax-m3:cloud
@@ -138,42 +152,36 @@ ollama pull gemma2
 ### 4. Configuration
 
 <details>
-<summary><b>Chrome Path Setting</b></summary>
-
-The Chrome executable path is currently **hardcoded for Windows** in `project_scripts/config.js`:
-
-```javascript
-export const CHROME_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-```
-
-If you are on Linux or macOS, edit this line and point it to your local Chrome/Chromium binary, for example:
-
-- Linux: `/usr/bin/google-chrome`
-- macOS: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
-
-> ⚠️ This value is not read from an environment variable yet — it must be edited directly in the source for now.
-
-</details>
-
-<details>
 <summary><b>Configuration Files Are Automatic</b></summary>
 
-`project_scripts/config.js` creates `settings.json`, `whitelist.json`, `admin.json`, `noprefix.json`, and `groupchat.json` automatically on first run if they don't already exist. You don't need to create them manually.
+`project_scripts/config.js` creates `settings.json`, `whitelist.json`, `admin.json`, `noprefix.json`, and `groupchat.json` automatically on first run if they don't already exist. You don't need to create them manually. Most settings can also be changed from the in-app settings panel.
 
 </details>
 
-### 5. Start the Bot
+### 5. Start the App
 
 ```bash
-node NeRoBoT.js
+npm start
 ```
 
-> **Note:** The Chrome window will open visibly (`headless: false`). The QR code will appear in the terminal.
+On Windows you can also double-click `NeRoBoT_App.bat`.
+
+A single window opens containing WhatsApp Web, a status bar, a console log panel, and the settings panel.
+
+### Building the Windows installer
+
+```bash
+npm run gen-icons   # regenerate app/ui/icon.ico + icon.png from logo.svg (only needed after changing the logo)
+npm run pack        # quick unpacked build, for testing (dist/win-unpacked/)
+npm run dist         # full NSIS installer, ready to upload to a GitHub Release (dist/NeRoBoT-Setup-*.exe)
+```
 
 ### 6. Connect to WhatsApp
 
-1. Scan the QR code in the terminal with your phone
+1. Scan the QR code shown inside the app with your phone
 2. WhatsApp > Settings > Linked Devices > Link a Device
+
+You only need to do this once — the session is stored and restored on the next launch.
 
 ---
 
@@ -326,13 +334,6 @@ Puppeteer keeps a cached copy of Chrome under your user folder. If that cache is
 </details>
 
 <details>
-<summary><b>Chrome not found error</b></summary>
-
-Check the `CHROME_PATH` value in `project_scripts/config.js`. On Linux it is usually `/usr/bin/google-chrome`, on macOS `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`.
-
-</details>
-
-<details>
 <summary><b>ECONNREFUSED 127.0.0.1:11434</b></summary>
 
 Ollama is not running. Run `ollama serve` in your terminal, or open the Ollama app.
@@ -342,7 +343,7 @@ Ollama is not running. Run `ollama serve` in your terminal, or open the Ollama a
 <details>
 <summary><b>QR code does not appear</b></summary>
 
-Check the terminal output. Sometimes an error message is shown instead of the QR code. Make sure Chrome is up to date.
+Open the log panel (the "Loglar" button in the top bar) and check for error messages. Make sure another copy of the app isn't already running.
 
 </details>
 
@@ -359,7 +360,7 @@ Check the terminal output. Sometimes an error message is shown instead of the QR
 <details>
 <summary><b>Bot keeps asking for QR code</b></summary>
 
-The `.wwebjs_auth/` folder may have been deleted. Back it up locally (do not commit it).
+The session is stored in the app's user-data folder (`%APPDATA%/nerobot` on Windows). If that folder was deleted, or you logged the device out from your phone, you'll need to scan the QR code again.
 
 </details>
 
@@ -391,7 +392,7 @@ This project is for personal use. Please use it in compliance with WhatsApp's [T
 - [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js/)
 - [Ollama](https://ollama.com/)
 - [Puppeteer](https://pptr.dev/)
-- [qrcode-terminal](https://www.npmjs.com/package/qrcode-terminal)
+- [Electron](https://www.electronjs.org/)
 
 ---
 

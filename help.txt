@@ -14,6 +14,12 @@ Beyaz Liste Yönetimi
 - whitelist reset         → Beyaz listeyi tamamen temizler. (Onay gerekir)
 - whitelist control       → Yeni sohbet kontrolünü aç/kapat.
 
+Kara Liste Yönetimi
+- blacklist list          → Kara listedeki sohbetleri gösterir.
+- blacklist add [ID]      → Kara listeye ekler (bu sohbet tamamen yok sayılır).
+- blacklist remove [ID]   → Kara listeden çıkarır.
+- blacklist reset         → Kara listeyi tamamen temizler. (Onay gerekir)
+
 AI Yönetimi
 - aichat                  → AI sohbetini aç/kapat.
 - model                    → Model komutları için kullanım yardımı gösterir.
@@ -31,9 +37,11 @@ AI Yönetimi
 - think [metin]           → Düşünme mesajı metnini günceller.
 - aierror                 → AI hata mesajını gösterir veya değiştirir.
 - replymode               → AI yanıtlarını quoted-reply modunda aç/kapat.
-- media                   → Görsel ve dosya okuma durumunu gösterir.
+- media                   → Görsel/dosya okuma ve görsel üretimi durumunu gösterir.
 - media image             → Görsel okumayı aç/kapat.
 - media file              → Dosya okumayı aç/kapat.
+- media imagegen          → Görsel üretimini aç/kapat (açıkken, resim isteyen mesajlar
+                             otomatik algılanıp ücretsiz bir servisle üretilir ve gönderilir).
 
 Hafıza
 - clear                   → Kullanım listesini gösterir, hiçbir şey silmez.
@@ -45,14 +53,17 @@ Sıfırlama
 - reset                   → Kullanım listesini gösterir, hiçbir şey sıfırlamaz.
 - reset settings          → Bu sohbetin TÜM özel ayarlarını global'e çevirir. (Onay gerekir)
 - reset settings [ad]     → Tek bir ayarı sıfırlar (onay istemez).
-                             ad: model, personality, noprefix, groupchat, debugchat, fixedchat
+                             ad: model, prefix, personality, noprefix, groupchat, debugchat, fixedchat
 - reset all settings      → Her şeyi proje varsayılanlarına döndürür. (Onay gerekir)
 
 Sistem Ayarları
-- prefix                  → Mevcut prefix'leri gösterir.
-- prefix main <p>         → Ana prefix'i değiştirir.
+- prefix                  → Mevcut prefix'leri (ve bu sohbetin override'ını) gösterir.
+- prefix main <p>         → Ana (global) prefix'i değiştirir.
 - prefix debug <p>        → Debug prefix'ini değiştirir.
 - prefix ignore <p>       → Yoksayma prefix'ini değiştirir.
+- prefix chat <p>         → Bu sohbetin prefix'ini değiştirir.
+- prefix chat [ID] <p>    → Belirtilen sohbetin prefix'ini değiştirir.
+- prefix chat reset [ID]  → Sohbetin prefix override'ını kaldırır, global'e döner.
 - fixedchat               → Botu sadece bu sohbete kilitler veya serbest bırakır.
 - noprefix                → Prefix olmadan her mesaja yanıt verme modunu aç/kapat.
 - noprefixall             → Tüm sohbetler için prefix'siz modu aç/kapat. (Whitelist kapalıyken açmak veya
@@ -95,6 +106,12 @@ Whitelist Management
 - whitelist reset         → Clears the entire whitelist. (Requires confirmation)
 - whitelist control       → Enables/disables new chat control.
 
+Blacklist Management
+- blacklist list          → Shows the blacklist.
+- blacklist add [ID]      → Adds to the blacklist (this chat is fully ignored).
+- blacklist remove [ID]   → Removes from the blacklist.
+- blacklist reset         → Clears the entire blacklist. (Requires confirmation)
+
 AI Management
 - aichat                  → Enables/disables AI chat.
 - model                    → Shows usage help for model commands.
@@ -112,9 +129,12 @@ AI Management
 - think [text]            → Updates the think message text.
 - aierror                 → Shows or updates the AI error message.
 - replymode               → Enables/disables quoted-reply mode for AI responses.
-- media                   → Shows image and file reading status.
+- media                   → Shows image/file reading and image generation status.
 - media image             → Enables/disables image reading.
 - media file              → Enables/disables file reading.
+- media imagegen          → Enables/disables image generation (when on, messages asking
+                             for a picture are auto-detected and one is generated + sent
+                             via a free image service).
 
 Memory
 - clear                   → Shows usage list, clears nothing.
@@ -126,14 +146,17 @@ Reset
 - reset                   → Shows usage list, resets nothing.
 - reset settings          → Resets ALL of this chat's own overrides to global. (Requires confirmation)
 - reset settings [name]   → Resets a single setting (no confirmation needed).
-                             name: model, personality, noprefix, groupchat, debugchat, fixedchat
+                             name: model, prefix, personality, noprefix, groupchat, debugchat, fixedchat
 - reset all settings      → Factory-resets everything to project defaults. (Requires confirmation)
 
 System Settings
-- prefix                  → Shows current prefixes.
-- prefix main <p>         → Changes the main prefix.
+- prefix                  → Shows current prefixes (and this chat's override).
+- prefix main <p>         → Changes the main (global) prefix.
 - prefix debug <p>        → Changes the debug prefix.
 - prefix ignore <p>       → Changes the ignore prefix.
+- prefix chat <p>         → Changes this chat's prefix.
+- prefix chat [ID] <p>    → Changes a specific chat's prefix.
+- prefix chat reset [ID]  → Removes a chat's prefix override, falls back to global.
 - fixedchat               → Locks the bot to this chat or releases it.
 - noprefix                → Enables/disables no-prefix mode for this chat.
 - noprefixall             → Enables/disables no-prefix mode for ALL chats. (Requires confirmation when

@@ -1,22 +1,57 @@
 {
   "name": "nerobot",
-  "version": "2.1.1",
+  "version": "4.4.16",
   "description": "",
-  "main": "NeRoBoT.js",
+  "main": "app/main.js",
   "scripts": {
-    "start": "node NeRoBoT.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "electron .",
+    "gen-icons": "node scripts/gen-icons.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win",
+    "release": "node release.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "dotenv": "^17.4.2",
     "mammoth": "^1.12.0",
     "ollama": "^0.6.3",
     "pdf-parse": "^2.4.5",
-    "qrcode-terminal": "^0.12.0",
+    "qrcode": "^1.5.4",
+    "teleproto": "^1.228.3",
     "whatsapp-web.js": "^1.34.7"
+  },
+  "devDependencies": {
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.3"
+  },
+  "build": {
+    "appId": "com.nerobot.app",
+    "productName": "NeRoBoT",
+    "asar": false,
+    "files": [
+      "app/**/*",
+      "project_scripts/**/*",
+      "ascii.txt",
+      "package.json",
+      "help.txt",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "app/ui/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NeRoBoT",
+      "include": "build/installer.nsh"
+    }
   }
 }

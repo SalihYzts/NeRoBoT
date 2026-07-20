@@ -131,13 +131,33 @@ session/
 # ===================================
 # ⚙️ Proje özel dosyalar (runtime'da otomatik oluşur)
 # ===================================
-# Bunlar config.js tarafından ./NeRoBoT_db/ altında
-# otomatik üretilir — kişisel/hassas veri içerdiği için commit'lenmez.
+# Eski (tek profilli) düz yerleşim — config.js tarafından ./NeRoBoT_db/
+# altında otomatik üretilir — kişisel/hassas veri içerdiği için commit'lenmez.
 NeRoBoT_db/whitelist.json
+NeRoBoT_db/blacklist.json
 NeRoBoT_db/admin.json
 NeRoBoT_db/noprefix.json
 NeRoBoT_db/groupchat.json
 NeRoBoT_db/settings.json
+NeRoBoT_db/chatprefixes.json
+NeRoBoT_db/ollama.json
+NeRoBoT_db/ollama-chats.json
+
+# Çoklu profil düzeni (project_scripts/profiles.js) — her profilin whitelist/
+# blacklist/admin/settings/vs dosyaları + Telegram profillerinin oturum
+# dosyası (telegram-session.txt — bir Telegram hesabına giriş yapılmış
+# oturum, gerçek bir sır) hep burada. Profil kayıt defteri de (profil
+# isimleri/platformları) kişisel bilgi sayılır.
+NeRoBoT_db/profiles.json
+NeRoBoT_db/profiles/
+
+# Telegram uygulama kimliği (my.telegram.org api_id/api_hash) — bkz.
+# app/main.js'in readTelegramAppConfig()'i / project_scripts/telegram-default-app.js.
+NeRoBoT_db/telegram-app.json
+
+# release.js'in GitHub Release oluşturmak için sakladığı Personal Access
+# Token — gerçek bir sır, ASLA commit'lenmemeli.
+.release-token
 
 # ===================================
 # 💻 IDE & Editor
@@ -150,6 +170,9 @@ NeRoBoT_db/settings.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Kısayol dosyaları — mutlak yol içerdiği için makineye özeldir, commit'lenmez.
+*.lnk
 
 # ===================================
 # 🪟 Windows

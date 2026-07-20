@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>NeRoBoT</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+        background: #0b0b0d;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 1;
+        transition: opacity 0.5s ease;
+    }
+    body.fade { opacity: 0; }
+    #wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+    }
+    #ascii {
+        margin: 0;
+        color: #ff8c1a;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 8px;
+        line-height: 1.1;
+        white-space: pre;
+        text-align: center;
+    }
+    #barWrap {
+        width: 320px;
+        height: 6px;
+        background: #232327;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    #barFill {
+        height: 100%;
+        width: 0%;
+        background: #ff8c1a;
+        border-radius: 3px;
+        transition: width 0.15s linear;
+    }
+    #pct {
+        height: 15px;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 12px;
+        color: #9a9aa2;
+    }
+    #retryBtn {
+        background: transparent;
+        color: #9a9aa2;
+        border: 1px solid #2a2a30;
+        border-radius: 6px;
+        padding: 8px 20px;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 13px;
+        cursor: pointer;
+    }
+    #retryBtn:hover { color: #ff8c1a; border-color: #ff8c1a; }
+</style>
+</head>
+<body>
+<div id="wrap">
+    <pre id="ascii"></pre>
+    <div id="barWrap"><div id="barFill"></div></div>
+    <div id="pct"></div>
+    <button id="retryBtn" style="display:none">⟳ Yeniden yükle</button>
+</div>
+<script>
+    (async () => {
+        // This splash view is loaded once per open profile (see
+        // app/main.js's showSplash), which passes its profileId as a query
+        // param since there's no other way for this page to know which
+        // profile it belongs to.
+        const profileId = new URLSearchParams(location.search).get('profileId');
+
+        const ascii = document.getElementById('ascii');
+        const barFill = document.getElementById('barFill');
+        const pct = document.getElementById('pct');
+        const retryBtn = document.getElementById('retryBtn');
+        try {
+            ascii.textContent = await window.nerobot.getSplashAscii();
+        } catch (_) {}
+
+        // Follow the saved UI language for the retry-button label.
+        let lang = 'tr';
+        window.nerobot.getSettings(profileId).then(v => {
+            if (v.helpLanguage === 'en') {
+                lang = 'en';
+                retryBtn.textContent = '⟳ Reload';
+            }
+        }).catch(() => {});
+
+        // Stays up through the passive "connecting/loading" phase (nothing
+        // for the user to do) and dismisses as soon as there's something
+        // actionable or final to show: a QR to scan, the bot going ready, or
+        // an error. A short minimum display time keeps it from being a
+        // single-frame flash on an already-warm/instant reconnect.
+        const MIN_DISPLAY_MS = 900;
+        // Same idea as the topbar's retry button: if the status hasn't moved
+        // at all for this long, offer a manual reload right on the splash.
+        const STUCK_MS = 5000;
+        const shownAt = Date.now();
+        let finished = false;
+        let lastSig = null;
+        let lastChange = Date.now();
+
+        function isActionable(status) {
+            return !!status && (status.key === 'qr' || status.key === 'ready' || status.key === 'error');
+        }
+
+        // ============================
+        // Progress bar — always fills 0 → 100, never loops.
+        // While there's no real percentage yet (connecting / just-logged-in
+        // phase) the bar creeps asymptotically toward a soft cap so it's
+        // visibly moving. Once WhatsApp's loading_screen events start
+        // reporting a real percentage, the cap follows it. The bar never
+        // moves backwards, and finish() completes it to 100 before the fade.
+        // ============================
+        const CONNECT_CAP = 20;   // soft cap while no real percent is known
+        let cap = CONNECT_CAP;
+        let shown = 0;
+
+        function renderBar() {
+            const p = Math.min(100, Math.floor(shown));
+            barFill.style.width = p + '%';
+            pct.textContent = lang === 'en' ? p + '%' : '%' + p;
+        }
+
+        const barTimer = setInterval(() => {
+            if (finished) return;
+            shown += (cap - shown) * 0.06; // quick at first, then eases off
+            renderBar();
+        }, 120);
+
+        function finish() {
+            if (finished) return;
+            finished = true;
+            retryBtn.style.display = 'none';
+            clearInterval(barTimer);
+            shown = 100;
+            renderBar(); // complete the bar before it fades out with the splash
+            const wait = Math.max(0, MIN_DISPLAY_MS - (Date.now() - shownAt));
+            setTimeout(() => {
+                document.body.classList.add('fade');
+                setTimeout(() => window.nerobot.notifySplashDone(), 500);
+            }, wait);
+        }
+
+        function applyStatus(s) {
+            if (!s) return;
+            if (isActionable(s)) { finish(); return; }
+
+            // Real loading percentage → let the bar's cap follow it (only
+            // forwards; WhatsApp occasionally re-reports lower values).
+            const percent = s.key === 'starting' && s.extra != null ? Number(s.extra) : null;
+            if (percent != null && Number.isFinite(percent)) {
+                cap = Math.max(cap, percent);
+            }
+
+            const sig = s.key + ':' + (s.extra ?? '');
+            if (sig !== lastSig) {
+                lastSig = sig;
+                lastChange = Date.now();
+                retryBtn.style.display = 'none';
+            }
+        }
+
+        setInterval(() => {
+            if (!finished && Date.now() - lastChange >= STUCK_MS) {
+                retryBtn.style.display = '';
+            }
+        }, 500);
+
+        retryBtn.addEventListener('click', () => {
+            window.nerobot.retryBotNow(profileId);
+            retryBtn.style.display = 'none';
+            lastChange = Date.now(); // fresh window before it reappears
+        });
+
+        try {
+            const { status } = await window.nerobot.init(profileId);
+            applyStatus(status);
+        } catch (_) {}
+
+        window.nerobot.onStatus(applyStatus);
+    })();
+</script>
+</body>
+</html>

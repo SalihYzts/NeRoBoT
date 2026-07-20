@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>NeRoBoT — NeRoChAt</title>
+<style>
+    :root {
+        --bg: #0b0b0d;
+        --bg2: #17171a;
+        --bg3: #101013;
+        --border: #2a2a30;
+        --text: #ececec;
+        --muted: #9a9aa2;
+        --accent: #ff8c1a;
+        --red: #e5484d;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        display: flex;
+        flex-direction: row;
+    }
+
+    /* ===== Sidebar — saved conversations ===== */
+    #sidebar {
+        width: 180px;
+        flex: 0 0 180px;
+        background: var(--bg2);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        padding: 10px;
+        gap: 8px;
+        overflow: hidden;
+    }
+    #newChatBtn {
+        background: var(--bg3);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-size: 13px;
+        font-family: inherit;
+        cursor: pointer;
+        flex: 0 0 auto;
+    }
+    #newChatBtn:hover { border-color: var(--accent); color: var(--accent); }
+    #convList { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+    .convItem {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 7px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        color: var(--muted);
+        cursor: pointer;
+        border: 1px solid transparent;
+    }
+    .convItem:hover { background: var(--bg3); color: var(--text); }
+    .convItem.active { background: rgba(255,140,26,.14); border-color: rgba(255,140,26,.35); color: var(--text); }
+    .convTitle { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .convDelete {
+        flex: 0 0 auto;
+        background: transparent;
+        border: none;
+        color: var(--muted);
+        font-size: 12px;
+        cursor: pointer;
+        padding: 2px 4px;
+        line-height: 1;
+        opacity: 0;
+    }
+    .convItem:hover .convDelete { opacity: 1; }
+    .convDelete:hover { color: var(--red); }
+    .convEmpty { font-size: 12px; color: var(--muted); padding: 8px; text-align: center; }
+
+    /* ===== Main column ===== */
+    #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    #topbar {
+        height: 36px;
+        flex: 0 0 36px;
+        background: var(--bg2);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 12px;
+        -webkit-app-region: drag;
+    }
+    #brandLogo { width: auto; height: 20px; flex: 0 0 auto; margin-right: -4px; }
+    #brandText { font-weight: 700; letter-spacing: .5px; color: var(--accent); font-size: 13px; white-space: nowrap; }
+    #spacer { flex: 1; }
+    #modelSelect {
+        -webkit-app-region: no-drag;
+        max-width: 180px;
+        appearance: none;
+        -webkit-appearance: none;
+        padding: 7px 26px 7px 10px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239a9aa2' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 9px center;
+    }
+
+    #messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 14px 14px 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .msg {
+        max-width: 82%;
+        padding: 8px 11px;
+        border-radius: 10px;
+        font-size: 13px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .msg.user {
+        align-self: flex-end;
+        background: rgba(255,140,26,.16);
+        border: 1px solid rgba(255,140,26,.35);
+    }
+    .msg.ai {
+        align-self: flex-start;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+    }
+    .msg.ai.pending { color: var(--muted); }
+    .hint {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+        padding: 14px;
+        text-align: center;
+    }
+
+    /* Images inside a bubble — generated, attached, or re-rendered on
+       reload (see addImageToBubble() below) — capped to a sane chat-sized
+       thumbnail instead of the bubble's full 82%-of-window width, with a
+       hover-revealed download button. */
+    .imgWrap { position: relative; display: inline-block; margin-top: 6px; max-width: 100%; }
+    .chatImg { display: block; max-width: 320px; max-height: 320px; width: auto; height: auto; border-radius: 8px; }
+    .imgDownloadBtn {
+        position: absolute;
+        top: 6px; right: 6px;
+        width: 26px; height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(11,11,13,.7);
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        font-size: 13px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity .15s, background .15s;
+    }
+    .imgWrap:hover .imgDownloadBtn { opacity: 1; }
+    .imgDownloadBtn:hover { background: var(--accent); color: #0b0b0d; }
+
+    #inputBar {
+        flex: 0 0 auto;
+        border-top: 1px solid var(--border);
+        background: var(--bg2);
+        padding: 10px 12px;
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+    }
+    textarea, select {
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        padding: 7px 10px;
+        font-size: 13px;
+        font-family: inherit;
+    }
+    textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+    #msgInput {
+        flex: 1;
+        resize: none;
+        min-height: 36px;
+        max-height: 120px;
+    }
+    .miniBtn {
+        background: var(--bg3);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 14px;
+        font-size: 13px;
+        cursor: pointer;
+        white-space: nowrap;
+        font-family: inherit;
+    }
+    .miniBtn:hover { border-color: var(--accent); color: var(--accent); }
+    .miniBtn:disabled { opacity: .4; cursor: default; pointer-events: none; }
+
+    #attachBtn {
+        flex: 0 0 auto;
+        background: var(--bg3);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 16px;
+        font-family: inherit;
+    }
+    #attachBtn:hover { border-color: var(--accent); color: var(--accent); }
+    #attachChip {
+        display: none;
+        align-items: center;
+        gap: 6px;
+        margin: 0 12px 8px;
+        padding: 5px 8px;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 12px;
+        color: var(--muted);
+        align-self: flex-start;
+    }
+    #attachChip.show { display: inline-flex; }
+    #attachThumb { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
+    #attachChipRemove {
+        background: transparent;
+        border: none;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 12px;
+        padding: 0 2px;
+        line-height: 1;
+    }
+    #attachChipRemove:hover { color: var(--red); }
+
+    /* Startup splash — shown from page load until loadModels()+loadConvList()
+       both resolve (see the bottom of the script below), same look as the
+       per-profile splash (app/ui/splash.html) — the model list fetch in
+       particular can take a moment on a cold/busy Ollama daemon, so without
+       this NeRoChAt just sat on an empty-looking window that whole time. */
+    #loadingOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 1;
+        transition: opacity .5s ease;
+    }
+    #loadingOverlay.fade { opacity: 0; pointer-events: none; }
+    #loadingWrap { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    #loadingAscii {
+        margin: 0;
+        color: var(--accent);
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 8px;
+        line-height: 1.1;
+        white-space: pre;
+        text-align: center;
+    }
+    #loadingBarWrap { width: 220px; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+    #loadingBarFill { height: 100%; width: 0%; background: var(--accent); border-radius: 3px; transition: width .15s linear; }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+    <div id="loadingOverlay">
+        <div id="loadingWrap">
+            <pre id="loadingAscii"></pre>
+            <div id="loadingBarWrap"><div id="loadingBarFill"></div></div>
+        </div>
+    </div>
+    <div id="sidebar">
+        <button id="newChatBtn">+ Yeni Sohbet</button>
+        <div id="convList"></div>
+    </div>
+    <div id="main">
+        <div id="topbar">
+            <img id="brandLogo" src="logo.svg" alt="">
+            <span id="brandText">NeRoChAt</span>
+            <span id="spacer"></span>
+            <select id="modelSelect"><option value="">— model —</option></select>
+        </div>
+        <div id="messages"></div>
+        <div id="attachChip">
+            <img id="attachThumb" alt="" style="display:none;">
+            <span id="attachChipLabel"></span>
+            <button id="attachChipRemove" title="Kaldır">✕</button>
+        </div>
+        <div id="inputBar">
+            <button id="attachBtn" title="Dosya/görsel ekle">📎</button>
+            <textarea id="msgInput" placeholder="Bir mesaj yaz…" rows="1"></textarea>
+            <button id="sendBtn" class="miniBtn">Gönder</button>
+        </div>
+    </div>
+
+<script>
+(async () => {
+    const messagesEl = document.getElementById('messages');
+    const modelSelect = document.getElementById('modelSelect');
+    const msgInput = document.getElementById('msgInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const convListEl = document.getElementById('convList');
+    const newChatBtn = document.getElementById('newChatBtn');
+    const attachBtn = document.getElementById('attachBtn');
+    const attachChip = document.getElementById('attachChip');
+    const attachThumb = document.getElementById('attachThumb');
+    const attachChipLabel = document.getElementById('attachChipLabel');
+    const attachChipRemove = document.getElementById('attachChipRemove');
+
+    let history = []; // { role, content, images? }
+    let currentConvId = null;
+    let sending = false;
+    // Requests typed/sent while one is already in flight — instead of
+    // dropping them, send() below queues them here and finishSend() drains
+    // one at a time once the current request actually finishes. Each entry:
+    // { text, model, attachment }.
+    let queue = [];
+    // { type: 'image', filename, mime, base64 } or { type: 'text', filename, text }
+    let pendingAttachment = null;
+    // Fetched once at startup (see bottom of this file) instead of on every
+    // image reply — it's a static string (ai.js's IMAGE_ACK_NOTE), not
+    // per-request data. See sendImageRequest() below.
+    let imageAckNote = '';
+
+    function clearAttachment() {
+        pendingAttachment = null;
+        attachChip.classList.remove('show');
+        attachThumb.style.display = 'none';
+        attachThumb.src = '';
+    }
+
+    attachBtn.addEventListener('click', async () => {
+        const result = await window.nerobot.pickOllamaFile();
+        if (!result.ok) {
+            if (!result.canceled) addHint('Dosya okunamadı: ' + (result.error || '?'));
+            return;
+        }
+        pendingAttachment = result;
+        attachChipLabel.textContent = result.filename;
+        if (result.type === 'image') {
+            attachThumb.src = `data:${result.mime};base64,${result.base64}`;
+            attachThumb.style.display = '';
+        } else {
+            attachThumb.style.display = 'none';
+        }
+        attachChip.classList.add('show');
+    });
+    attachChipRemove.addEventListener('click', clearAttachment);
+
+    function addMessage(role, text) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + role;
+        div.textContent = text;
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return div;
+    }
+
+    function addHint(text) {
+        const div = document.createElement('div');
+        div.className = 'hint';
+        div.textContent = text;
+        messagesEl.appendChild(div);
+    }
+
+    // Single insertion point for every image shown in a bubble (generated,
+    // attached-photo echoes, and reload re-renders) — capped size + a
+    // hover-revealed download button (see .chatImg/.imgDownloadBtn CSS and
+    // main.js's ollama:saveImage), instead of each call site building its
+    // own raw <img> with no way to save it.
+    function addImageToBubble(container, base64, mimetype) {
+        const wrap = document.createElement('div');
+        wrap.className = 'imgWrap';
+        const img = document.createElement('img');
+        img.className = 'chatImg';
+        img.src = `data:${mimetype};base64,${base64}`;
+        const dl = document.createElement('button');
+        dl.className = 'imgDownloadBtn';
+        dl.title = 'İndir';
+        dl.textContent = '⬇';
+        dl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.nerobot.saveOllamaImage(base64, mimetype);
+        });
+        wrap.appendChild(img);
+        wrap.appendChild(dl);
+        container.appendChild(wrap);
+        return wrap;
+    }
+
+    // Re-callable (unlike the original one-shot version) — the "+" pull
+    // button needs to refresh this list once a new model finishes
+    // downloading, without piling up duplicate <option>s or re-showing the
+    // "no models" chat hint on every refresh.
+    async function loadModels(showHintIfEmpty) {
+        const result = await window.nerobot.listOllamaModels();
+        modelSelect.innerHTML = '<option value="">— model —</option>';
+        if (!result.ok || !result.models.length) {
+            if (showHintIfEmpty) addHint('Hiç model bulunamadı — yukarıdaki "+" ile bir model indirebilir, ya da bir terminalde "ollama pull llama3.2" çalıştırabilirsin.');
+            sendBtn.disabled = true;
+            return;
+        }
+        sendBtn.disabled = false;
+        for (const name of result.models) {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            modelSelect.appendChild(opt);
+        }
+        modelSelect.value = result.models[0];
+    }
+
+    // New models are pulled from Ayarlar → NeRoChAt (see index.html's
+    // ollama-general tab) instead of an inline form here — main.js notifies
+    // us over 'ollama:modelsChanged' once a pull started from there finishes
+    // so the dropdown picks it up without needing to reopen NeRoChAt.
+    window.nerobot.onOllamaModelsChanged(() => loadModels(false));
+
+    // ============================
+    // Sidebar — saved conversations. Each one is a standalone message list
+    // persisted by main.js (NeRoBoT_db/ollama-chats.json), independent of
+    // any WhatsApp profile — this window is a general-purpose Ollama chat,
+    // not tied to a specific bot account.
+    // ============================
+    async function loadConvList() {
+        const convs = await window.nerobot.listOllamaConversations();
+        convListEl.innerHTML = '';
+        if (!convs.length) {
+            const empty = document.createElement('div');
+            empty.className = 'convEmpty';
+            empty.textContent = 'Henüz sohbet yok';
+            convListEl.appendChild(empty);
+            return;
+        }
+        for (const c of convs) {
+            const item = document.createElement('div');
+            item.className = 'convItem' + (c.id === currentConvId ? ' active' : '');
+            const title = document.createElement('div');
+            title.className = 'convTitle';
+            title.textContent = c.title || 'Yeni Sohbet';
+            title.title = c.title || '';
+            const del = document.createElement('button');
+            del.className = 'convDelete';
+            del.textContent = '✕';
+            del.title = 'Sil';
+            del.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await window.nerobot.deleteOllamaConversation(c.id);
+                if (c.id === currentConvId) startNewChat();
+                loadConvList();
+            });
+            item.appendChild(title);
+            item.appendChild(del);
+            item.addEventListener('click', () => openConversation(c.id));
+            convListEl.appendChild(item);
+        }
+    }
+
+    function startNewChat() {
+        currentConvId = null;
+        history = [];
+        messagesEl.innerHTML = '';
+        loadConvList();
+    }
+
+    async function openConversation(id) {
+        if (id === currentConvId) return;
+        const conv = await window.nerobot.getOllamaConversation(id);
+        if (!conv) return;
+        currentConvId = id;
+        history = conv.messages || [];
+        messagesEl.innerHTML = '';
+        for (const m of history) {
+            const div = addMessage(m.role === 'user' ? 'user' : 'ai', m.content);
+            if (m.images?.[0]) {
+                addImageToBubble(div, m.images[0], m.mime || 'image/png');
+            }
+        }
+        loadConvList();
+    }
+
+    newChatBtn.addEventListener('click', startNewChat);
+
+    // After every send (whichever path it took) — first message of a brand
+    // new conversation derives its title from that message, every send
+    // after that just re-saves under the same id.
+    async function finishSend(titleSource) {
+        sending = false;
+        msgInput.focus();
+        const title = !currentConvId ? titleSource.slice(0, 40) + (titleSource.length > 40 ? '…' : '') : undefined;
+        const { id } = await window.nerobot.saveOllamaConversation(currentConvId, history, title);
+        currentConvId = id;
+        loadConvList();
+        // A message typed/sent while this one was still in flight (see
+        // send() below) waits here — start it now that this turn is fully
+        // wrapped up (including the save above, so its own finishSend()
+        // reopens the right conversation id).
+        if (queue.length) {
+            const next = queue.shift();
+            performSend(next.text, next.model, next.attachment);
+        }
+    }
+
+    // Image-generation requests get routed to a separate free image backend
+    // instead of a normal streamed reply — same "does the chat model even
+    // know it made this?" trick bot.js's WhatsApp side uses (see ai.js's
+    // IMAGE_ACK_NOTE, fetched once into imageAckNote below): the note gets
+    // folded into a follow-up message so the model reacts to the image as
+    // if it drew it itself, and that reply is what actually gets saved —
+    // reuses the exact same streaming/rendering path a normal reply takes.
+    // `sourceAttachment` ({base64, mime}) is set when this came from "redraw
+    // this" on an attached photo rather than a plain text request — imagegen
+    // backends are text-to-image only, so that photo gets described into a
+    // prompt first (see describeOllamaImageForGeneration).
+    async function sendImageRequest(text, model, personality, imagePrompt, sourceAttachment) {
+        const userMessage = { role: 'user', content: text };
+        if (sourceAttachment) {
+            userMessage.images = [sourceAttachment.base64];
+            userMessage.mime = sourceAttachment.mime;
+        }
+        history.push(userMessage);
+
+        let genPrompt = imagePrompt || text;
+        if (sourceAttachment) {
+            const described = await window.nerobot.describeOllamaImageForGeneration(model, sourceAttachment.base64, text)
+                .catch(err => ({ ok: false, error: err.message || String(err) }));
+            if (!described.ok) {
+                addMessage('ai', 'Hata: ' + (described.error || 'Görsel açıklanamadı.'));
+                await finishSend(text);
+                return;
+            }
+            genPrompt = described.description;
+        }
+
+        const imgDiv = addMessage('ai pending', 'Görsel oluşturuluyor…');
+        const result = await window.nerobot.generateOllamaImage(genPrompt).catch(err => ({ ok: false, error: err.message || String(err) }));
+        if (!result.ok) {
+            imgDiv.classList.remove('pending');
+            imgDiv.textContent = 'Hata: ' + (result.error || 'Görsel üretilemedi.');
+            await finishSend(text);
+            return;
+        }
+        imgDiv.classList.remove('pending');
+        imgDiv.textContent = '';
+        addImageToBubble(imgDiv, result.base64, result.mimetype);
+
+        const captionDiv = document.createElement('div');
+        captionDiv.style.marginTop = '6px';
+        imgDiv.appendChild(captionDiv);
+
+        const ackMessages = [];
+        if (personality) ackMessages.push({ role: 'system', content: personality });
+        ackMessages.push({ role: 'user', content: `${text}${imageAckNote}` });
+
+        let full = '';
+        const off = window.nerobot.onOllamaChatChunk((chunk) => {
+            if (chunk.error) { captionDiv.textContent = 'Hata: ' + chunk.error; return; }
+            if (chunk.content) {
+                full += chunk.content;
+                captionDiv.textContent = full;
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
+        });
+        try {
+            await window.nerobot.sendOllamaChat(model, ackMessages);
+        } finally {
+            off?.();
+            history.push({ role: 'assistant', content: full, images: [result.base64], mime: result.mimetype });
+            await finishSend(text);
+        }
+    }
+
+    // The actual work of sending one message — text/model/attachment are
+    // passed in rather than read live from the DOM, since a queued call
+    // (see send() below) can run well after the input box has moved on to
+    // something else.
+    async function performSend(text, model, attachment) {
+        sending = true;
+
+        // Personality (system prompt) — this conversation's own override
+        // (set in Ayarlar → NeRoChAt → Sohbet) if it has one, otherwise the
+        // global one (Ayarlar → NeRoChAt → Genel). Fetched fresh on every
+        // send rather than cached, since either can change while this
+        // window stays open. A brand new conversation (no id yet) has no
+        // override of its own, so it just gets the global one.
+        const [status, conv] = await Promise.all([
+            window.nerobot.getOllamaStatus(),
+            currentConvId ? window.nerobot.getOllamaConversation(currentConvId) : Promise.resolve(null),
+        ]);
+        const personality = (conv?.personality || status.personality || '').trim();
+
+        // A text-file attachment still opts out entirely (that's "read this
+        // file", not "generate one"), but a PHOTO attachment no longer does
+        // — the classifier is told a photo came along too, so "redraw this"/
+        // "regenerate it" is recognized as a generation request for that
+        // photo (see sendImageRequest's sourceAttachment param), while a
+        // bare "what is this?" caption still falls through to normal vision
+        // reading below.
+        const isImageAttachment = attachment?.type === 'image';
+        if (status.imageGenEnabled !== false && (!attachment || isImageAttachment) && text) {
+            const intent = await window.nerobot.classifyOllamaImageIntent(text, model, isImageAttachment);
+            if (intent.image) {
+                const userDiv = addMessage('user', text);
+                if (isImageAttachment) {
+                    addImageToBubble(userDiv, attachment.base64, attachment.mime);
+                }
+                await sendImageRequest(text, model, personality, intent.prompt, isImageAttachment ? attachment : undefined);
+                return;
+            }
+        }
+
+        // What the model actually reads: the typed text, with any
+        // extracted file text prepended — same "[Dosya içeriği: name]\n…"
+        // shape bot.js already uses for WhatsApp media, just sourced from
+        // a picked file instead of a WhatsApp message.
+        let modelContent = text;
+        if (attachment?.type === 'text') {
+            modelContent = attachment.text + (text ? `\n\n${text}` : '');
+        }
+        const userMessage = { role: 'user', content: modelContent || ' ' };
+        if (attachment?.type === 'image') {
+            userMessage.images = [attachment.base64];
+            userMessage.mime = attachment.mime; // kept for re-rendering on reload; stripped before sending below
+
+            // Selected model may not actually be able to see images (e.g. a
+            // text-only model) — main.js checks its real capabilities and,
+            // if it can't, captions the image with whatever vision-capable
+            // model IS pulled instead (see ollama:prepareImageForChat).
+            // Fold that caption into the text this turn and skip sending the
+            // raw image — .images/.mime above stay stored either way so
+            // reopening this conversation later still shows the thumbnail.
+            const prep = await window.nerobot.prepareImageForChat(model, attachment.base64);
+            if (prep.ok && prep.mode === 'caption') {
+                userMessage.content = (modelContent ? modelContent + '\n\n' : '') + `[Image: ${prep.text}]`;
+                userMessage._skipImageInApi = true;
+            }
+        }
+        history.push(userMessage);
+
+        // What's shown in the bubble: just what the user typed, plus a
+        // small marker for the attachment — not the whole extracted file
+        // text (that'd make PDFs unreadable walls of text in the chat).
+        let displayText = text;
+        if (attachment) displayText = (displayText ? displayText + '\n' : '') + `📎 ${attachment.filename}`;
+        const userDiv = addMessage('user', displayText);
+        if (attachment?.type === 'image') {
+            addImageToBubble(userDiv, attachment.base64, attachment.mime);
+        }
+
+        const aiDiv = addMessage('ai pending', '…');
+        aiDiv.classList.add('pending');
+        let full = '';
+
+        const off = window.nerobot.onOllamaChatChunk((chunk) => {
+            if (chunk.error) {
+                aiDiv.classList.remove('pending');
+                aiDiv.textContent = 'Hata: ' + chunk.error;
+                return;
+            }
+            if (chunk.content) {
+                if (aiDiv.classList.contains('pending')) {
+                    aiDiv.classList.remove('pending');
+                    aiDiv.textContent = '';
+                }
+                full += chunk.content;
+                aiDiv.textContent = full;
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
+        });
+
+        try {
+            // Ollama's chat API only wants role/content/images — strip the
+            // extra `mime` bookkeeping field before sending (history itself
+            // keeps it, for re-rendering the thumbnail if this conversation
+            // is reopened later).
+            const apiMessages = history.map(({ role, content, images, _skipImageInApi }) =>
+                images && !_skipImageInApi ? { role, content, images } : { role, content });
+            if (personality) apiMessages.unshift({ role: 'system', content: personality });
+
+            await window.nerobot.sendOllamaChat(model, apiMessages);
+        } finally {
+            off?.();
+            if (full) history.push({ role: 'assistant', content: full });
+            await finishSend(text || attachment?.filename || 'Yeni Sohbet');
+        }
+    }
+
+    // The click/Enter entry point — reads the live input state, then either
+    // starts sending right away or, if a previous request is still in
+    // flight, queues this one (see finishSend() above, which drains it).
+    // sendBtn is deliberately never disabled for "busy" — only for "no
+    // model available" (see loadModels()) — so queueing via a click stays
+    // possible the whole time a request is running.
+    function send() {
+        const text = msgInput.value.trim();
+        const model = modelSelect.value;
+        const attachment = pendingAttachment;
+        if ((!text && !attachment) || !model) return;
+        msgInput.value = '';
+        msgInput.style.height = 'auto';
+        clearAttachment();
+        if (sending) {
+            queue.push({ text, model, attachment });
+            addHint(`Sıraya alındı — önceki istek bitince gönderilecek: "${(text || attachment?.filename || '').slice(0, 60)}"`);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            return;
+        }
+        performSend(text, model, attachment);
+    }
+
+    sendBtn.addEventListener('click', send);
+    msgInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            send();
+        }
+    });
+    msgInput.addEventListener('input', () => {
+        msgInput.style.height = 'auto';
+        msgInput.style.height = Math.min(120, msgInput.scrollHeight) + 'px';
+    });
+
+    // Startup splash — same asymptotic-creep progress bar as splash.html's
+    // (no real percentage to follow here, just something visibly moving
+    // while loadModels()/loadConvList() are in flight below).
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingBarFill = document.getElementById('loadingBarFill');
+    window.nerobot.getSplashAscii().then(ascii => {
+        document.getElementById('loadingAscii').textContent = ascii || '';
+    }).catch(() => {});
+    let loadingShown = 0;
+    const loadingTimer = setInterval(() => {
+        loadingShown += (85 - loadingShown) * 0.08;
+        loadingBarFill.style.width = Math.floor(loadingShown) + '%';
+    }, 100);
+
+    await loadModels(true);
+    await loadConvList();
+    window.nerobot.getOllamaImageAckNote().then(note => { imageAckNote = note || ''; }).catch(() => {});
+    msgInput.focus();
+
+    clearInterval(loadingTimer);
+    loadingBarFill.style.width = '100%';
+    setTimeout(() => {
+        loadingOverlay.classList.add('fade');
+        setTimeout(() => loadingOverlay.remove(), 500);
+    }, 150);
+})();
+</script>
+</body>
+</html>

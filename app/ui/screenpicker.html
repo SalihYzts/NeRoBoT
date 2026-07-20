@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Ekranınızı Paylaşın</title>
+<style>
+    :root {
+        --bg: #0b0b0d;
+        --bg2: #17171a;
+        --bg3: #101013;
+        --border: #2a2a30;
+        --text: #ececec;
+        --muted: #9a9aa2;
+        --accent: #ff8c1a;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+    #header {
+        flex: 0 0 auto;
+        padding: 14px 16px 10px;
+        font-size: 14px;
+        font-weight: 600;
+        border-bottom: 1px solid var(--border);
+    }
+    #grid {
+        flex: 1;
+        overflow-y: auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+        padding: 14px;
+    }
+    .tile {
+        background: var(--bg2);
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .tile:hover { border-color: var(--accent); }
+    .tile img {
+        width: 100%;
+        height: 90px;
+        object-fit: contain;
+        background: var(--bg3);
+    }
+    .tile .name {
+        font-size: 11px;
+        color: var(--muted);
+        padding: 6px 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    #footer {
+        flex: 0 0 auto;
+        padding: 10px 16px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: flex-end;
+    }
+    #cancelBtn {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 6px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+    #cancelBtn:hover { border-color: var(--accent); }
+</style>
+</head>
+<body>
+    <div id="header">Ekranınızı veya bir pencereyi seçin</div>
+    <div id="grid"></div>
+    <div id="footer">
+        <button id="cancelBtn">İptal</button>
+    </div>
+
+<script>
+    const grid = document.getElementById('grid');
+    window.screenPicker.onSources((sources) => {
+        grid.innerHTML = '';
+        for (const s of sources) {
+            const tile = document.createElement('div');
+            tile.className = 'tile';
+            const img = document.createElement('img');
+            img.src = s.thumbnail;
+            const name = document.createElement('div');
+            name.className = 'name';
+            name.textContent = s.name;
+            tile.appendChild(img);
+            tile.appendChild(name);
+            tile.addEventListener('click', () => window.screenPicker.choose(s.id));
+            grid.appendChild(tile);
+        }
+    });
+    document.getElementById('cancelBtn').addEventListener('click', () => window.screenPicker.cancel());
+</script>
+</body>
+</html>

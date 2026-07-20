@@ -1,15 +1,33 @@
 import fs from 'fs';
-import { sendText } from './utils.js';
-import {
-    state, saveSettings, resetStateToDefaults,
-    chatHistories,
-    whitelist, saveWhitelist,
-    admins, saveAdmins,
-    noPrefixChats, saveNoPrefixChats,
-    groupChats, saveGroupChats,
-    chatModels, saveChatModels,
-} from './config.js';
-import { resetRateLimitBucket, resetAllRateLimitBuckets } from './ratelimit.js';
+
+// Commands that only make sense when AI Bot (state.aiChatEnabled) is on —
+// blocked over WhatsApp while it's off (bot.js checks this before dispatch),
+// so the only way to control any of them remotely while AI is off is to
+// turn it back on first with !aichat. Not per-profile state, just a fixed
+// list of command names, so this lives at module scope rather than inside
+// createCommands().
+export const AI_GATED_COMMANDS = new Set([
+    'model', 'personality', 'think', 'ratelimit', 'aierror', 'media',
+    'replymode', 'fixedchat', 'clear', 'debugchat', 'noprefix', 'noprefixall',
+]);
+
+// Per-profile debug commands. Wrapped in a factory so each profile's
+// whitelist/blacklist/admins/settings/memory are the ones every command
+// body below reads and writes — never another profile's.
+export function createCommands({ store, utils, ratelimit }) {
+    const {
+        state, saveSettings, resetStateToDefaults,
+        chatHistories,
+        whitelist, saveWhitelist,
+        blacklist, saveBlacklist,
+        admins, saveAdmins,
+        noPrefixChats, saveNoPrefixChats,
+        groupChats, saveGroupChats,
+        chatModels, saveChatModels,
+        chatPrefixes, saveChatPrefixes,
+    } = store;
+    const { sendText } = utils;
+    const { resetRateLimitBucket, resetAllRateLimitBuckets } = ratelimit;
 
 // ============================
 // Project version — read from package.json (project root, one level up
@@ -66,7 +84,7 @@ function requireConfirm(key, targetId, warningText, action) {
 //   remove [ID]      → remove this chat or given ID
 //   reset            → clear all (requires confirm)
 // ============================
-export async function Admin(msg, targetId) {
+async function Admin(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
     const sub   = parts[1]?.toLowerCase();
     const selfId = msg.author || msg.from;
@@ -115,11 +133,13 @@ export async function Admin(msg, targetId) {
 //   reset             → clear all (requires confirm)
 //   control           → toggle new-chat gate
 // ============================
-export async function Whitelist(msg, targetId) {
+async function Whitelist(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
     const sub   = parts[1]?.toLowerCase();
-    const chat  = await msg.getChat();
-    const selfId = chat.id._serialized;
+    // targetId IS this chat's ID — msg.getChat() would fetch the full chat
+    // model, whose last-message serialization crashes on current WhatsApp
+    // Web builds (DataError from Msg.getMessagesById).
+    const selfId = targetId;
 
     if (!sub || sub === 'list') {
         if (whitelist.size === 0) return sendText(targetId, `Whitelist is empty.`);
@@ -128,6 +148,18 @@ export async function Whitelist(msg, targetId) {
 
     if (sub === 'add') {
         const id = parts[2] || targetId;
+        if (blacklist.has(id)) {
+            return requireConfirm(`whitelist:add:${targetId}:${id}`, targetId,
+                `⚠️ ${id} is currently blacklisted. Confirming will remove it from the blacklist and add it to the whitelist.`,
+                async () => {
+                    blacklist.delete(id);
+                    saveBlacklist();
+                    whitelist.add(id);
+                    saveWhitelist();
+                    await sendText(targetId, `Moved from blacklist to whitelist: ${id}`);
+                }
+            );
+        }
         whitelist.add(id);
         saveWhitelist();
         return sendText(targetId, `Added to whitelist: ${id}`);
@@ -180,12 +212,74 @@ export async function Whitelist(msg, targetId) {
 }
 
 // ============================
+// !blacklist  —  manage blacklist
+//   (no args / list)  → show list
+//   add [ID]          → add
+//   remove [ID]       → remove
+//   reset             → clear all (requires confirm)
+// Blacklisted chats are fully ignored (messages and debug commands
+// alike), regardless of whitelist/prefix/no-prefix state.
+// ============================
+async function Blacklist(msg, targetId) {
+    const parts = msg.body.trim().split(/\s+/);
+    const sub   = parts[1]?.toLowerCase();
+    const selfId = msg.author || msg.from;
+
+    if (!sub || sub === 'list') {
+        if (blacklist.size === 0) return sendText(targetId, `Blacklist is empty.`);
+        return sendText(targetId, `Blacklist (${blacklist.size}):\n${[...blacklist].join('\n')}`);
+    }
+
+    if (sub === 'add') {
+        const id = parts[2] || selfId;
+        if (whitelist.has(id)) {
+            return requireConfirm(`blacklist:add:${targetId}:${id}`, targetId,
+                `⚠️ ${id} is currently whitelisted. Confirming will remove it from the whitelist and add it to the blacklist.`,
+                async () => {
+                    whitelist.delete(id);
+                    saveWhitelist();
+                    blacklist.add(id);
+                    saveBlacklist();
+                    await sendText(targetId, `Moved from whitelist to blacklist: ${id}`);
+                }
+            );
+        }
+        blacklist.add(id);
+        saveBlacklist();
+        return sendText(targetId, `Added to blacklist: ${id}`);
+    }
+
+    if (sub === 'remove') {
+        const id = parts[2] || selfId;
+        if (!blacklist.has(id)) return sendText(targetId, `${id} is not blacklisted.`);
+        blacklist.delete(id);
+        saveBlacklist();
+        return sendText(targetId, `Removed from blacklist: ${id}`);
+    }
+
+    if (sub === 'reset') {
+        return requireConfirm(`blacklist:reset:${targetId}`, targetId,
+            `This will remove ALL ${blacklist.size} blacklisted chat(s).`,
+            async () => { blacklist.clear(); saveBlacklist(); await sendText(targetId, `Blacklist cleared.`); }
+        );
+    }
+
+    await sendText(targetId,
+        `Usage:\n` +
+        `${state.debugPrefix}blacklist list\n` +
+        `${state.debugPrefix}blacklist add [ID]\n` +
+        `${state.debugPrefix}blacklist remove [ID]\n` +
+        `${state.debugPrefix}blacklist reset`
+    );
+}
+
+// ============================
 // !personality  —  manage system prompt
 //   (no args)            → show active (this chat) + global personality
 //   chat <text>          → set this chat's personality only
 //   global <text>        → set global personality (applies to new/cleared chats)
 // ============================
-export async function Personality(msg, targetId) {
+async function Personality(msg, targetId) {
     const afterCmd   = msg.body.trim().split(/\s+/).slice(1).join(' ').trim();
     const firstWord  = afterCmd.split(/\s+/)[0]?.toLowerCase();
     const restOfText = afterCmd.split(/\s+/).slice(1).join(' ').trim();
@@ -242,7 +336,7 @@ export async function Personality(msg, targetId) {
 //   on / off    → toggle
 //   <text>      → set new message text
 // ============================
-export async function Think(msg, targetId) {
+async function Think(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
     const sub   = parts[1]?.toLowerCase();
 
@@ -269,26 +363,78 @@ export async function Think(msg, targetId) {
 
 // ============================
 // !prefix  —  manage command prefixes
-//   (no args)      → show all
-//   main <p>       → change main prefix
-//   debug <p>      → change debug prefix
-//   ignore <p>     → change ignore prefix (no-prefix chats only)
+//   (no args)                → show all (global + this chat's override)
+//   main <p>                 → change main (global) prefix
+//   debug <p>                → change debug prefix
+//   ignore <p>                → change ignore prefix (no-prefix chats only)
+//   chat <p>                 → set this chat's AI-prefix override
+//   chat <ID> <p>             → set a specific chat's AI-prefix override
+//   chat reset [ID]           → remove a chat's override, fall back to global
+// Only the AI-trigger prefix is overridable per chat — debug/ignore
+// prefixes stay global.
 // ============================
-export async function Prefix(msg, targetId) {
+async function Prefix(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
     const sub   = parts[1]?.toLowerCase();
 
     if (!sub) {
+        const override = chatPrefixes[targetId];
         return sendText(targetId,
             `Prefixes:\n` +
             `- Main:   ${state.prefix}\n` +
             `- Debug:  ${state.debugPrefix}\n` +
-            `- Ignore: ${state.ignorePrefix}  (no-prefix chats only)\n\n` +
+            `- Ignore: ${state.ignorePrefix}  (no-prefix chats only)\n` +
+            `- This chat: ${override ? override + ' (override)' : state.prefix + ' (global)'}\n\n` +
             `Usage:\n` +
             `${state.debugPrefix}prefix main <p>\n` +
             `${state.debugPrefix}prefix debug <p>\n` +
-            `${state.debugPrefix}prefix ignore <p>`
+            `${state.debugPrefix}prefix ignore <p>\n` +
+            `${state.debugPrefix}prefix chat <p>\n` +
+            `${state.debugPrefix}prefix chat <ID> <p>\n` +
+            `${state.debugPrefix}prefix chat reset [ID]`
         );
+    }
+
+    if (sub === 'chat') {
+        const arg2 = parts[2];
+        const arg3 = parts[3];
+
+        // prefix chat reset [ID]
+        if (arg2?.toLowerCase() === 'reset') {
+            const id = arg3 || targetId;
+            if (!chatPrefixes[id]) return sendText(targetId, `${id} has no prefix override (already using global).`);
+            delete chatPrefixes[id];
+            saveChatPrefixes();
+            return sendText(targetId, `Prefix override removed for: ${id}\nNow using global prefix: ${state.prefix}`);
+        }
+
+        // prefix chat <p>            → this chat
+        // prefix chat <ID> <p>       → given chat
+        let id, p;
+        if (arg3) {
+            id = arg2;
+            p = arg3;
+        } else {
+            id = targetId;
+            p = arg2;
+        }
+
+        if (!p) {
+            return sendText(targetId,
+                `Usage:\n` +
+                `${state.debugPrefix}prefix chat <p>          — set this chat's prefix\n` +
+                `${state.debugPrefix}prefix chat <ID> <p>     — set a specific chat's prefix\n` +
+                `${state.debugPrefix}prefix chat reset [ID]   — remove override, fall back to global`
+            );
+        }
+        if (p === state.debugPrefix || p === state.ignorePrefix) {
+            return sendText(targetId, `Chat prefix must differ from the debug and ignore prefixes.`);
+        }
+
+        const old = chatPrefixes[id] || `${state.prefix} (global)`;
+        chatPrefixes[id] = p;
+        saveChatPrefixes();
+        return sendText(targetId, `Prefix for ${id}:\n${old} → ${p}`);
     }
 
     if (sub === 'main') {
@@ -333,7 +479,7 @@ export async function Prefix(msg, targetId) {
 //   chat <ID>     → clear a specific chat's memory
 //   all           → clear ALL chats' memory (requires confirm)
 // ============================
-export async function Clear(msg, targetId) {
+async function Clear(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
     const sub   = parts[1]?.toLowerCase();
 
@@ -386,6 +532,12 @@ function resetSingleChatSetting(targetId, name) {
             saveChatModels();
             return `Model override removed — back to global model: ${state.aiModel}`;
         }
+        case 'prefix': {
+            if (!chatPrefixes[targetId]) return `This chat had no prefix override.`;
+            delete chatPrefixes[targetId];
+            saveChatPrefixes();
+            return `Prefix override removed — back to global prefix: ${state.prefix}`;
+        }
         case 'personality': {
             if (!chatHistories[targetId]) return `This chat had no custom personality.`;
             chatHistories[targetId][0].content = state.systemPrompt;
@@ -406,6 +558,7 @@ function resetSingleChatSetting(targetId, name) {
         case 'debugchat': {
             if (state.debugChatId !== targetId) return `This chat wasn't the debug channel.`;
             state.debugChatId = null;
+            saveSettings();
             return `Debug channel cleared (was this chat).`;
         }
         case 'fixedchat': {
@@ -419,9 +572,9 @@ function resetSingleChatSetting(targetId, name) {
     }
 }
 
-const CHAT_SETTING_NAMES = ['model', 'personality', 'noprefix', 'groupchat', 'debugchat', 'fixedchat'];
+const CHAT_SETTING_NAMES = ['model', 'prefix', 'personality', 'noprefix', 'groupchat', 'debugchat', 'fixedchat'];
 
-export async function Reset(msg, targetId) {
+async function Reset(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
     const sub   = parts[1]?.toLowerCase();
     const arg2  = parts[2]?.toLowerCase();
@@ -430,16 +583,19 @@ export async function Reset(msg, targetId) {
     if (sub === 'all' && arg2 === 'settings') {
         return requireConfirm(`reset:all:${targetId}`, targetId,
             `This will reset EVERYTHING to the project's default config: ` +
-            `all settings, the whitelist, admins, no-prefix chats, group chats, ` +
-            `per-chat model overrides, and all chat memories.`,
+            `all settings, the whitelist, blacklist, admins, no-prefix chats, group chats, ` +
+            `per-chat model/prefix overrides, and all chat memories.`,
             async () => {
                 resetStateToDefaults();
                 whitelist.clear();      saveWhitelist();
+                blacklist.clear();      saveBlacklist();
                 admins.clear();         saveAdmins();
                 noPrefixChats.clear();  saveNoPrefixChats();
                 groupChats.clear();     saveGroupChats();
                 for (const key in chatModels) delete chatModels[key];
                 saveChatModels();
+                for (const key in chatPrefixes) delete chatPrefixes[key];
+                saveChatPrefixes();
                 for (const key in chatHistories) delete chatHistories[key];
                 resetAllRateLimitBuckets();
                 await sendText(targetId, `Everything has been reset to the project defaults.`);
@@ -492,7 +648,7 @@ export async function Reset(msg, targetId) {
 //   chat reset <ID>         → remove the given chat's override
 //   installed               → list installed Ollama models
 // ============================
-export async function Model(msg, targetId) {
+async function Model(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
     const sub   = parts[1]?.toLowerCase();
 
@@ -606,7 +762,7 @@ export async function Model(msg, targetId) {
 // ============================
 // !aichat  —  toggle AI responses
 // ============================
-export async function AiChat(msg, targetId) {
+async function AiChat(msg, targetId) {
     state.aiChatEnabled = !state.aiChatEnabled;
     saveSettings();
     await sendText(targetId, `AI chat ${state.aiChatEnabled ? 'enabled' : 'disabled'}.`);
@@ -615,7 +771,7 @@ export async function AiChat(msg, targetId) {
 // ============================
 // !fixedchat  —  lock bot to one chat
 // ============================
-export async function FixedChat(msg, targetId) {
+async function FixedChat(msg, targetId) {
     state.fixedMode = !state.fixedMode;
     state.activeChatId = state.fixedMode ? targetId : null;
     // fixedMode is intentionally not persisted (runtime-only)
@@ -628,7 +784,7 @@ export async function FixedChat(msg, targetId) {
 // ============================
 // !noprefix  —  toggle no-prefix mode for this chat
 // ============================
-export async function NoPrefix(msg, targetId) {
+async function NoPrefix(msg, targetId) {
     if (noPrefixChats.has(targetId)) {
         noPrefixChats.delete(targetId);
         saveNoPrefixChats();
@@ -651,7 +807,7 @@ export async function NoPrefix(msg, targetId) {
 //     response — dangerous, so turning this ON while whitelist is OFF
 //     requires confirmation. Turning it back OFF is always immediate.
 // ============================
-export async function NoPrefixAll(msg, targetId) {
+async function NoPrefixAll(msg, targetId) {
     if (state.noPrefixAll) {
         state.noPrefixAll = false;
         saveSettings();
@@ -688,7 +844,7 @@ export async function NoPrefixAll(msg, targetId) {
 // into ONE shared chatHistories entry (keyed by the group ID) instead
 // of one per sender — the AI replies as if it's one ongoing chat.
 // ============================
-export async function GroupChat(msg, targetId) {
+async function GroupChat(msg, targetId) {
     const arg = msg.body.trim().split(/\s+/)[1];
 
     if (arg?.toLowerCase() === 'list') {
@@ -715,9 +871,9 @@ export async function GroupChat(msg, targetId) {
 // ============================
 // !debugchat  —  register debug channel
 // ============================
-export async function DebugChat(msg, targetId) {
+async function DebugChat(msg, targetId) {
     state.debugChatId = targetId;
-    // debugChatId is intentionally not persisted (runtime-only)
+    saveSettings();
     await sendText(targetId, `Debug channel set.\nID: ${state.debugChatId}`);
 }
 
@@ -730,7 +886,7 @@ export async function DebugChat(msg, targetId) {
 //   warn <sec>          → warning cooldown in seconds
 //   message <text>      → warning text shown to users
 // ============================
-export async function RateLimit(msg, targetId) {
+async function RateLimit(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
     const sub   = parts[1]?.toLowerCase();
 
@@ -795,17 +951,20 @@ export async function RateLimit(msg, targetId) {
 //   ai         → AI, think, rate limit, personality
 //   system     → prefixes, whitelist, debug channel
 // ============================
-export async function Info(msg, targetId) {
+async function Info(msg, targetId) {
     const parts  = msg.body.trim().split(/\s+/);
     const sub    = parts[1]?.toLowerCase();
-    const chat   = await msg.getChat();
-    const chatId = chat.id._serialized;
+    // targetId IS this chat's ID — msg.getChat() would fetch the full chat
+    // model, whose last-message serialization crashes on current WhatsApp
+    // Web builds (DataError from Msg.getMessagesById).
+    const chatId  = targetId;
+    const isGroup = targetId.endsWith('@g.us');
 
     if (!sub) {
         return sendText(targetId,
             `NeRoBoT v${getVersion()} — Status Overview\n` +
             `\n[Chat]\n` +
-            `ID: ${chatId}  |  ${chat.isGroup ? 'Group' : 'DM'}\n` +
+            `ID: ${chatId}  |  ${isGroup ? 'Group' : 'DM'}\n` +
             `No-prefix: ${noPrefixChats.has(targetId) ? 'on' : 'off'}  |  ` +
             `Group chat: ${groupChats.has(targetId) ? 'on' : 'off'}  |  ` +
             `Memory: ${chatHistories[targetId] ? 'active' : 'none'}\n` +
@@ -819,7 +978,7 @@ export async function Info(msg, targetId) {
             `Prefix: ${state.prefix}  |  Debug: ${state.debugPrefix}\n` +
             `Whitelist mode: ${state.whitelistMode ? 'on' : 'off'}  |  ` +
             `No-prefix-all: ${state.noPrefixAll ? 'on' : 'off'}  |  ` +
-            `Admins: ${admins.size}  |  Whitelist: ${whitelist.size}\n` +
+            `Admins: ${admins.size}  |  Whitelist: ${whitelist.size}  |  Blacklist: ${blacklist.size}\n` +
             `\nUse ${state.debugPrefix}info ai / chat / system for details.`
         );
     }
@@ -830,9 +989,10 @@ export async function Info(msg, targetId) {
         return sendText(targetId,
             `[Chat Info]\n` +
             `ID: ${chatId}\n` +
-            `Type: ${chat.isGroup ? 'Group' : 'DM'}\n` +
+            `Type: ${isGroup ? 'Group' : 'DM'}\n` +
             `No-prefix mode: ${noPrefixChats.has(targetId) ? 'Enabled' : 'Disabled'}\n` +
             `Group chat mode: ${groupChats.has(targetId) ? 'Enabled (shared memory)' : 'Disabled'}\n` +
+            `Prefix: ${chatPrefixes[targetId] || state.prefix}${chatPrefixes[targetId] ? ' (override)' : ' (global)'}\n` +
             `Model: ${chatModels[targetId] || state.aiModel}${chatModels[targetId] ? ' (override)' : ' (global)'}\n` +
             `Memory: ${hasCustom ? `Active (${chatHistories[targetId].length - 1} messages)` : 'None'}\n` +
             `Personality: ${hasCustom ? '(custom)' : '(global)'}\n` +
@@ -854,6 +1014,7 @@ export async function Info(msg, targetId) {
             `Reply mode: ${state.replyMode ? 'Enabled' : 'Disabled'}\n` +
             `Image reading: ${state.imageEnabled ? 'Enabled' : 'Disabled'}\n` +
             `File reading:  ${state.fileEnabled  ? 'Enabled' : 'Disabled'}\n` +
+            `Image generation: ${state.imageGenEnabled ? 'Enabled' : 'Disabled'}\n` +
             `\n` +
             `Rate limiting: ${state.rateLimitEnabled ? 'Enabled' : 'Disabled'}\n` +
             `Tokens: ${state.rateLimitMaxTokens} burst  |  Refill: ${state.rateLimitRefillMs/1000}s  |  Warn cooldown: ${state.rateLimitWarnCooldown/1000}s\n` +
@@ -878,6 +1039,7 @@ export async function Info(msg, targetId) {
             `Whitelist mode:  ${state.whitelistMode ? 'Enabled' : 'Disabled'}\n` +
             `No-prefix-all:   ${state.noPrefixAll ? 'Enabled' : 'Disabled'}\n` +
             `Whitelist count: ${whitelist.size}\n` +
+            `Blacklist count: ${blacklist.size}\n` +
             `Admin count:     ${admins.size}`
         );
     }
@@ -896,7 +1058,7 @@ export async function Info(msg, targetId) {
 //   (no args)   → show current text
 //   <text>      → set new message text
 // ============================
-export async function AiError(msg, targetId) {
+async function AiError(msg, targetId) {
     const text = msg.body.trim().split(/\s+/).slice(1).join(' ').trim();
 
     if (!text) {
@@ -916,7 +1078,7 @@ export async function AiError(msg, targetId) {
 //   (no args)  → full help menu (TR or EN, based on helpLanguage)
 //   github     → sends the project's GitHub link
 // ============================
-export async function Help(msg, targetId) {
+async function Help(msg, targetId) {
     const sub = msg.body.trim().split(/\s+/)[1]?.toLowerCase();
 
     if (sub === 'github') {
@@ -934,7 +1096,7 @@ export async function Help(msg, targetId) {
 // ============================
 // !helplang tr/en
 // ============================
-export async function HelpLang(msg, targetId) {
+async function HelpLang(msg, targetId) {
     const lang = msg.body.trim().toLowerCase().split(/\s+/)[1];
     if (lang === 'tr' || lang === 'en') {
         state.helpLanguage = lang;
@@ -950,29 +1112,32 @@ export async function HelpLang(msg, targetId) {
 // ============================
 // !replymode  —  toggle quoted-reply mode for AI responses
 // ============================
-export async function ReplyMode(msg, targetId) {
+async function ReplyMode(msg, targetId) {
     state.replyMode = !state.replyMode;
     saveSettings();
     await sendText(targetId, `Reply mode ${state.replyMode ? 'enabled — AI will quote your message when responding.' : 'disabled — AI will send plain messages.'}`);
 }
 
 // ============================
-// !media  —  toggle image / file reading
+// !media  —  toggle image / file reading, and image generation
 //   (no args)   → show status
 //   image       → toggle görsel okuma (vision)
 //   file        → toggle dosya okuma (pdf, word, txt, json, js...)
+//   imagegen    → toggle görsel üretimi (see project_scripts/imagegen.js)
 // ============================
-export async function Media(msg, targetId) {
+async function Media(msg, targetId) {
     const sub = msg.body.trim().split(/\s+/)[1]?.toLowerCase();
 
     if (!sub) {
         return sendText(targetId,
             `Media Settings:\n` +
-            `- Image reading: ${state.imageEnabled ? 'Enabled' : 'Disabled'}\n` +
-            `- File reading:  ${state.fileEnabled  ? 'Enabled' : 'Disabled'}\n\n` +
+            `- Image reading:    ${state.imageEnabled    ? 'Enabled' : 'Disabled'}\n` +
+            `- File reading:     ${state.fileEnabled      ? 'Enabled' : 'Disabled'}\n` +
+            `- Image generation: ${state.imageGenEnabled  ? 'Enabled' : 'Disabled'}\n\n` +
             `Usage:\n` +
             `${state.debugPrefix}media image\n` +
-            `${state.debugPrefix}media file`
+            `${state.debugPrefix}media file\n` +
+            `${state.debugPrefix}media imagegen`
         );
     }
 
@@ -988,36 +1153,47 @@ export async function Media(msg, targetId) {
         return sendText(targetId, `File reading (PDF, Word, TXT, JSON, JS...) ${state.fileEnabled ? 'enabled' : 'disabled'}.`);
     }
 
+    if (sub === 'imagegen') {
+        state.imageGenEnabled = !state.imageGenEnabled;
+        saveSettings();
+        return sendText(targetId, `Image generation ${state.imageGenEnabled ? 'enabled — messages asking for a picture now get one generated and sent back.' : 'disabled.'}`);
+    }
+
     await sendText(targetId,
         `Usage:\n` +
-        `${state.debugPrefix}media image  — toggle görsel okuma\n` +
-        `${state.debugPrefix}media file   — toggle dosya okuma`
+        `${state.debugPrefix}media image     — toggle görsel okuma\n` +
+        `${state.debugPrefix}media file      — toggle dosya okuma\n` +
+        `${state.debugPrefix}media imagegen  — toggle görsel üretimi`
     );
 }
 
-// ============================
-// Command map
-// ============================
-export const commands = {
-    'admin':       Admin,
-    'whitelist':   Whitelist,
-    'personality': Personality,
-    'think':       Think,
-    'prefix':      Prefix,
-    'clear':       Clear,
-    'reset':       Reset,
-    'model':       Model,
-    'aichat':      AiChat,
-    'fixedchat':   FixedChat,
-    'noprefix':    NoPrefix,
-    'noprefixall': NoPrefixAll,
-    'groupchat':   GroupChat,
-    'debugchat':   DebugChat,
-    'ratelimit':   RateLimit,
-    'info':        Info,
-    'help':        Help,
-    'helplang':    HelpLang,
-    'aierror':     AiError,
-    'replymode':   ReplyMode,
-    'media':       Media,
-};
+    // ============================
+    // Command map
+    // ============================
+    return {
+        commands: {
+            'admin':       Admin,
+            'whitelist':   Whitelist,
+            'blacklist':   Blacklist,
+            'personality': Personality,
+            'think':       Think,
+            'prefix':      Prefix,
+            'clear':       Clear,
+            'reset':       Reset,
+            'model':       Model,
+            'aichat':      AiChat,
+            'fixedchat':   FixedChat,
+            'noprefix':    NoPrefix,
+            'noprefixall': NoPrefixAll,
+            'groupchat':   GroupChat,
+            'debugchat':   DebugChat,
+            'ratelimit':   RateLimit,
+            'info':        Info,
+            'help':        Help,
+            'helplang':    HelpLang,
+            'aierror':     AiError,
+            'replymode':   ReplyMode,
+            'media':       Media,
+        },
+    };
+}

@@ -52,6 +52,8 @@ Geliştirici: **TheSalHeLP**
 
 ## Özellikler
 
+- Masaüstü Uygulaması — Tek pencerelik Electron uygulaması: WhatsApp Web, bot konsol logları ve tam ayar paneli (genel, sohbet bazlı ve liste yönetimi) hepsi bir arada
+- Kalıcı Oturum — QR kodu bir kez okutun; oturum yeniden başlatmalarda korunur
 - Yerel YZ Desteği — Ollama üzerinden istediğiniz modeli (görsel destekli modeller dahil) kullanın
 - Sohbet Hafızası — Her sohbet/kullanıcı için ayrı bağlam, isteğe bağlı ortak hafızalı grup modu
 - Görsel & Dosya Okuma — Görselleri (vision), PDF, Word ve düz metin/kod dosyalarını okuyup modele aktarır
@@ -75,8 +77,9 @@ Başlamadan önce şunların kurulu olduğundan emin olun:
 - **Node.js** >= 18.x
 - **npm** >= 9.x
 - **Ollama** (güncel)
-- **Google Chrome** (güncel)
 - **İşletim Sistemi:** Windows / Linux / macOS
+
+> Chrome **gerekmez** — uygulama kendi tarayıcı motoruyla (Electron) gelir.
 
 ---
 
@@ -84,9 +87,14 @@ Başlamadan önce şunların kurulu olduğundan emin olun:
 
 ```
 nerobot/
-├── NeRoBoT.js                      # Giriş noktası — WhatsApp istemcisi & mesaj yönlendirme
 ├── package.json
+├── NeRoBoT_App.bat                 # Masaüstü uygulamasını başlatır (Windows)
+├── app/
+│   ├── main.js                     # Electron ana süreç — pencere, gömülü WhatsApp Web, IPC
+│   ├── preload.cjs                 # Arayüz köprüsü
+│   └── ui/index.html               # Üst çubuk, log paneli, ayar paneli
 ├── project_scripts/
+│   ├── bot.js                      # WhatsApp istemcisi & mesaj yönlendirme
 │   ├── ai.js                       # Ollama entegrasyonu
 │   ├── config.js                   # Durum, ayar kalıcılığı, dosya yolları
 │   ├── commands.js                 # Tüm !komutlar
@@ -109,6 +117,12 @@ nerobot/
 
 ## Kurulum
 
+### Windows: Installer (önerilen)
+
+[GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) sayfasından `NeRoBoT-Setup-x.y.z.exe` dosyasını indirip çalıştırın. NeRoBoT normal bir Windows uygulaması olarak kurulur (Start Menu kısayolu, Windows arama kutusundan bulunabilir, "Program Ekle/Kaldır"da kendi uninstaller'ıyla listelenir) — `git clone`/`npm install` gerekmez. [Ollama](https://ollama.com/) kurulu değilse installer onu da sessizce indirip kurmaya çalışır; bu adım atlanır veya başarısız olursa (örn. kurulum sırasında internet yoksa) NeRoBoT, AI Bot'u ilk açtığınızda kurulumu tekrar teklif eder.
+
+### Kaynak koddan çalıştırma (tüm platformlar / geliştirme)
+
 ### 1. Depoyu Klonlayın
 
 ```bash
@@ -126,7 +140,7 @@ npm install
 
 ### 3. Ollama'yı Kurun ve Bir Model İndirin
 
-[Ollama](https://ollama.com/) sitesinden uygulamayı indirip kurun, ardından kullanmak istediğiniz modeli indirin:
+[Ollama](https://ollama.com/) sitesinden uygulamayı indirip kurun, ardından kullanmak istediğiniz modeli indirin. (Kaynak yerine paketlenmiş Windows installer'ı kullanıyorsanız bu adım sizin için otomatik denenir — yukarıya bakın.)
 
 ```bash
 ollama pull minimax-m3:cloud
@@ -138,42 +152,36 @@ ollama pull gemma2
 ### 4. Yapılandırma
 
 <details>
-<summary><b>Chrome Yolu Ayarı</b></summary>
-
-Chrome çalıştırılabilir dosya yolu şu anda `project_scripts/config.js` içinde **Windows'a sabit** olarak tanımlı:
-
-```javascript
-export const CHROME_PATH = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-```
-
-Linux veya macOS kullanıyorsanız bu satırı kendi sisteminizdeki Chrome/Chromium yoluna göre düzenleyin, örneğin:
-
-- Linux: `/usr/bin/google-chrome`
-- macOS: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
-
-> ⚠️ Bu değer henüz bir ortam değişkeninden okunmuyor — şimdilik doğrudan kod içinde değiştirilmesi gerekiyor.
-
-</details>
-
-<details>
 <summary><b>Yapılandırma Dosyaları Otomatiktir</b></summary>
 
-`project_scripts/config.js`, ilk çalıştırmada `settings.json`, `whitelist.json`, `admin.json`, `noprefix.json` ve `groupchat.json` dosyalarını otomatik olarak oluşturur. Bunları elle oluşturmanıza gerek yoktur.
+`project_scripts/config.js`, ilk çalıştırmada `settings.json`, `whitelist.json`, `admin.json`, `noprefix.json` ve `groupchat.json` dosyalarını otomatik olarak oluşturur. Bunları elle oluşturmanıza gerek yoktur. Çoğu ayar, uygulama içindeki ayar panelinden de değiştirilebilir.
 
 </details>
 
-### 5. Botu Başlatın
+### 5. Uygulamayı Başlatın
 
 ```bash
-node NeRoBoT.js
+npm start
 ```
 
-> **Not:** Chrome penceresi görünür olarak açılacak (`headless: false`). QR kodu terminalde görünecek.
+Windows'ta `NeRoBoT_App.bat` dosyasına çift tıklayarak da açabilirsiniz.
 
-### 6. WhatsApp'a Başlanın
+WhatsApp Web, durum çubuğu, konsol log paneli ve ayar panelini içeren tek bir pencere açılır.
 
-1. Terminalde çıkan QR kodu telefonunuzla okutun
+### Windows installer'ı oluşturma
+
+```bash
+npm run gen-icons   # logo.svg'den app/ui/icon.ico + icon.png'yi yeniden üretir (sadece logo değiştiğinde gerekir)
+npm run pack        # hızlı, paketlenmemiş build — test için (dist/win-unpacked/)
+npm run dist         # tam NSIS installer, GitHub Release'e yüklemeye hazır (dist/NeRoBoT-Setup-*.exe)
+```
+
+### 6. WhatsApp'a Bağlanın
+
+1. Uygulamanın içinde görünen QR kodu telefonunuzla okutun
 2. WhatsApp > Ayarlar > Bağlı Cihazlar > Cihaz Bağla
+
+Bunu sadece bir kez yapmanız gerekir — oturum kaydedilir ve sonraki açılışta geri yüklenir.
 
 ---
 
@@ -326,13 +334,6 @@ Puppeteer, Chrome'un bir kopyasını kullanıcı klasörünüzde önbelleğe al�
 </details>
 
 <details>
-<summary><b>Chrome not found hatası</b></summary>
-
-`project_scripts/config.js` içindeki `CHROME_PATH` değerini kontrol edin. Linux'ta `/usr/bin/google-chrome`, macOS'ta `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` olabilir.
-
-</details>
-
-<details>
 <summary><b>ECONNREFUSED 127.0.0.1:11434</b></summary>
 
 Ollama çalışmıyor. Terminalde `ollama serve` komutunu çalıştırın veya Ollama uygulamasını açın.
@@ -342,7 +343,7 @@ Ollama çalışmıyor. Terminalde `ollama serve` komutunu çalıştırın veya O
 <details>
 <summary><b>QR kodu gelmiyor</b></summary>
 
-Terminal çıktısını kontrol edin. Bazen QR yerine hata mesajı yazılır. Chrome'un güncel olduğundan emin olun.
+Log panelini açın (üst çubuktaki "Loglar" düğmesi) ve hata mesajı olup olmadığına bakın. Uygulamanın başka bir kopyasının zaten açık olmadığından emin olun.
 
 </details>
 
@@ -359,7 +360,7 @@ Terminal çıktısını kontrol edin. Bazen QR yerine hata mesajı yazılır. Ch
 <details>
 <summary><b>Bot sürekli QR istiyor</b></summary>
 
-`.wwebjs_auth/` klasörü silinmiş olabilir. Bu klasörü yedekleyin (commit etmeyin ama yerel olarak saklayın).
+Oturum, uygulamanın kullanıcı verisi klasöründe saklanır (Windows'ta `%APPDATA%/nerobot`). Bu klasör silindiyse veya cihazı telefonunuzdan çıkardıysanız QR kodu yeniden okutmanız gerekir.
 
 </details>
 
@@ -391,7 +392,7 @@ Bu proje kişisel kullanım içindir. Lütfen WhatsApp'ın [Hizmet Şartları](h
 - [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js/)
 - [Ollama](https://ollama.com/)
 - [Puppeteer](https://pptr.dev/)
-- [qrcode-terminal](https://www.npmjs.com/package/qrcode-terminal)
+- [Electron](https://www.electronjs.org/)
 
 ---
 
