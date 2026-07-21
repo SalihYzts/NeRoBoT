@@ -122,7 +122,7 @@ function writeTelegramAppConfig(config) {
 // Same read/write shape as the Telegram app config above, own file since
 // it's a genuinely separate concern.
 const APP_CONFIG_FILE = path.join(DB_DIR, 'app-config.json');
-const DEFAULT_APP_CONFIG = { neroPopupShortcut: 'Ctrl+Shift+K', fixTextShortcut: 'Ctrl+Shift+J', fixTextAutoMode: false };
+const DEFAULT_APP_CONFIG = { neroPopupShortcut: 'Ctrl+Shift+K', fixTextShortcut: 'Ctrl+Shift+J', fixTextAutoMode: false, fixTextUseLocalModel: true };
 
 function readAppConfig() {
     try {
@@ -870,14 +870,21 @@ async function createWindow() {
         // (multi-resolution, picked per-context by the OS).
         icon: path.join(__dirname, 'ui', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
         backgroundColor: '#0b0b0d',
+        // No native title bar — #topbar in index.html is already its own
+        // draggable region (see -webkit-app-region: drag there) with its
+        // own icon/title; a native frame on top of that was just a second,
+        // redundant bar. The three window-control buttons at its right end
+        // (window:minimize/maximizeToggle/close below) replace what the
+        // native frame used to provide.
+        frame: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
         },
     });
     win.setMenuBarVisibility(false);
     win.on('resize', layoutViews);
-    win.on('maximize', layoutViews);
-    win.on('unmaximize', layoutViews);
+    win.on('maximize', () => { layoutViews(); win.webContents.send('window:maximizedChanged', true); });
+    win.on('unmaximize', () => { layoutViews(); win.webContents.send('window:maximizedChanged', false); });
 
     await win.loadFile(path.join(__dirname, 'ui', 'index.html'));
 
@@ -1498,6 +1505,22 @@ ipcMain.handle('app:setConfig', (_e, updates) => {
     writeAppConfig({ ...readAppConfig(), ...updates });
     return readAppConfig();
 });
+
+// ============================
+// IPC — window controls (see #topbar's own minimize/maximize/close buttons
+// in index.html — the window is frame: false, so these replace the native
+// title bar's controls; window:maximizedChanged above tells the renderer
+// which icon to show).
+// ============================
+ipcMain.handle('window:minimize', () => win?.minimize());
+ipcMain.handle('window:maximizeToggle', () => {
+    if (!win) return false;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+    return win.isMaximized();
+});
+ipcMain.handle('window:isMaximized', () => win?.isMaximized() ?? false);
+ipcMain.handle('window:close', () => win?.close());
 
 ipcMain.handle('telegram:createProfile', async (_e, name, mode) => {
     // The app-wide api_id/api_hash is only needed for the bot's own MTProto
@@ -2351,7 +2374,7 @@ const COMPOSE_BOX_SELECTORS = [
     'div[contenteditable="true"][data-tab]',
 ];
 
-const FIX_TEXT_PROMPT = `You are a writing assistant. The user will give you a draft WhatsApp message (in whatever language it's written in). Return ONLY a JSON object with three keys — "plain" (same wording, just spelling/grammar fixed, same tone), "formal" (same meaning, rewritten in a more formal/polite tone), "casual" (same meaning, rewritten in a relaxed/friendly tone) — each a string in the same language as the input. Do not add commentary, do not change the meaning. Example: {"plain":"...","formal":"...","casual":"..."}`;
+const FIX_TEXT_PROMPT = `You are a writing assistant. The user will give you a draft WhatsApp message (in whatever language it's written in). Return ONLY a JSON object with five keys — "plain" (same wording, just spelling/grammar/punctuation fixed, same tone), "formal" (same meaning, rewritten in a more formal/polite tone), "casual" (same meaning, rewritten in a relaxed/friendly tone), "flirty" (same meaning, rewritten in a playful/flirtatious tone), "playful" (same meaning, rewritten in a witty/humorous tone) — each a string in the same language as the input. Punctuation must be correct and consistent in every single variant, no exceptions. Never insert an apostrophe just to sound casual — if the text is Turkish, only use one where Turkish orthography actually requires it (attaching a suffix to a proper noun, a number, or an abbreviation, e.g. "Ahmet'e", "2024'te"); a random or ungrammatical apostrophe reads as fake and robotic, not human, so when in doubt leave it out entirely. Never add an emoji to any variant unless the original draft already contains at least one emoji itself — if the draft has none, none of your variants may add any either. Do not add commentary, do not change the meaning. Example: {"plain":"...","formal":"...","casual":"...","flirty":"...","playful":"..."}`;
 
 async function readComposeBoxText(session) {
     return session.client.pupPage.evaluate((selectors) => {
@@ -2389,7 +2412,7 @@ async function injectLoadingOverlay(session) {
         // whatever's about to show is either already stale or about to be
         // moot — close right away instead of leaving it sitting there.
         const closeOnActivity = (e) => {
-            if (e.type === 'keydown' && e.key !== 'Enter') return;
+            if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== 'Backspace') return;
             overlay.remove();
             box.removeEventListener('input', closeOnActivity);
             box.removeEventListener('keydown', closeOnActivity);
@@ -2406,13 +2429,25 @@ async function removeFixTextOverlay(session) {
     });
 }
 
+// Cheap heuristic, not a real language detector: if the draft itself has
+// non-ASCII letters (very common in Turkish — ç ğ ı ö ş ü İ) but every
+// variant the model wrote back is plain ASCII, that's a strong sign the
+// model ignored FIX_TEXT_PROMPT's "reply in the same language as the input"
+// and defaulted to English — something smaller/local models do noticeably
+// more often than the profile's actual configured (often larger, cloud)
+// model. Only meaningful when the draft has something non-ASCII to compare
+// against in the first place.
+function looksLikeLanguageMismatch(draft, variants) {
+    if (!/[^\x00-\x7F]/.test(draft)) return false;
+    const values = Object.values(variants).filter(v => typeof v === 'string' && v);
+    return values.length > 0 && values.every(v => !/[^\x00-\x7F]/.test(v));
+}
+
 // Same "one-off chat call, parse a JSON blob out of the reply, fail quiet"
 // shape as ollama:classifyImageIntent above — this is a convenience
 // shortcut, not a core bot feature, so any failure here just means no
 // overlay shows up rather than an error the user has to dismiss.
-async function getTextCorrections(session, draft) {
-    const model = session.store?.state?.aiModel;
-    if (!model) return null;
+async function requestTextCorrections(model, draft) {
     try {
         const response = await ollamaClient.chat({
             model,
@@ -2424,12 +2459,38 @@ async function getTextCorrections(session, draft) {
         const match = response.message.content.match(/\{[\s\S]*\}/);
         if (!match) return null;
         const parsed = JSON.parse(match[0]);
-        if (!parsed.plain && !parsed.formal && !parsed.casual) return null;
+        if (!parsed.plain && !parsed.formal && !parsed.casual && !parsed.flirty && !parsed.playful) return null;
         return parsed;
     } catch (err) {
         console.error('[fixText] Ollama error:', err.message || err);
         return null;
     }
+}
+
+// Runs through pickClassifierModel (ai.js) same as classifyImageIntent
+// does, gated behind fixTextUseLocalModel (Ayarlar → Uygulama, default on)
+// — the profile's actual configured model is often a cloud/metered one
+// (this app's own default, minimax-m3:cloud, included), and this rewrite
+// isn't the real reply the user reads, just a convenience side-feature, so
+// it prefers whatever's already pulled locally instead of spending that
+// allowance (and a local model is also just plain faster to reach — no
+// network round-trip). If the local attempt comes back empty, or
+// (heuristically) wrote English back for a non-English draft, retries once
+// against the actual configured model instead of settling for a bad
+// result — a small/local model is more likely to ignore the
+// "same language as the input" instruction than the user's real pick.
+async function getTextCorrections(session, draft) {
+    const preferredModel = session.store?.state?.aiModel;
+    if (!preferredModel) return null;
+
+    const useLocal = readAppConfig().fixTextUseLocalModel !== false;
+    const model = useLocal ? await pickClassifierModel(preferredModel) : preferredModel;
+
+    let result = await requestTextCorrections(model, draft);
+    if (useLocal && model !== preferredModel && (!result || looksLikeLanguageMismatch(draft, result))) {
+        result = (await requestTextCorrections(preferredModel, draft)) || result;
+    }
+    return result;
 }
 
 // Injects a small suggestion box anchored just above the compose box.
@@ -2477,6 +2538,8 @@ async function injectFixTextOverlay(session, variants) {
             ['plain', 'Düzeltilmiş'],
             ['formal', 'Resmi'],
             ['casual', 'Samimi'],
+            ['flirty', 'Flörtöz'],
+            ['playful', 'Esprili'],
         ];
         for (const [key, label] of rows) {
             if (!variants[key]) continue;
@@ -2493,9 +2556,13 @@ async function injectFixTextOverlay(session, variants) {
         }
 
         document.body.appendChild(overlay);
+        // Dismiss on an outside click, or on typing/Enter (see
+        // closeOnActivity below) — no forced timeout otherwise: once these
+        // suggestions are up, they were worth generating, so they stay put
+        // until the user actually does something instead of vanishing on
+        // their own while still being read.
         const dismiss = (e) => { if (!overlay.contains(e.target)) { overlay.remove(); document.removeEventListener('mousedown', dismiss); } };
         setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
-        setTimeout(() => overlay.remove(), 20000);
 
         // Typing again, or hitting Enter (which sends the message), means
         // these suggestions are for a draft that's already changed or gone
@@ -2505,7 +2572,7 @@ async function injectFixTextOverlay(session, variants) {
         // already removes the overlay itself, this is just a no-op second
         // removal in that case.
         const closeOnActivity = (e) => {
-            if (e.type === 'keydown' && e.key !== 'Enter') return;
+            if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== 'Backspace') return;
             overlay.remove();
             box.removeEventListener('input', closeOnActivity);
             box.removeEventListener('keydown', closeOnActivity);
@@ -2526,14 +2593,18 @@ async function handleFixTextShortcut(session) {
         await removeFixTextOverlay(session);
         return;
     }
-    // Ollama can take a few seconds — if the user kept typing while it
-    // thought, these suggestions are for a draft that no longer exists.
-    // Showing them anyway is exactly the "the box keeps popping up while
-    // I'm still typing" complaint (auto-mode only ever triggers after a
-    // pause, but the reply can still land after typing resumes) — so drop
-    // them quietly instead of surprising the user mid-sentence.
+    // Only bail here if the message is actually gone (sent, or cleared) —
+    // an earlier version compared the draft for an *exact* match instead,
+    // which any harmless WhatsApp-side re-render (not necessarily the user
+    // typing at all) could nudge just enough to trip, quietly dropping a
+    // perfectly good result and leaving the loading spinner's disappearance
+    // as the only thing that ever happened — exactly the "it thinks, then
+    // does nothing and closes" symptom. If the user genuinely kept typing,
+    // the overlay's own close-on-activity listener (see injectFixTextOverlay)
+    // hides it the instant they type again anyway, so there's no need to
+    // pre-emptively guess "did they change it" here at all.
     const currentDraft = await readComposeBoxText(session);
-    if (currentDraft !== draft) {
+    if (!currentDraft) {
         await removeFixTextOverlay(session);
         return;
     }

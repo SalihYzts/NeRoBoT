@@ -54,6 +54,14 @@ contextBridge.exposeInMainWorld('nerobot', {
     onTabSwitcherCommit: (cb) => ipcRenderer.on('tabSwitcher:commit', () => cb()),
     onTabSwitcherCancel: (cb) => ipcRenderer.on('tabSwitcher:cancel', () => cb()),
 
+    // Window controls (frame: false — #topbar's own minimize/maximize/close
+    // buttons replace the native title bar's).
+    minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+    maximizeToggleWindow: () => ipcRenderer.invoke('window:maximizeToggle'),
+    isWindowMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    closeWindow: () => ipcRenderer.invoke('window:close'),
+    onWindowMaximizedChanged: (cb) => ipcRenderer.on('window:maximizedChanged', (_e, maximized) => cb(maximized)),
+
     // Global settings (Genel tab) — scoped to the given profile
     getSettings: (profileId) => ipcRenderer.invoke('settings:get', profileId),
     saveSettings: (profileId, updates) => ipcRenderer.invoke('settings:save', profileId, updates),

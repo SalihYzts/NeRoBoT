@@ -1,7 +1,10 @@
 // Sürüm derleme betiği — çalıştırıldığında:
 //   1) Yeni sürüm numarasını sorar (package.json'a yazar)
 //   2) Gerekirse (node_modules yok/eski) "npm install" çalıştırır
-//   3) İkonları yeniden oluşturur ve electron-builder ile Windows kurulum
+//   3) Varsa bir önceki derlemeden kalan dist/ klasörünü tamamen siler
+//      (electron-builder kendisi temizlemiyor, üst üste biriken eski
+//      sürümlerin .exe/.blockmap/latest.yml dosyalarını önlemek için)
+//   4) İkonları yeniden oluşturur ve electron-builder ile Windows kurulum
 //      paketini (.exe) YERELDE derler — dist/ klasörüne yazar, GitHub'a
 //      hiçbir şey göndermez/yayınlamaz.
 // Kaynak kodu commit'leyip GitHub'a göndermek ve bu sürümü bir GitHub
@@ -63,6 +66,19 @@ function ensureDependenciesInstalled() {
     run('npm', ['install']);
 }
 
+// electron-builder kendi çıktı klasörünü (dist/) derlemeler arasında
+// temizlemiyor — her "npm run build" bir öncekinin .exe/.blockmap/
+// latest.yml'sinin ÜSTÜNE bir yenisini ekliyor, ta ki dist/ eski sürüm
+// numaralarından kalma bir yığın kurulum dosyasına dönüşene kadar. Yeni
+// derlemeye başlamadan hemen önce tamamen siliyoruz ki dist/ her zaman
+// sadece BU çalıştırmanın çıktısını tutsun.
+function cleanDistDir() {
+    const distDir = path.join(ROOT, 'dist');
+    if (!fs.existsSync(distDir)) return;
+    console.log('\nÖnceki derlemeden kalan dist/ klasörü temizleniyor...');
+    fs.rmSync(distDir, { recursive: true, force: true });
+}
+
 async function main() {
     const pkg = JSON.parse(fs.readFileSync(PKG_PATH, 'utf8'));
     console.log(`Mevcut sürüm: ${pkg.version}`);
@@ -80,6 +96,7 @@ async function main() {
     fs.writeFileSync(PKG_PATH, JSON.stringify(pkg, null, 2) + '\n');
     console.log(`package.json sürümü ${version} olarak güncellendi.`);
 
+    cleanDistDir();
     run('npm', ['run', 'gen-icons']);
     run('npm', ['run', 'dist']);
 

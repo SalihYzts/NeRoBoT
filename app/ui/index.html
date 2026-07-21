@@ -115,6 +115,32 @@
     .barBtn.iconBtn svg { width: 16px; height: 16px; display: block; }
     .barBtn.iconBtn:disabled { opacity: .35; cursor: default; pointer-events: none; }
 
+    /* ===== Window controls (frame: false — see main.js's BrowserWindow
+       config; these replace the native title bar's minimize/maximize/
+       close) ===== */
+    #winControls {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        margin-left: 4px;
+        -webkit-app-region: no-drag;
+    }
+    .winCtrlBtn {
+        background: transparent;
+        border: none;
+        color: var(--muted);
+        width: 32px;
+        height: 26px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border-radius: 4px;
+    }
+    .winCtrlBtn svg { width: 14px; height: 14px; display: block; }
+    .winCtrlBtn:hover { background: #ffffff1a; color: var(--text); }
+    .winCtrlClose:hover { background: var(--red); color: #fff; }
+
     /* ===== Tab strip ===== */
     #tabStrip {
         -webkit-app-region: no-drag;
@@ -1126,6 +1152,17 @@
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
         </button>
+        <div id="winControls">
+            <button id="winMinimizeBtn" class="winCtrlBtn" title="Küçült">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"></path></svg>
+            </button>
+            <button id="winMaximizeBtn" class="winCtrlBtn" title="Büyüt">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="1"></rect></svg>
+            </button>
+            <button id="winCloseBtn" class="winCtrlBtn winCtrlClose" title="Kapat">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+            </button>
+        </div>
     </div>
 
     <div id="middle">
@@ -1338,6 +1375,15 @@
                                 <span class="switch"><input type="checkbox" id="fixTextAutoModeToggle"><span class="track"></span></span>
                             </label>
                             <div class="hint" id="fixTextAutoModeHint">Açıkken, WhatsApp'ta yazarken bir süre durduğunda kısayola basmana gerek kalmadan öneriler otomatik çıkar.</div>
+                            <label class="toggleRow">
+                                <span id="fixTextUseLocalModelLabel">Özellikler İçin Yerel AI Kullan</span>
+                                <span class="switch"><input type="checkbox" id="fixTextUseLocalModelToggle"><span class="track"></span></span>
+                            </label>
+                            <div class="hint" id="fixTextUseLocalModelHint">Açıkken, yazı düzeltme gibi yardımcı özellikler önce yerelde kurulu bir modeli dener (daha hızlı, cloud kotanı harcamaz) — model uygun bir sonuç üretemezse (ör. yanlış dilde yazarsa) otomatik olarak ayarlı asıl modele döner. Kapalıyken doğrudan ayarlı modeli kullanır.</div>
+                        </div>
+                        <div class="section">
+                            <div class="sectionTitle" id="gsAppAboutTitle">Hakkında</div>
+                            <div class="hint" id="gsAppVersionText">Sürüm —</div>
                         </div>
                     </div>
 
@@ -2401,11 +2447,21 @@
         backlog.forEach(addLine);
     });
 
-    // Used to live in Ayarlar → WhatsApp (a whole tab for one line of text);
-    // now shown once, next to the credit line on the Home screen.
+    // Shown next to the credit line on the Home screen (easy to miss there
+    // — small, low-opacity, and only visible while no profile is open) and,
+    // more reachably, in Ayarlar → Uygulama → Hakkında (settings are always
+    // one click away, whichever tab/profile is open).
     window.nerobot.getAppVersion().then(v => {
-        document.getElementById('homeVersion').textContent = `v${v}`;
-    }).catch(() => {});
+        // Each element guarded independently — previously, if either one
+        // were ever missing, the direct .textContent write on it would
+        // throw and silently skip whichever line came after it in this
+        // same callback (the other element's version text never got set,
+        // with nothing surfaced anywhere to explain why).
+        const homeVersionEl = document.getElementById('homeVersion');
+        if (homeVersionEl) homeVersionEl.textContent = `v${v}`;
+        const gsVersionEl = document.getElementById('gsAppVersionText');
+        if (gsVersionEl) gsVersionEl.textContent = `Sürüm — v${v}`;
+    }).catch(err => console.error('[version] getAppVersion başarısız:', err));
 
     // Rebuilds anything already on screen that depends on the active
     // language (called from applyLanguage()). The Sohbet/Listeler tabs
@@ -2660,6 +2716,8 @@
         if (input) input.value = fixTextShortcut;
         const autoToggle = document.getElementById('fixTextAutoModeToggle');
         if (autoToggle) autoToggle.checked = !!config.fixTextAutoMode;
+        const useLocalToggle = document.getElementById('fixTextUseLocalModelToggle');
+        if (useLocalToggle) useLocalToggle.checked = config.fixTextUseLocalModel !== false;
     }
 
     document.getElementById('fixTextShortcutRecordBtn').addEventListener('click', () => {
@@ -2671,6 +2729,10 @@
 
     document.getElementById('fixTextAutoModeToggle').addEventListener('change', (e) => {
         window.nerobot.setAppConfig({ fixTextAutoMode: e.target.checked });
+    });
+
+    document.getElementById('fixTextUseLocalModelToggle').addEventListener('change', (e) => {
+        window.nerobot.setAppConfig({ fixTextUseLocalModel: e.target.checked });
     });
 
     // One listener does double duty: while `recordingNeroShortcut` is armed,
@@ -2946,6 +3008,17 @@
         neroPopupRangeStart.value = 0; // earliest of the fetched batch
     }
 
+    // Guards against a hung IPC call (e.g. the pupPage.evaluate on the
+    // main-process side never resolving for some reason) leaving a button
+    // stuck disabled and the user staring at nothing forever with no error
+    // to go on — races the real promise against a plain timer.
+    function withTimeout(promise, ms, timeoutMessage) {
+        return Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), ms)),
+        ]);
+    }
+
     // "Bu sohbeti sor" toggles the start/end message picker (see
     // neroPopupChatRangeBar) instead of immediately pulling a fixed window
     // — neroPopupRangeLoadBtn's own handler below is what actually folds a
@@ -2960,7 +3033,11 @@
         if (!neroChatMessagesCache) {
             neroPopupAskChatBtn.disabled = true;
             try {
-                const result = await window.nerobot.getChatRecentMessages(activeProfileId, 200);
+                const result = await withTimeout(
+                    window.nerobot.getChatRecentMessages(activeProfileId, 200),
+                    15000,
+                    'İstek zaman aşımına uğradı — tekrar dener misin?'
+                );
                 if (!result.ok) { addNeroHint('Hata: ' + (result.error || 'Mesajlar alınamadı.')); return; }
                 if (!result.messages.length) { addNeroHint('Bu sohbette henüz mesaj yok.'); return; }
                 neroChatMessagesCache = result;
@@ -3047,6 +3124,31 @@
     neroPopupInput.addEventListener('input', () => {
         neroPopupInput.style.height = 'auto';
         neroPopupInput.style.height = Math.min(100, neroPopupInput.scrollHeight) + 'px';
+    });
+
+    // ============================
+    // Window controls — frame: false (see main.js's BrowserWindow config),
+    // so these replace the native title bar's minimize/maximize/close.
+    // #topbar itself is the drag region (-webkit-app-region: drag in CSS);
+    // double-clicking it toggles maximize like a native title bar would,
+    // as long as the double-click didn't land on one of these buttons (or
+    // any other button/tab) — closest() guards against that.
+    // ============================
+    const winMaximizeBtn = document.getElementById('winMaximizeBtn');
+    const MAXIMIZE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="1"></rect></svg>';
+    const RESTORE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 8h11a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><path d="M5 16H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h11a1 1 0 0 1 1 1v1"></path></svg>';
+    function setMaximizeIcon(maximized) {
+        winMaximizeBtn.innerHTML = maximized ? RESTORE_ICON : MAXIMIZE_ICON;
+        winMaximizeBtn.title = maximized ? 'Eski Boyut' : 'Büyüt';
+    }
+    document.getElementById('winMinimizeBtn').addEventListener('click', () => window.nerobot.minimizeWindow());
+    winMaximizeBtn.addEventListener('click', async () => setMaximizeIcon(await window.nerobot.maximizeToggleWindow()));
+    document.getElementById('winCloseBtn').addEventListener('click', () => window.nerobot.closeWindow());
+    window.nerobot.onWindowMaximizedChanged(setMaximizeIcon);
+    window.nerobot.isWindowMaximized().then(setMaximizeIcon);
+    document.getElementById('topbar').addEventListener('dblclick', (e) => {
+        if (e.target.closest('button')) return;
+        window.nerobot.maximizeToggleWindow().then(setMaximizeIcon);
     });
 
     // ============================

@@ -135,13 +135,19 @@ NeRoBoT_db/
 # release.js'in GitHub Release oluşturmak için sakladığı Personal Access
 # Token — gerçek bir sır, ASLA commit'lenmemeli.
 .release-token
+# Aynı fikir, changelog/LinkedIn metnini Claude API ile üretmek için
+# (opsiyonel — release.js'in generateText'i) — gerçek bir sır, ASLA
+# commit'lenmemeli.
+.claude-api-key
 
 # release.js'in her sürümde ürettiği tek-seferlik dosyalar — CHANGELOG.md'ye
 # (bilerek repo'da kalır) ve GitHub Release notuna zaten işlendiler,
-# LinkedIn metni de tek kullanımlık; ikisinin de repo'da tekrar tekrar
-# değişen ayrı kopyaları olmasına gerek yok.
+# LinkedIn duyurusu (metin + varsa ekran görüntüleri) da tek kullanımlık;
+# hiçbirinin repo'da tekrar tekrar değişen ayrı kopyaları olmasına gerek yok.
 changelog_v*.md
 linkedin_post_*.txt
+linkedin_post_*.docx
+release-assets/
 
 # ===================================
 # 💻 IDE & Editor
