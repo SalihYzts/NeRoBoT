@@ -48,6 +48,7 @@ Hafıza
 - clear chat              → Bu sohbetin hafızasını temizler.
 - clear chat [ID]         → Belirtilen sohbetin hafızasını temizler.
 - clear all               → Tüm sohbetlerin hafızasını temizler. (Onay gerekir)
+- upload <n>              → Bu sohbetin son <n> mesajını AI hafızasına yükler.
 
 Sıfırlama
 - reset                   → Kullanım listesini gösterir, hiçbir şey sıfırlamaz.
@@ -141,6 +142,7 @@ Memory
 - clear chat              → Clears this chat's memory.
 - clear chat [ID]         → Clears a specific chat's memory.
 - clear all               → Clears all chat memories. (Requires confirmation)
+- upload <n>              → Uploads this chat's last <n> messages into its AI memory.
 
 Reset
 - reset                   → Shows usage list, resets nothing.

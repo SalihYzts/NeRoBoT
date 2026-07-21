@@ -83,14 +83,15 @@ const DEFAULTS = {
     imageGenApiKeyStability:  '',
 
     // Browser permissions the embedded WhatsApp view grants — see
-    // app/main.js's setPermissionRequestHandler. Microphone/camera ("media")
-    // are always granted (WhatsApp voice messages/calls are core features,
-    // and this embedded view has no address-bar UI to fall back on if
-    // denied — see the fix for that). Notifications/location are genuinely
-    // optional, so they're toggleable here; on by default since that's what
-    // a real browser would prompt-and-allow for WhatsApp Web too.
+    // app/main.js's setPermissionRequestHandler. Microphone is always
+    // granted (voice messages are a core feature, and this embedded view
+    // has no address-bar UI to fall back on if denied). Notifications/
+    // location/camera are genuinely optional, so they're toggleable here;
+    // on by default since that's what a real browser would prompt-and-allow
+    // for WhatsApp Web too.
     notificationsEnabled:  true,
     locationEnabled:       true,
+    cameraEnabled:         true,
 
     // Preferred mic/camera for the embedded WhatsApp view (device id from
     // navigator.mediaDevices.enumerateDevices()) — empty means "system
@@ -129,7 +130,7 @@ export const PERSISTENT_KEYS = [
     'rateLimitWarnCooldown', 'rateLimitWarnMessage',
     'helpLanguage', 'aiErrorMessage', 'replyMode', 'imageEnabled', 'fileEnabled',
     'imageGenEnabled', 'imageGenProvider', 'imageGenApiKeyOpenai', 'imageGenApiKeyStability',
-    'notificationsEnabled', 'locationEnabled', 'preferredMicId', 'preferredCameraId',
+    'notificationsEnabled', 'locationEnabled', 'cameraEnabled', 'preferredMicId', 'preferredCameraId',
 ];
 
 // ============================

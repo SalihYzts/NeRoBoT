@@ -9,6 +9,7 @@ import fs from 'fs';
 export const AI_GATED_COMMANDS = new Set([
     'model', 'personality', 'think', 'ratelimit', 'aierror', 'media',
     'replymode', 'fixedchat', 'clear', 'debugchat', 'noprefix', 'noprefixall',
+    'upload',
 ]);
 
 // Per-profile debug commands. Wrapped in a factory so each profile's
@@ -512,6 +513,63 @@ async function Clear(msg, targetId) {
         `${state.debugPrefix}clear chat <ID>     — clear a specific chat's memory\n` +
         `${state.debugPrefix}clear all           — clear ALL chats' memory`
     );
+}
+
+// ============================
+// !upload  —  fold this chat's last <n> messages into its own AI memory, so
+// the AI can answer questions about what was already said here without the
+// sender having to paste it in manually.
+//   (no args)   → usage hint, uploads nothing
+//   <n>         → reads the last <n> messages (max 300) and adds them as a
+//                 system-role entry in this chat's chatHistories
+// Reads chat.msgs straight off the page instead of whatsapp-web.js's own
+// fetchMessages()/getMessagesById path — same reasoning as chat:recentMessages
+// in app/main.js (that path is known to throw on current WhatsApp Web builds).
+// ============================
+async function Upload(msg, targetId) {
+    const parts = msg.body.trim().split(/\s+/);
+    const n     = Number(parts[1]);
+
+    if (!n || n < 1) {
+        return sendText(targetId,
+            `Usage: ${state.debugPrefix}upload <n>\n` +
+            `Uploads this chat's last <n> messages into its own AI memory (max 300).`
+        );
+    }
+
+    const limit = Math.min(300, Math.floor(n));
+
+    let messages;
+    try {
+        messages = await msg.client.pupPage.evaluate(async (chatId, lim) => {
+            const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
+            return chat.msgs.getModelsArray()
+                .filter(m => !m.isNotification)
+                .sort((a, b) => (a.t || 0) - (b.t || 0))
+                .slice(-lim)
+                .map(m => ({
+                    fromMe: !!m.id?.fromMe,
+                    author: m.id?.fromMe ? null : (m.author || null),
+                    body: m.body || (m.type && m.type !== 'chat' ? `[${m.type}]` : ''),
+                }));
+        }, targetId, limit);
+    } catch (err) {
+        return sendText(targetId, `Couldn't read messages: ${err.message || err}`);
+    }
+
+    if (!messages.length) {
+        return sendText(targetId, `No messages in this chat yet.`);
+    }
+
+    const lines = messages.map(m => `${m.fromMe ? 'Me' : (m.author ? m.author.split('@')[0] : 'User')}: ${m.body}`);
+    const context = `${messages.length} messages loaded from this chat's history:\n${lines.join('\n')}`;
+
+    if (!chatHistories[targetId]) {
+        chatHistories[targetId] = [{ role: 'system', content: state.systemPrompt }];
+    }
+    chatHistories[targetId].push({ role: 'system', content: context });
+
+    return sendText(targetId, `✅ Uploaded ${messages.length} messages from this chat into AI memory.`);
 }
 
 // ============================
@@ -1179,6 +1237,7 @@ async function Media(msg, targetId) {
             'think':       Think,
             'prefix':      Prefix,
             'clear':       Clear,
+            'upload':      Upload,
             'reset':       Reset,
             'model':       Model,
             'aichat':      AiChat,

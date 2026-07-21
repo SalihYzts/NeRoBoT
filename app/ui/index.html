@@ -193,6 +193,10 @@
         cursor: pointer;
     }
     .profileTab .tabClose:hover { opacity: 1; color: var(--red); }
+    /* Drag-to-reorder (see wireTabDrag in the script) */
+    .profileTab.dragging { opacity: .35; }
+    .profileTab.dragOverBefore { box-shadow: -2px 0 0 0 var(--accent); }
+    .profileTab.dragOverAfter { box-shadow: 2px 0 0 0 var(--accent); }
 
     /* ===== Home / profile-picker screen ===== */
     #homeScreen {
@@ -329,8 +333,20 @@
         width: 100%;
         height: 100%;
         object-fit: cover;
-        filter: blur(14px) brightness(.6);
-        transform: scale(1.06); /* hides the blur's soft edge */
+        filter: blur(4px) brightness(.65);
+        transform: scale(1.03); /* hides the blur's soft edge */
+    }
+    /* The WA/Telegram/Ollama layer of the composited backdrop (see
+       main.js's 'modal:toggle'/getVisibleContentView and openModal below) —
+       positioned/sized in JS to exactly cover #middle, the same area that
+       view actually occupies on screen, then blurred the same as the base
+       chrome layer underneath it so the seam between the two doesn't show. */
+    #modalBackdropContentImg {
+        position: absolute;
+        display: none;
+        object-fit: cover;
+        filter: blur(4px) brightness(.65);
+        transform: scale(1.03);
     }
 
     /* ===== Modals (new profile / profile settings) ===== */
@@ -370,6 +386,53 @@
         line-height: 1;
     }
     .modalClose:hover { color: var(--text); }
+
+    /* Ctrl+Tab switcher — a row of cards instead of the usual narrow
+       stacked panel, so it needs its own width/layout override. */
+    #tabSwitcherPanel {
+        width: auto;
+        max-width: 90vw;
+        padding: 10px;
+    }
+    #tabSwitcherList {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+    }
+    .tabSwitcherItem {
+        flex: 0 0 auto;
+        width: 96px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        padding: 12px 8px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+        color: var(--muted);
+    }
+    .tabSwitcherItem:hover { color: var(--text); border-color: var(--muted); }
+    .tabSwitcherItem.selected { color: var(--text); border-color: var(--accent); background: rgba(255,140,26,.12); }
+    .tabSwitcherItem .tabSwitcherIcon {
+        width: 28px; height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg3);
+        font-size: 13px;
+        font-weight: 600;
+        overflow: hidden;
+    }
+    .tabSwitcherItem .tabSwitcherIcon img { width: 100%; height: 100%; object-fit: cover; }
+    .tabSwitcherItem .tabSwitcherName {
+        font-size: 11px;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
     .modalBody { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
     /* Unified global settings popup — replaces the old sliding #settingsPanel
        drawer, the separate NeRoChAt-only #ollamaSettingsOverlay modal, and
@@ -448,6 +511,17 @@
         border-bottom: 1px solid var(--border);
     }
     #neroPopupModelSelect { flex: 1; min-width: 0; }
+    #neroPopupChatRangeBar {
+        display: none;
+        flex: 0 0 auto;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg3);
+    }
+    #neroPopupChatRangeBar.open { display: flex; }
+    #neroPopupChatRangeBar .field { margin-bottom: 0; }
     #neroPopupMessages {
         flex: 1;
         overflow-y: auto;
@@ -737,7 +811,7 @@
     #savedToast.show { opacity: 1; }
 
     /* tabs */
-    #tabBar, #aiTabBar {
+    #tabBar {
         flex: 0 0 auto;
         display: flex;
         flex-wrap: wrap;
@@ -745,7 +819,7 @@
         padding: 0 10px;
         border-bottom: 1px solid var(--border);
     }
-    #tabBar.hidden, #aiTabBar.hidden { display: none; }
+    #tabBar.hidden { display: none; }
     .tabBtn {
         background: transparent;
         border: none;
@@ -1046,11 +1120,6 @@
             </svg>
             <span id="notifBadge" class="notifBadge"></span>
         </button>
-        <button id="aiBtn" class="barBtn iconBtn" title="AI">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"></path>
-            </svg>
-        </button>
         <button id="settingsBtn" class="barBtn iconBtn" title="Ayarlar">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
@@ -1107,7 +1176,7 @@
         <div id="logLines"></div>
     </div>
 
-    <div id="modalBackdrop"><img id="modalBackdropImg" alt=""></div>
+    <div id="modalBackdrop"><img id="modalBackdropImg" alt=""><img id="modalBackdropContentImg" alt=""></div>
 
     <!-- Notification panel — every open profile's incoming messages, newest
          first (see notifBellBtn / main.js's pushNotification). Reply inline
@@ -1254,6 +1323,22 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="section">
+                            <div class="sectionTitle" id="fixTextShortcutTitle">Yazı Düzeltme Kısayolu</div>
+                            <div class="hint" id="fixTextShortcutHint">WhatsApp'ta bir mesaj yazarken (henüz göndermeden) bu kısayola basınca, yazdığın metnin düzeltilmiş/resmi/samimi varyantları yazı kutusunun altında önerilir.</div>
+                            <div class="field">
+                                <label class="name" id="fixTextShortcutLabel">Kısayol</label>
+                                <div class="btnRow">
+                                    <input type="text" id="fixTextShortcutInput" readonly placeholder="örn: Ctrl+Shift+J">
+                                    <button id="fixTextShortcutRecordBtn" class="miniBtn">Değiştir</button>
+                                </div>
+                            </div>
+                            <label class="toggleRow">
+                                <span id="fixTextAutoModeLabel">Otomatik Düzeltme (kısayolsuz)</span>
+                                <span class="switch"><input type="checkbox" id="fixTextAutoModeToggle"><span class="track"></span></span>
+                            </label>
+                            <div class="hint" id="fixTextAutoModeHint">Açıkken, WhatsApp'ta yazarken bir süre durduğunda kısayola basmana gerek kalmadan öneriler otomatik çıkar.</div>
+                        </div>
                     </div>
 
                     <div id="gsSection-ollama" class="gsSection">
@@ -1351,15 +1436,9 @@
                             <button class="tabBtn" data-tab="chat" id="tabBtnChat">Sohbet</button>
                             <button class="tabBtn" data-tab="lists" id="tabBtnLists">Listeler</button>
                             <button class="tabBtn" data-tab="services" id="tabBtnServices">Hizmetler</button>
-                        </div>
-                        <!-- AI has its OWN tab bar (Genel/Sohbet/Yardım), swapped in for
-                             #tabBar above instead of sharing it — the AI panel used to
-                             reuse #tabBar's buttons with none of them ever marked
-                             active, which looked like a broken/shared settings panel. -->
-                        <div id="aiTabBar" class="hidden">
-                            <button class="tabBtn" data-tab="ai-general" id="tabBtnAiGeneral">Genel</button>
-                            <button class="tabBtn" data-tab="ai-chat" id="tabBtnAiChat">Sohbet</button>
-                            <button class="tabBtn" data-tab="ai-help" id="tabBtnAiHelp">Yardım</button>
+                            <!-- Only shown while AI Bot is on for this profile — see
+                                 syncAiSectionsVisibility. -->
+                            <button class="tabBtn" data-tab="help" id="tabBtnHelp" style="display:none">Yardım</button>
                         </div>
                         <div id="settingsBody">
                             <div id="tab-general" class="tabContent active">
@@ -1382,6 +1461,26 @@
                                     </div>
                                     <button id="refreshMediaDevicesBtn" class="miniBtn" style="width:100%">Cihazları Yenile</button>
                                     <div class="hint" id="mediaDevicesHint"></div>
+                                </div>
+
+                                <!-- AI Bot's general (non-per-chat) settings — only shown
+                                     while Hizmetler → AI Bot is on for this profile (see
+                                     syncAiSectionsVisibility). Used to live under a
+                                     separate AI tab bar; folded in here instead. -->
+                                <div id="generalAiSection" style="display:none">
+                                    <div class="sectionTitle" id="generalAiSectionTitle">AI Bot</div>
+                                    <div class="field">
+                                        <label class="name" id="aiDebugChatLabel">Debug sohbeti</label>
+                                        <select id="aiDebugChatSelect"><option value="">— sohbet seç —</option></select>
+                                        <div class="hint" id="aiDebugChatHint">Hatalar ve whitelist bildirimleri bu sohbete gönderilir.</div>
+                                    </div>
+                                    <div id="aiFormBody"></div>
+                                    <div class="field">
+                                        <button id="aiSaveBtn" class="miniBtn">Kaydet</button>
+                                    </div>
+                                    <div class="field">
+                                        <button id="aiClearAllBtn" class="miniBtn danger" style="width:100%">Tüm AI Hafızasını Temizle</button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1420,6 +1519,68 @@
                                         <div class="hint" id="cBlacklistedHint" style="margin-bottom:10px">Blacklist'teki sohbet, mesaj ve komutlar dahil tamamen yok sayılır.</div>
                                     </div>
                                 </div>
+
+                                <!-- This chat's AI-specific overrides — only shown while
+                                     Hizmetler → AI Bot is on (see syncAiSectionsVisibility).
+                                     Used to live under a separate AI tab bar; folded in here
+                                     instead. Shares its "which chat" selection with the
+                                     plain chat picker above (see openChat()). -->
+                                <div id="chatAiSection" style="display:none">
+                                    <div class="sectionTitle" id="chatAiSectionTitle">AI Bot (bu sohbet)</div>
+                                    <div class="field">
+                                        <label class="name" id="aiChatSelectLabel">Sohbet seç</label>
+                                        <select id="aiChatSelect"><option value="" id="aiChatSelectPlaceholder">— sohbet seç —</option></select>
+                                    </div>
+                                    <div class="field">
+                                        <label class="name" id="aiChatIdManualLabel">…veya ID gir</label>
+                                        <div class="btnRow">
+                                            <input type="text" id="aiChatIdManual" placeholder="905xx@c.us / 123@lid / 123@g.us">
+                                            <button id="aiChatIdOpen" class="miniBtn">Aç</button>
+                                        </div>
+                                    </div>
+                                    <div class="hint" id="aiChatContextHint"></div>
+                                    <div id="aiChatFields">
+                                        <label class="toggleRow">
+                                            <span id="cNoPrefixLabel">Prefixsiz mod (bu sohbet)</span>
+                                            <span class="switch"><input type="checkbox" id="cNoPrefix"><span class="track"></span></span>
+                                        </label>
+                                        <label class="toggleRow">
+                                            <span id="cGroupLabel">Ortak hafıza (grup)</span>
+                                            <span class="switch"><input type="checkbox" id="cGroup"><span class="track"></span></span>
+                                        </label>
+                                        <div class="hint" id="cGroupHint" style="margin-bottom:10px">Ortak hafıza: gruptaki herkes tek bir AI hafızasını paylaşır.</div>
+
+                                        <div class="field">
+                                            <label class="name" id="cPrefixLabel">Prefix (bu sohbete özel — boş bırak = genel prefix)</label>
+                                            <div class="btnRow">
+                                                <input type="text" id="cPrefix" placeholder="örn: .">
+                                                <button id="cPrefixApply" class="miniBtn">Uygula</button>
+                                            </div>
+                                        </div>
+                                        <div class="field">
+                                            <label class="name" id="cModelLabel">Model (bu sohbete özel — boş bırak = genel model)</label>
+                                            <div class="btnRow">
+                                                <input type="text" id="cModel" placeholder="örn: llama3.2">
+                                                <button id="cModelApply" class="miniBtn">Uygula</button>
+                                            </div>
+                                        </div>
+                                        <div class="field">
+                                            <label class="name" id="cPersonalityLabel">Kişilik (bu sohbete özel — boş bırak = genel kişilik)</label>
+                                            <textarea id="cPersonality" rows="3"></textarea>
+                                            <button id="cPersonalityApply" class="miniBtn" style="margin-top:6px">Uygula</button>
+                                        </div>
+
+                                        <label class="toggleRow">
+                                            <span id="cFixedLabel">Bu sohbete kilitli (fixedchat)</span>
+                                            <span class="switch"><input type="checkbox" id="cFixed"><span class="track"></span></span>
+                                        </label>
+                                        <div class="hint" id="cFixedHint" style="margin-bottom:10px">Açıksa bot yalnızca bu sohbette AI ile yanıt verir.</div>
+
+                                        <div class="field">
+                                            <button id="cClearMemory" class="miniBtn danger">Bu sohbetin AI hafızasını temizle</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div id="tab-lists" class="tabContent">
@@ -1456,85 +1617,16 @@
                                     <span id="svcAiLabel">AI Bot</span>
                                     <span class="switch"><input type="checkbox" id="svcAiToggle"><span class="track"></span></span>
                                 </label>
-                                <div class="hint" id="svcAiHint">AI Bot kapalı — açtığında yanındaki AI butonundan ayarlarına ulaşabilirsin.</div>
+                                <div class="hint" id="svcAiHint">AI Bot kapalı — açtığında ayarlarını Genel ve Sohbet sekmelerinin altında göreceksin.</div>
                             </div>
 
-                            <div id="tab-ai-general" class="tabContent">
-                                <div id="aiPanel">
-                                    <div class="field">
-                                        <label class="name" id="aiDebugChatLabel">Debug sohbeti</label>
-                                        <select id="aiDebugChatSelect"><option value="">— sohbet seç —</option></select>
-                                        <div class="hint" id="aiDebugChatHint">Hatalar ve whitelist bildirimleri bu sohbete gönderilir.</div>
-                                    </div>
-                                    <div id="aiFormBody"></div>
-                                    <div class="field">
-                                        <button id="aiSaveBtn" class="miniBtn">Kaydet</button>
-                                    </div>
-                                    <div class="field">
-                                        <button id="aiClearAllBtn" class="miniBtn danger" style="width:100%">Tüm AI Hafızasını Temizle</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div id="tab-ai-chat" class="tabContent">
-                                <div class="field">
-                                    <label class="name" id="aiChatSelectLabel">Sohbet seç</label>
-                                    <select id="aiChatSelect"><option value="" id="aiChatSelectPlaceholder">— sohbet seç —</option></select>
-                                </div>
-                                <div class="field">
-                                    <label class="name" id="aiChatIdManualLabel">…veya ID gir</label>
-                                    <div class="btnRow">
-                                        <input type="text" id="aiChatIdManual" placeholder="905xx@c.us / 123@lid / 123@g.us">
-                                        <button id="aiChatIdOpen" class="miniBtn">Aç</button>
-                                    </div>
-                                </div>
-                                <div class="hint" id="aiChatContextHint"></div>
-                                <div id="aiChatFields">
-                                    <label class="toggleRow">
-                                        <span id="cNoPrefixLabel">Prefixsiz mod (bu sohbet)</span>
-                                        <span class="switch"><input type="checkbox" id="cNoPrefix"><span class="track"></span></span>
-                                    </label>
-                                    <label class="toggleRow">
-                                        <span id="cGroupLabel">Ortak hafıza (grup)</span>
-                                        <span class="switch"><input type="checkbox" id="cGroup"><span class="track"></span></span>
-                                    </label>
-                                    <div class="hint" id="cGroupHint" style="margin-bottom:10px">Ortak hafıza: gruptaki herkes tek bir AI hafızasını paylaşır.</div>
-
-                                    <div class="field">
-                                        <label class="name" id="cPrefixLabel">Prefix (bu sohbete özel — boş bırak = genel prefix)</label>
-                                        <div class="btnRow">
-                                            <input type="text" id="cPrefix" placeholder="örn: .">
-                                            <button id="cPrefixApply" class="miniBtn">Uygula</button>
-                                        </div>
-                                    </div>
-                                    <div class="field">
-                                        <label class="name" id="cModelLabel">Model (bu sohbete özel — boş bırak = genel model)</label>
-                                        <div class="btnRow">
-                                            <input type="text" id="cModel" placeholder="örn: llama3.2">
-                                            <button id="cModelApply" class="miniBtn">Uygula</button>
-                                        </div>
-                                    </div>
-                                    <div class="field">
-                                        <label class="name" id="cPersonalityLabel">Kişilik (bu sohbete özel — boş bırak = genel kişilik)</label>
-                                        <textarea id="cPersonality" rows="3"></textarea>
-                                        <button id="cPersonalityApply" class="miniBtn" style="margin-top:6px">Uygula</button>
-                                    </div>
-
-                                    <label class="toggleRow">
-                                        <span id="cFixedLabel">Bu sohbete kilitli (fixedchat)</span>
-                                        <span class="switch"><input type="checkbox" id="cFixed"><span class="track"></span></span>
-                                    </label>
-                                    <div class="hint" id="cFixedHint" style="margin-bottom:10px">Açıksa bot yalnızca bu sohbette AI ile yanıt verir.</div>
-
-                                    <div class="field">
-                                        <button id="cClearMemory" class="miniBtn danger">Bu sohbetin AI hafızasını temizle</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div id="tab-ai-help" class="tabContent">
+                            <!-- AI's own help text (the bot's !help command output) — a
+                                 separate tab, only shown while Hizmetler → AI Bot is on
+                                 (see syncAiSectionsVisibility/tabBtnHelp). -->
+                            <div id="tab-help" class="tabContent">
                                 <pre id="aiHelpBody" class="hint" style="white-space:pre-wrap; font-family:inherit; font-size:12px; line-height:1.6;"></pre>
                             </div>
+
                         </div>
                         <div id="settingsFooter">
                             <button id="profileManageBtn" class="miniBtn" style="width:100%">Profil Yönetimi</button>
@@ -1583,8 +1675,9 @@
          nothing saved to ollama-chats.json, just a quick way to ask NeRoChAt
          something without leaving whatever tab is open. "Bu sohbeti sor"
          only shows for an active WhatsApp profile (see openNeroPopup()) and
-         pulls that chat's recent messages in as context (chat:recentMessages
-         IPC, main.js). -->
+         opens a start/end message range picker (neroPopupChatRangeBar
+         below) that folds the chosen range of that chat's messages in as
+         context (chat:recentMessages IPC, main.js). -->
     <div id="neroPopupOverlay" class="modalOverlay">
         <div class="modalPanel" id="neroPopupPanel">
             <div class="modalHeader">
@@ -1595,11 +1688,40 @@
                 <select id="neroPopupModelSelect"><option value="">— model —</option></select>
                 <button id="neroPopupAskChatBtn" class="miniBtn" style="display:none">💬 Bu sohbeti sor</button>
             </div>
+            <!-- Opened by neroPopupAskChatBtn — pick a start message (and,
+                 optionally, an end message; left blank = through the last
+                 one) from the active chat's recently-loaded messages, then
+                 "Yükle" (neroPopupRangeLoadBtn) folds just that range into
+                 context. See neroPopupAskChatBtn's own click handler /
+                 populateNeroRangeSelects in the script. -->
+            <div id="neroPopupChatRangeBar">
+                <div class="field">
+                    <label class="name" id="neroRangeStartLabel">Başlangıç mesajı</label>
+                    <select id="neroPopupRangeStart"></select>
+                </div>
+                <div class="field">
+                    <label class="name" id="neroRangeEndLabel">Bitiş mesajı (opsiyonel)</label>
+                    <select id="neroPopupRangeEnd"></select>
+                </div>
+                <button id="neroPopupRangeLoadBtn" class="miniBtn">Yükle</button>
+            </div>
             <div id="neroPopupMessages"></div>
             <div id="neroPopupInputBar">
                 <textarea id="neroPopupInput" rows="1" placeholder="Bir mesaj yaz…"></textarea>
                 <button id="neroPopupSendBtn" class="miniBtn">Gönder</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Alt+Tab-style tab switcher — Ctrl+Tab (see wireGlobalShortcuts in
+         main.js / the document keydown/keyup listeners below) opens this
+         and steps the selection forward, Ctrl+Shift+Tab steps it backward,
+         releasing Ctrl commits whichever card is selected. Reuses the same
+         openModal()/closeModal() collapse-the-active-view-and-blur-it-behind
+         mechanism every other modal here does — see stepTabSwitcher(). -->
+    <div id="tabSwitcherOverlay" class="modalOverlay">
+        <div class="modalPanel" id="tabSwitcherPanel">
+            <div id="tabSwitcherList"></div>
         </div>
     </div>
 
@@ -1719,7 +1841,7 @@
             listClearBtn: 'Tümünü Sil',
             listClearConfirm: name => `"${name}" listesindeki TÜM kayıtlar silinecek. Emin misin?`,
             svcAiLabel: 'AI Bot',
-            svcAiHintOff: 'AI Bot kapalı — açtığında ayarları burada göreceksin.',
+            svcAiHintOff: 'AI Bot kapalı — açtığında ayarlarını Genel ve Sohbet sekmelerinin altında göreceksin.',
             svcAiHintOn: 'AI Bot açık.',
             mediaDevicesTitle: 'Cihazlar',
             preferredMicLabel: 'Mikrofon',
@@ -1734,6 +1856,8 @@
             aiClearAllBtn: 'Tüm AI Hafızasını Temizle',
             aiClearAllConfirm: 'Her sohbetin AI hafızası (konuşma geçmişi) silinecek. Emin misin?',
             tabAiHelp: 'Yardım',
+            generalAiSectionTitle: 'AI Bot',
+            chatAiSectionTitle: 'AI Bot (bu sohbet)',
             aiChatContextNone: 'Önce Sohbet sekmesinden bir sohbet seç.',
             aiChatContextSelected: name => `Seçili sohbet: ${name}`,
             ollamaModelsTitle: 'Model Yönetimi',
@@ -1777,7 +1901,6 @@
             addTileName: 'Yeni', importBtn: 'İçe Aktar',
             tileSettingsTitle: 'Profil ayarları', tileExportTitle: 'Dışa Aktar', tileDeleteTitle: 'Sil',
             profileManageBtn: 'Profil Yönetimi',
-            aiBtnTitle: 'AI',
             confirmOkBtn: 'Tamam', confirmCancelBtn: 'İptal',
             ollamaTileName: 'NeRoChAt', ollamaTileTitle: 'NeRoChAt\'i aç',
             ollamaTileResetTitle: 'Sıfırla',
@@ -1846,7 +1969,7 @@
             listClearBtn: 'Clear All',
             listClearConfirm: name => `ALL entries in "${name}" will be deleted. Are you sure?`,
             svcAiLabel: 'AI Bot',
-            svcAiHintOff: "AI Bot is off — turn it on to see its settings here.",
+            svcAiHintOff: "AI Bot is off — turn it on to see its settings under the General and Chat tabs.",
             svcAiHintOn: 'AI Bot is on.',
             mediaDevicesTitle: 'Devices',
             preferredMicLabel: 'Microphone',
@@ -1861,6 +1984,8 @@
             aiClearAllBtn: 'Clear All AI Memory',
             aiClearAllConfirm: "Every chat's AI memory (conversation history) will be deleted. Are you sure?",
             tabAiHelp: 'Help',
+            generalAiSectionTitle: 'AI Bot',
+            chatAiSectionTitle: 'AI Bot (this chat)',
             aiChatContextNone: 'Select a chat in the Chat tab first.',
             aiChatContextSelected: name => `Selected chat: ${name}`,
             ollamaModelsTitle: 'Model Management',
@@ -1904,7 +2029,6 @@
             addTileName: 'New', importBtn: 'Import',
             tileSettingsTitle: 'Profile settings', tileExportTitle: 'Export', tileDeleteTitle: 'Delete',
             profileManageBtn: 'Manage Profile',
-            aiBtnTitle: 'AI',
             confirmOkBtn: 'OK', confirmCancelBtn: 'Cancel',
             ollamaTileName: 'NeRoChAt', ollamaTileTitle: 'Open NeRoChAt',
             ollamaTileResetTitle: 'Reset',
@@ -1965,7 +2089,6 @@
     function applyLanguage() {
         document.documentElement.lang = lang;
         document.getElementById('settingsBtn').title = t('settingsBtn');
-        document.getElementById('aiBtn').title = t('aiBtnTitle');
         document.getElementById('statusLogBtn').title = t('logsBtn');
         document.getElementById('retryBtn').title = t('retryBtn');
         document.getElementById('waPlaceholder').textContent = t('waPlaceholder');
@@ -1994,9 +2117,9 @@
         document.getElementById('tabBtnChat').textContent = t('tabChat');
         document.getElementById('tabBtnLists').textContent = t('tabLists');
         document.getElementById('tabBtnServices').textContent = t('tabServices');
-        document.getElementById('tabBtnAiGeneral').textContent = t('tabGeneral');
-        document.getElementById('tabBtnAiChat').textContent = t('tabChat');
-        document.getElementById('tabBtnAiHelp').textContent = t('tabAiHelp');
+        document.getElementById('tabBtnHelp').textContent = t('tabAiHelp');
+        document.getElementById('generalAiSectionTitle').textContent = t('generalAiSectionTitle');
+        document.getElementById('chatAiSectionTitle').textContent = t('chatAiSectionTitle');
         document.getElementById('tabBtnOllamaGeneral').textContent = t('tabGeneral');
         document.getElementById('tabBtnOllamaChat').textContent = t('tabChat');
         document.getElementById('logHeader').textContent = t('logHeader');
@@ -2311,7 +2434,6 @@
     // #telegramCredsOverlay with no standing entry point at all.
     // ============================
     const settingsBtn = document.getElementById('settingsBtn');
-    const aiBtn = document.getElementById('aiBtn');
     const settingsFooter = document.getElementById('settingsFooter');
     const savedToast = document.getElementById('savedToast');
     let settingsOpen = false;
@@ -2325,29 +2447,37 @@
     }
 
     let activeTab = 'general';
+    // Whether Hizmetler → AI Bot is on for the active profile — gates
+    // generalAiSection/chatAiSection's visibility (see
+    // syncAiSectionsVisibility) and whether switchTab bothers loading their
+    // data below.
+    let aiSectionsEnabled = false;
     const tabBtns = document.querySelectorAll('.tabBtn');
     const tabBar = document.getElementById('tabBar');
-    const aiTabBar = document.getElementById('aiTabBar');
     tabBtns.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
 
-    // A profile's own tabs (Genel/Sohbet/Listeler/Hizmetler + AI sub-tabs) —
+    // A profile's own tabs (Genel/Sohbet/Listeler/Hizmetler/Yardım) —
     // unchanged from the old drawer, just living inside #gsSection-profile
-    // now instead of being the sole content of a standalone panel.
+    // now instead of being the sole content of a standalone panel. AI's
+    // general/per-chat settings used to live under their own separate tab
+    // bar; they're folded into Genel/Sohbet now instead (see
+    // generalAiSection/chatAiSection) — only AI's help text keeps its own
+    // tab (see tabBtnHelp/tab-help), since unlike those it isn't really
+    // "Genel" or "Sohbet" content.
     function switchTab(tab) {
         activeTab = tab;
-        const isAiTab = tab.startsWith('ai-');
-        tabBar.classList.toggle('hidden', isAiTab);
-        aiTabBar.classList.toggle('hidden', !isAiTab);
         tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
         document.querySelectorAll('.tabContent').forEach(c =>
             c.classList.toggle('active', c.id === 'tab-' + tab));
         settingsFooter.classList.toggle('hidden', tab !== 'general');
-        if (tab === 'chat') loadChatList();
+        if (tab === 'general' && aiSectionsEnabled) loadAiGeneralTab();
+        if (tab === 'chat') {
+            loadChatList();
+            if (aiSectionsEnabled) updateAiChatContext(currentChatId);
+        }
         if (tab === 'lists') loadList();
         if (tab === 'services' && typeof loadServicesTab === 'function') loadServicesTab();
-        if (tab === 'ai-general' && typeof loadAiGeneralTab === 'function') loadAiGeneralTab();
-        if (tab === 'ai-chat') { loadChatList(); updateAiChatContext(currentChatId); }
-        if (tab === 'ai-help' && typeof loadAiHelpTab === 'function') loadAiHelpTab();
+        if (tab === 'help' && aiSectionsEnabled) loadAiHelpTab();
     }
 
     // NeRoChAt's own Genel/Sohbet sub-tabs — unchanged, now living inside
@@ -2472,16 +2602,6 @@
         openGlobalSettings(defaultGsSection());
     });
 
-    // AI button — a dedicated entry point straight to the active profile's
-    // AI tab instead of making users dig for it under Genel/Hizmetler.
-    aiBtn.addEventListener('click', async () => {
-        if (!activeProfileId) return;
-        if (!settingsOpen || gsCurrentSection !== activeProfileId) {
-            await openGlobalSettings(activeProfileId);
-        }
-        switchTab('ai-general');
-    });
-
     // ============================
     // NeRoChAt quick-access popup — global keyboard shortcut (configurable
     // in Ayarlar → Uygulama) that opens a small NeRoChAt window on top of
@@ -2489,6 +2609,13 @@
     // ============================
     let neroPopupShortcut = 'Ctrl+Shift+K'; // overwritten by loadNeroPopupShortcut() below once main.js's saved value (or its own default) is known
     let recordingNeroShortcut = false;
+    // Fix-text shortcut (see handleFixTextShortcut in main.js) — this page
+    // only ever needs to record/display the combo; the shortcut itself is
+    // matched and acted on entirely in main.js while a WhatsApp view has
+    // focus, since there's no compose box or renderer UI for it to reach
+    // here.
+    let fixTextShortcut = 'Ctrl+Shift+J';
+    let recordingFixTextShortcut = false;
 
     function formatShortcutCombo(e) {
         const parts = [];
@@ -2526,6 +2653,26 @@
         input.focus();
     });
 
+    async function loadFixTextShortcut() {
+        const config = await window.nerobot.getAppConfig();
+        fixTextShortcut = config.fixTextShortcut || fixTextShortcut;
+        const input = document.getElementById('fixTextShortcutInput');
+        if (input) input.value = fixTextShortcut;
+        const autoToggle = document.getElementById('fixTextAutoModeToggle');
+        if (autoToggle) autoToggle.checked = !!config.fixTextAutoMode;
+    }
+
+    document.getElementById('fixTextShortcutRecordBtn').addEventListener('click', () => {
+        recordingFixTextShortcut = true;
+        const input = document.getElementById('fixTextShortcutInput');
+        input.value = '…';
+        input.focus();
+    });
+
+    document.getElementById('fixTextAutoModeToggle').addEventListener('change', (e) => {
+        window.nerobot.setAppConfig({ fixTextAutoMode: e.target.checked });
+    });
+
     // One listener does double duty: while `recordingNeroShortcut` is armed,
     // the next keypress anywhere becomes the new combo (works even though
     // the input itself is readonly, since focus is still on it); otherwise,
@@ -2542,6 +2689,15 @@
             await window.nerobot.setAppConfig({ neroPopupShortcut });
             return;
         }
+        if (recordingFixTextShortcut) {
+            e.preventDefault();
+            if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
+            recordingFixTextShortcut = false;
+            fixTextShortcut = formatShortcutCombo(e);
+            document.getElementById('fixTextShortcutInput').value = fixTextShortcut;
+            await window.nerobot.setAppConfig({ fixTextShortcut });
+            return;
+        }
         const typingInField = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
         if (typingInField) return;
         if (matchesShortcutCombo(e, neroPopupShortcut)) {
@@ -2552,7 +2708,7 @@
 
     // Main process pings this whenever the shortcut fires while a WA/
     // Telegram/Ollama embedded view has keyboard focus instead of this
-    // page's own document (see main.js's wireNeroShortcut / preload.cjs's
+    // page's own document (see main.js's wireGlobalShortcuts / preload.cjs's
     // onOpenNeroPopup) — the document 'keydown' listener above only ever
     // catches the combo while THIS page itself has focus (Home screen, or a
     // modal up), which in practice is rare once a profile is open.
@@ -2566,6 +2722,122 @@
     });
 
     // ============================
+    // Ctrl+Tab tab switcher — Alt+Tab-style: Ctrl+Tab (Ctrl+Shift+Tab to go
+    // backward) steps a selection through every open tab while Ctrl stays
+    // held, releasing Ctrl commits whichever card ends up selected. Reuses
+    // the same openModal()/closeModal() mechanism every other modal here
+    // uses (collapses the active WA/Telegram/Ollama view and shows a
+    // blurred snapshot behind it — see main.js's 'modal:toggle') so the
+    // overlay is actually visible no matter what's on screen when it opens.
+    // ============================
+    let tabSwitcherOpen = false;
+    let tabSwitcherItems = [];
+    let tabSwitcherIndex = 0;
+
+    function buildTabSwitcherItems() {
+        const items = [{ kind: 'home', id: null, name: t('homeTabTitle') }];
+        if (ollamaTabOpen) items.push({ kind: 'ollama', id: 'ollama', name: t('ollamaTileName') });
+        for (const p of orderedOpenProfiles()) {
+            items.push({ kind: 'profile', id: p.id, name: p.name });
+        }
+        return items;
+    }
+
+    function renderTabSwitcher() {
+        const list = document.getElementById('tabSwitcherList');
+        list.innerHTML = '';
+        tabSwitcherItems.forEach((item, i) => {
+            const card = document.createElement('div');
+            card.className = 'tabSwitcherItem' + (i === tabSwitcherIndex ? ' selected' : '');
+            const icon = document.createElement('div');
+            icon.className = 'tabSwitcherIcon';
+            if (item.kind === 'ollama') {
+                const img = document.createElement('img');
+                img.src = 'logo.svg';
+                img.alt = '';
+                icon.appendChild(img);
+            } else if (item.kind === 'home') {
+                icon.textContent = '⌂';
+            } else {
+                icon.textContent = (item.name || '?').trim().charAt(0).toUpperCase() || '?';
+            }
+            const name = document.createElement('div');
+            name.className = 'tabSwitcherName';
+            name.textContent = item.name;
+            card.appendChild(icon);
+            card.appendChild(name);
+            card.addEventListener('click', () => { tabSwitcherIndex = i; commitTabSwitcher(); });
+            list.appendChild(card);
+        });
+        list.children[tabSwitcherIndex]?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    }
+
+    // Fires on every Ctrl+Tab (direction 1) / Ctrl+Shift+Tab (direction -1)
+    // keydown, whether or not the switcher is already up.
+    async function stepTabSwitcher(direction) {
+        if (!tabSwitcherOpen) {
+            // Don't pop this on top of Ayarlar/a confirm panel/anything
+            // else already up — that modal has the user's attention, not
+            // the tab strip.
+            if (document.querySelector('.modalOverlay.open')) return;
+            tabSwitcherItems = buildTabSwitcherItems();
+            if (tabSwitcherItems.length < 2) return; // nothing to switch to
+            const activeIdx = tabSwitcherItems.findIndex((it) =>
+                it.kind === 'home' ? (!activeProfileId && !ollamaTabActive) :
+                it.kind === 'ollama' ? ollamaTabActive :
+                it.id === activeProfileId);
+            tabSwitcherIndex = activeIdx === -1 ? 0 : activeIdx;
+            tabSwitcherOpen = true;
+            openModal('tabSwitcherOverlay'); // async, nothing below needs to wait on it
+        }
+        const n = tabSwitcherItems.length;
+        tabSwitcherIndex = (tabSwitcherIndex + direction + n) % n;
+        renderTabSwitcher();
+    }
+
+    async function commitTabSwitcher() {
+        if (!tabSwitcherOpen) return;
+        tabSwitcherOpen = false;
+        const item = tabSwitcherItems[tabSwitcherIndex];
+        closeModal('tabSwitcherOverlay');
+        if (!item) return;
+        if (item.kind === 'home') await activateTab(null);
+        else if (item.kind === 'ollama') await openOllamaTab();
+        else await activateTab(item.id);
+    }
+
+    function cancelTabSwitcher() {
+        if (!tabSwitcherOpen) return;
+        tabSwitcherOpen = false;
+        closeModal('tabSwitcherOverlay');
+    }
+
+    document.getElementById('tabSwitcherOverlay').addEventListener('click', (e) => {
+        if (e.target.id === 'tabSwitcherOverlay') cancelTabSwitcher();
+    });
+
+    // Document-level keydown/keyup: catches Ctrl+Tab while THIS page itself
+    // has focus (Home screen, a modal, or the switcher overlay itself).
+    // Focus while a WA/Telegram/Ollama view is active instead goes through
+    // main.js's wireGlobalShortcuts + the onTabSwitcher*() listeners below
+    // — same split as the NeRoChAt popup shortcut above.
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab' && e.ctrlKey && !e.repeat) {
+            e.preventDefault();
+            stepTabSwitcher(e.shiftKey ? -1 : 1);
+        } else if (e.key === 'Escape' && tabSwitcherOpen) {
+            e.preventDefault();
+            cancelTabSwitcher();
+        }
+    });
+    document.addEventListener('keyup', (e) => {
+        if (e.key === 'Control') commitTabSwitcher();
+    });
+    window.nerobot.onTabSwitcherStep((direction) => stepTabSwitcher(direction));
+    window.nerobot.onTabSwitcherCommit(() => commitTabSwitcher());
+    window.nerobot.onTabSwitcherCancel(() => cancelTabSwitcher());
+
+    // ============================
     // NeRoChAt quick-access popup — the actual small chat window (model
     // picker + messages + input), opened by openNeroPopup() above. Fully
     // ephemeral: nothing here is persisted (unlike the full NeRoChAt tab's
@@ -2575,12 +2847,22 @@
     const neroPopupOverlay = document.getElementById('neroPopupOverlay');
     const neroPopupModelSelect = document.getElementById('neroPopupModelSelect');
     const neroPopupAskChatBtn = document.getElementById('neroPopupAskChatBtn');
+    const neroPopupChatRangeBar = document.getElementById('neroPopupChatRangeBar');
+    const neroPopupRangeStart = document.getElementById('neroPopupRangeStart');
+    const neroPopupRangeEnd = document.getElementById('neroPopupRangeEnd');
+    const neroPopupRangeLoadBtn = document.getElementById('neroPopupRangeLoadBtn');
     const neroPopupMessages = document.getElementById('neroPopupMessages');
     const neroPopupInput = document.getElementById('neroPopupInput');
     const neroPopupSendBtn = document.getElementById('neroPopupSendBtn');
 
     let neroHistory = []; // { role, content } — role 'system' entries never render as bubbles
     let neroSending = false;
+    // { chatName, messages } — fetched once per popup-open the first time
+    // the range bar opens (see toggleNeroChatRangeBar), oldest first. The
+    // start/end pickers below just reference indices into this array —
+    // there's no separate id-based range fetch, everything the picker can
+    // offer is already sitting in this one batch.
+    let neroChatMessagesCache = null;
 
     function addNeroMessage(role, text) {
         const div = document.createElement('div');
@@ -2617,6 +2899,8 @@
         neroHistory = [];
         neroPopupMessages.innerHTML = '';
         neroPopupInput.value = '';
+        neroChatMessagesCache = null; // re-fetch fresh next time the range bar opens
+        neroPopupChatRangeBar.classList.remove('open');
         const activeEntry = allProfiles.find(p => p.id === activeProfileId);
         neroPopupAskChatBtn.style.display = activeEntry?.platform === 'whatsapp' ? '' : 'none';
         openModal('neroPopupOverlay');
@@ -2629,23 +2913,87 @@
         if (e.target.id === 'neroPopupOverlay') closeModal('neroPopupOverlay');
     });
 
-    // "Bu sohbeti sor" — pulls the active WhatsApp profile's currently-open
-    // chat's recent messages in as a system-role context message (never
-    // shown as its own bubble, just a hint confirming it loaded), so the
-    // next question sent gets answered with that chat in mind. Re-clicking
-    // replaces the previous context instead of stacking multiple copies.
+    // One line per <option> in the start/end pickers below — how many
+    // messages back from the latest one this is, timestamp + sender + a
+    // short preview, enough to tell messages apart at a glance without
+    // showing the full text.
+    function neroRangeOptionLabel(m, chatName, backDistance) {
+        const who = m.fromMe ? 'Ben' : (m.author ? m.author.split('@')[0] : chatName);
+        const time = m.t ? new Date(m.t * 1000).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+        const preview = (m.body || '').slice(0, 36);
+        return `-${backDistance} · ${time} · ${who}: ${preview}`;
+    }
+
+    // Rebuilds both pickers from neroChatMessagesCache — same option list in
+    // each (any message can be picked as either end), oldest first so index
+    // order matches chronological order for the end-can't-precede-start
+    // check in neroPopupRangeLoadBtn's handler below.
+    function populateNeroRangeSelects() {
+        const { chatName, messages } = neroChatMessagesCache;
+        neroPopupRangeStart.innerHTML = '';
+        neroPopupRangeEnd.innerHTML = '<option value="">— son mesaja kadar —</option>';
+        messages.forEach((m, i) => {
+            const label = neroRangeOptionLabel(m, chatName, messages.length - i);
+            const startOpt = document.createElement('option');
+            startOpt.value = i;
+            startOpt.textContent = label;
+            neroPopupRangeStart.appendChild(startOpt);
+            const endOpt = document.createElement('option');
+            endOpt.value = i;
+            endOpt.textContent = label;
+            neroPopupRangeEnd.appendChild(endOpt);
+        });
+        neroPopupRangeStart.value = 0; // earliest of the fetched batch
+    }
+
+    // "Bu sohbeti sor" toggles the start/end message picker (see
+    // neroPopupChatRangeBar) instead of immediately pulling a fixed window
+    // — neroPopupRangeLoadBtn's own handler below is what actually folds a
+    // range into context. The underlying batch (up to 200 messages) is
+    // fetched once per popup-open and reused for every toggle after that.
     neroPopupAskChatBtn.addEventListener('click', async () => {
-        if (!activeProfileId) return;
-        neroPopupAskChatBtn.disabled = true;
-        const result = await window.nerobot.getChatRecentMessages(activeProfileId, 20);
-        neroPopupAskChatBtn.disabled = false;
-        if (!result.ok) { addNeroHint('Hata: ' + (result.error || 'Mesajlar alınamadı.')); return; }
-        if (!result.messages.length) { addNeroHint('Bu sohbette henüz mesaj yok.'); return; }
-        const lines = result.messages.map(m => `${m.fromMe ? 'Ben' : (m.author ? m.author.split('@')[0] : result.chatName)}: ${m.body}`);
-        const context = `WhatsApp sohbeti "${result.chatName}" son mesajları:\n${lines.join('\n')}`;
+        if (!activeProfileId) { addNeroHint('Aktif bir profil bulunamadı.'); return; }
+        if (neroPopupChatRangeBar.classList.contains('open')) {
+            neroPopupChatRangeBar.classList.remove('open');
+            return;
+        }
+        if (!neroChatMessagesCache) {
+            neroPopupAskChatBtn.disabled = true;
+            try {
+                const result = await window.nerobot.getChatRecentMessages(activeProfileId, 200);
+                if (!result.ok) { addNeroHint('Hata: ' + (result.error || 'Mesajlar alınamadı.')); return; }
+                if (!result.messages.length) { addNeroHint('Bu sohbette henüz mesaj yok.'); return; }
+                neroChatMessagesCache = result;
+            } catch (err) {
+                addNeroHint('Hata: ' + (err?.message || err));
+                return;
+            } finally {
+                neroPopupAskChatBtn.disabled = false;
+            }
+        }
+        populateNeroRangeSelects();
+        neroPopupChatRangeBar.classList.add('open');
+    });
+
+    // Folds the picked [start, end] range (end left blank = through the
+    // last fetched message) into a single system-role context message —
+    // never shown as its own bubble, just a hint confirming it loaded — so
+    // the next question sent gets answered with that range in mind.
+    // Re-loading replaces the previous context instead of stacking
+    // multiple copies.
+    neroPopupRangeLoadBtn.addEventListener('click', () => {
+        if (!neroChatMessagesCache) return;
+        const { chatName, messages } = neroChatMessagesCache;
+        const startIdx = Number(neroPopupRangeStart.value);
+        const endIdx = neroPopupRangeEnd.value === '' ? messages.length - 1 : Number(neroPopupRangeEnd.value);
+        if (endIdx < startIdx) { addNeroHint('Bitiş mesajı, başlangıçtan önce olamaz.'); return; }
+        const slice = messages.slice(startIdx, endIdx + 1);
+        const lines = slice.map(m => `${m.fromMe ? 'Ben' : (m.author ? m.author.split('@')[0] : chatName)}: ${m.body}`);
+        const context = `WhatsApp sohbeti "${chatName}" mesajları (${slice.length} mesaj):\n${lines.join('\n')}`;
         neroHistory = neroHistory.filter(m => m.role !== 'system');
         neroHistory.unshift({ role: 'system', content: context });
-        addNeroHint(`🔗 "${result.chatName}" sohbetinin son ${result.messages.length} mesajı yüklendi — şimdi bu sohbetle ilgili soru sorabilirsin.`);
+        addNeroHint(`🔗 "${chatName}" sohbetinden ${slice.length} mesaj yüklendi — şimdi bu sohbetle ilgili soru sorabilirsin.`);
+        neroPopupChatRangeBar.classList.remove('open');
         neroPopupInput.focus();
     });
 
@@ -2924,15 +3272,16 @@
             title: { tr: 'İzinler', en: 'Permissions' },
             fields: [
                 { key: 'notificationsEnabled', type: 'toggle', label: { tr: 'Bildirim izni', en: 'Notification permission' } },
-                { key: 'locationEnabled', type: 'toggle', label: { tr: 'Konum izni', en: 'Location permission' },
-                  hint: { tr: "Mikrofon/kamera her zaman açık (WhatsApp'ın sesli/görüntülü özellikleri için) — bunlar WhatsApp'ın diğer isteklerini kapsar.",
-                          en: "Mic/camera are always on (for WhatsApp's voice/video features) — these cover WhatsApp's other requests." } },
+                { key: 'locationEnabled', type: 'toggle', label: { tr: 'Konum izni', en: 'Location permission' } },
+                { key: 'cameraEnabled', type: 'toggle', label: { tr: 'Kamera izni', en: 'Camera permission' },
+                  hint: { tr: "Kapalıyken görüntülü aramalar reddedilir. Mikrofon her zaman açık (WhatsApp'ın sesli özellikleri için) — bu, WhatsApp'ın diğer isteklerini kapsar.",
+                          en: "Video calls are rejected while this is off. Microphone is always on (for WhatsApp's voice features) — this covers WhatsApp's other requests." } },
             ],
         },
     ];
 
-    // AI-specific — lives in the AI panel (its own tab bar, see #aiTabBar),
-    // only shown once AI Bot is turned on (see loadServicesTab()). Includes
+    // AI-specific — renders into generalAiSection, under Genel, only shown
+    // once AI Bot is turned on (see syncAiSectionsVisibility). Includes
     // access/prefix settings that are meaningless without AI (see the note
     // on SECTIONS_I18N above).
     const AI_SECTIONS_I18N = [
@@ -3194,10 +3543,15 @@
             buildForm(values);
         }
         // Whitelist/blacklist/admins/lists/AI memory were all wiped too —
-        // refresh whatever else might be showing stale data.
+        // refresh whatever else might be showing stale data. This button
+        // only shows on Genel (see settingsFooter's hidden toggle in
+        // switchTab), so activeTab is always 'general' here — just the AI
+        // section's own gate still applies. Yardım's own content is static
+        // bot documentation, unaffected by a factory reset — no need to
+        // refresh it here.
         if (currentChatId) openChat(currentChatId);
         if (activeTab === 'lists') loadList();
-        if (activeTab === 'ai-general') loadServicesTab();
+        if (aiSectionsEnabled) loadAiGeneralTab();
         showSaved();
     });
 
@@ -3542,19 +3896,25 @@
     const preferredCameraSelect = document.getElementById('preferredCameraSelect');
     const refreshMediaDevicesBtn = document.getElementById('refreshMediaDevicesBtn');
     const mediaDevicesHint = document.getElementById('mediaDevicesHint');
-    const aiPanel = document.getElementById('aiPanel');
     const aiDebugChatSelect = document.getElementById('aiDebugChatSelect');
     const aiDebugChatHintEl = document.getElementById('aiDebugChatHint');
     const aiSaveBtn = document.getElementById('aiSaveBtn');
     const aiClearAllBtn = document.getElementById('aiClearAllBtn');
 
-    // The AI button itself only shows once AI Bot is on for the active
-    // profile — no point offering an entry point into AI settings that
-    // don't do anything yet. If it was just turned off while one of its
-    // tabs was open, fall back to Genel instead of showing an empty/gone tab.
-    function updateAiBtnVisibility(aiChatEnabled) {
-        aiBtn.style.display = aiChatEnabled ? '' : 'none';
-        if (!aiChatEnabled && activeTab.startsWith('ai-')) switchTab('general');
+    // Shows/hides generalAiSection (under Genel), chatAiSection (under
+    // Sohbet) and the Yardım tab button — AI settings used to live under
+    // their own dedicated tab bar, gone now that most of it is folded into
+    // Genel/Sohbet directly (see switchTab). aiSectionsEnabled also gates
+    // switchTab's own loading of their data, so this must run before any
+    // tab switch relies on it. If AI just got turned off while Yardım was
+    // the active tab, bounce back to Genel instead of leaving a hidden tab
+    // showing.
+    function syncAiSectionsVisibility(aiChatEnabled) {
+        aiSectionsEnabled = !!aiChatEnabled;
+        document.getElementById('generalAiSection').style.display = aiSectionsEnabled ? '' : 'none';
+        document.getElementById('chatAiSection').style.display = aiSectionsEnabled ? '' : 'none';
+        document.getElementById('tabBtnHelp').style.display = aiSectionsEnabled ? '' : 'none';
+        if (!aiSectionsEnabled && activeTab === 'help') switchTab('general');
     }
 
     // connectionMode 'web' (either platform) has no bot running at all (see
@@ -3566,7 +3926,7 @@
         document.getElementById('tabBtnChat').style.display = hideBotTabs ? 'none' : '';
         document.getElementById('tabBtnLists').style.display = hideBotTabs ? 'none' : '';
         document.getElementById('tabBtnServices').style.display = hideBotTabs ? 'none' : '';
-        if (hideBotTabs && (activeTab === 'chat' || activeTab === 'lists' || activeTab === 'services' || activeTab.startsWith('ai-'))) {
+        if (hideBotTabs && (activeTab === 'chat' || activeTab === 'lists' || activeTab === 'services')) {
             switchTab('general');
         }
     }
@@ -3659,9 +4019,10 @@
         loadMediaDevices(preferredMicSelect.value, preferredCameraSelect.value);
     });
 
-    // AI tab's Genel sub-tab — only reachable while AI Bot is on (aiBtn is
-    // hidden otherwise, see updateAiBtnVisibility), so its content no
-    // longer needs its own separate on/off gating.
+    // generalAiSection's data — only visible while AI Bot is on (see
+    // syncAiSectionsVisibility), so this itself doesn't need its own
+    // separate on/off gating; callers (switchTab, syncAiSectionsVisibility's
+    // callers) already only invoke it when that's true.
     async function loadAiGeneralTab() {
         if (!activeProfileId) return;
         const values = await window.nerobot.getSettings(activeProfileId);
@@ -3680,7 +4041,7 @@
         }
         const values = await window.nerobot.saveSettings(activeProfileId, { aiChatEnabled: svcAiToggle.checked });
         svcAiHintEl.textContent = values.aiChatEnabled ? t('svcAiHintOn') : t('svcAiHintOff');
-        updateAiBtnVisibility(!!values.aiChatEnabled);
+        syncAiSectionsVisibility(!!values.aiChatEnabled);
         showSaved();
     });
 
@@ -4124,6 +4485,85 @@
         return !!result.ok;
     }
 
+    // Purely a UI concern — which order the OPEN profile tabs show in,
+    // independent of allProfiles' own order (which also drives the Home
+    // grid and shouldn't jump around just because tabs got dragged).
+    // Persisted so a reorder survives a restart; any id not in here (a
+    // freshly-opened profile, or the very first run) just falls back to
+    // wherever it'd naturally sort in allProfiles.
+    let tabOrder = [];
+    try { tabOrder = JSON.parse(localStorage.getItem('nerobot.tabOrder') || '[]'); } catch (_) { tabOrder = []; }
+    function saveTabOrder() {
+        try { localStorage.setItem('nerobot.tabOrder', JSON.stringify(tabOrder)); } catch (_) {}
+    }
+    function orderedOpenProfiles() {
+        const open = allProfiles.filter(p => p.isOpen);
+        const byId = new Map(open.map(p => [p.id, p]));
+        const ordered = [];
+        for (const id of tabOrder) {
+            const p = byId.get(id);
+            if (p) { ordered.push(p); byId.delete(id); }
+        }
+        for (const p of open) if (byId.has(p.id)) ordered.push(p);
+        return ordered;
+    }
+
+    // Drag-to-reorder for the WA/Telegram profile tabs (the NeRoChAt tab
+    // stays put at the front — it isn't part of allProfiles/tabOrder at
+    // all). HTML5 drag-and-drop: dragstart marks the source, dragover on
+    // another tab previews which side it'd land on (dragOverBefore/After,
+    // split at that tab's own horizontal midpoint), drop commits the new
+    // tabOrder and re-renders.
+    let dragTabId = null;
+    function clearDragOverMarkers() {
+        document.querySelectorAll('.profileTab.dragOverBefore, .profileTab.dragOverAfter')
+            .forEach(el => el.classList.remove('dragOverBefore', 'dragOverAfter'));
+    }
+    function wireTabDrag(tab, profileId) {
+        tab.draggable = true;
+        tab.addEventListener('dragstart', (e) => {
+            dragTabId = profileId;
+            tab.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', profileId);
+        });
+        tab.addEventListener('dragend', () => {
+            tab.classList.remove('dragging');
+            clearDragOverMarkers();
+            dragTabId = null;
+        });
+        tab.addEventListener('dragover', (e) => {
+            if (!dragTabId || dragTabId === profileId) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const rect = tab.getBoundingClientRect();
+            const before = (e.clientX - rect.left) < rect.width / 2;
+            tab.classList.toggle('dragOverBefore', before);
+            tab.classList.toggle('dragOverAfter', !before);
+        });
+        tab.addEventListener('dragleave', () => {
+            tab.classList.remove('dragOverBefore', 'dragOverAfter');
+        });
+        tab.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const before = tab.classList.contains('dragOverBefore');
+            clearDragOverMarkers();
+            const draggedId = dragTabId;
+            dragTabId = null;
+            if (!draggedId || draggedId === profileId) return;
+            const ids = orderedOpenProfiles().map(p => p.id);
+            const from = ids.indexOf(draggedId);
+            let to = ids.indexOf(profileId);
+            if (from === -1 || to === -1) return;
+            ids.splice(from, 1);
+            to = ids.indexOf(profileId);
+            ids.splice(before ? to : to + 1, 0, draggedId);
+            tabOrder = ids;
+            saveTabOrder();
+            renderTabs();
+        });
+    }
+
     function renderTabs() {
         document.getElementById('homeTabBtn').classList.toggle('active', !activeProfileId && !ollamaTabActive);
         const container = document.getElementById('profileTabs');
@@ -4156,7 +4596,7 @@
             container.appendChild(tab);
         }
 
-        for (const p of allProfiles.filter(p => p.isOpen)) {
+        for (const p of orderedOpenProfiles()) {
             const tab = document.createElement('div');
             tab.className = 'profileTab' + (p.id === activeProfileId ? ' active' : '') + (hasUnreadNotifications(p.id) ? ' hasUnread' : '');
             tab.dataset.id = p.id;
@@ -4177,8 +4617,17 @@
             tab.appendChild(nameEl);
             tab.appendChild(closeEl);
             tab.addEventListener('click', () => activateTab(p.id));
+            wireTabDrag(tab, p.id);
             container.appendChild(tab);
         }
+
+        // Too many tabs to fit — #tabStrip scrolls (see its CSS/the wheel
+        // handler below), but a newly-activated tab can still land outside
+        // the visible scroll window with nothing to show it did. Keep
+        // whichever one is active in view instead of leaving the user to go
+        // hunt for it.
+        const activeEl = container.querySelector('.profileTab.active') || document.getElementById('homeTabBtn');
+        activeEl?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     }
 
     function updateViewVisibility() {
@@ -4202,11 +4651,7 @@
         }
         // settingsBtn now always opens the global settings panel (Uygulama
         // is always available there, even on the bare Home screen — see
-        // openGlobalSettings/defaultGsSection) — never disabled. aiBtn (the
-        // Hizmetler/AI-service shortcut) stays WA-profile-only, so it's
-        // still hidden while NeRoChAt is active or on Home (see
-        // updateAiBtnVisibility).
-        aiBtn.disabled = blank;
+        // openGlobalSettings/defaultGsSection) — never disabled.
         // No profile is active on the Home/Ollama screens, so the dot/status
         // text (which describe a profile's bot connection) don't mean
         // anything — hide them there. statusLogBtn itself stays visible
@@ -4261,7 +4706,7 @@
         if (settingsOpen) renderGsProfileNav();
 
         if (!activeProfileId) {
-            updateAiBtnVisibility(false);
+            syncAiSectionsVisibility(false);
             // Only bounce the panel back to Uygulama if it was showing a
             // profile section that just went away — Uygulama/NeRoChAt don't
             // depend on activeProfileId at all, no reason to touch those.
@@ -4274,7 +4719,7 @@
         updateModeTabVisibility(entry?.mode);
 
         const values = await window.nerobot.getSettings(activeProfileId);
-        updateAiBtnVisibility(!!values.aiChatEnabled && entry?.mode !== 'web');
+        syncAiSectionsVisibility(!!values.aiChatEnabled && entry?.mode !== 'web');
 
         // Only rebuild the profile-tab form/reload its data if the panel is
         // actually showing THIS profile right now — this can also fire for
@@ -4283,11 +4728,11 @@
         // profile entirely.
         if (settingsOpen && gsCurrentSection === activeProfileId) {
             buildForm(values);
-            if (activeTab === 'chat' || activeTab === 'ai-chat') loadChatList();
+            if (activeTab === 'chat') loadChatList();
             if (activeTab === 'lists') loadList();
             if (activeTab === 'services') loadServicesTab();
-            if (activeTab === 'ai-general') loadAiGeneralTab();
-            if (activeTab === 'ai-help') loadAiHelpTab();
+            if (activeTab === 'general' && aiSectionsEnabled) loadAiGeneralTab();
+            if (activeTab === 'help' && aiSectionsEnabled) loadAiHelpTab();
         }
     }
 
@@ -4381,15 +4826,30 @@
     // Telegram/NeRoChAt content the user actually had on screen.
     const modalBackdrop = document.getElementById('modalBackdrop');
     const modalBackdropImg = document.getElementById('modalBackdropImg');
+    const modalBackdropContentImg = document.getElementById('modalBackdropContentImg');
+    const middleEl = document.getElementById('middle');
     async function openModal(overlayId) {
         const wasAnyOpen = !!document.querySelector('.modalOverlay.open');
         document.getElementById(overlayId).classList.add('open');
         if (wasAnyOpen) return;
+        // { base, content } — see main.js's 'modal:toggle'/getVisibleContentView.
+        // base is this page's own chrome; content (if any) is whichever WA/
+        // Telegram/Ollama/splash view was actually on screen, positioned here
+        // to line up with #middle (the DOM area that view sits over — see
+        // layoutViews' activeBounds in main.js, which #middle's own layout
+        // mirrors).
         const snapshot = await window.nerobot.setModalOpen(true);
-        if (snapshot) {
-            modalBackdropImg.src = snapshot;
-            modalBackdrop.classList.add('show');
+        if (snapshot?.base) modalBackdropImg.src = snapshot.base;
+        if (snapshot?.content) {
+            const rect = middleEl.getBoundingClientRect();
+            modalBackdropContentImg.style.left = rect.left + 'px';
+            modalBackdropContentImg.style.top = rect.top + 'px';
+            modalBackdropContentImg.style.width = rect.width + 'px';
+            modalBackdropContentImg.style.height = rect.height + 'px';
+            modalBackdropContentImg.src = snapshot.content;
+            modalBackdropContentImg.style.display = 'block';
         }
+        if (snapshot?.base || snapshot?.content) modalBackdrop.classList.add('show');
     }
     function closeModal(overlayId) {
         document.getElementById(overlayId).classList.remove('open');
@@ -4397,6 +4857,8 @@
             window.nerobot.setModalOpen(false);
             modalBackdrop.classList.remove('show');
             modalBackdropImg.src = '';
+            modalBackdropContentImg.src = '';
+            modalBackdropContentImg.style.display = 'none';
         }
     }
 
@@ -4709,6 +5171,18 @@
 
     document.getElementById('homeTabBtn').addEventListener('click', () => activateTab(null));
 
+    // A crowded tab strip only scrolls horizontally (see #tabStrip's CSS) —
+    // fine for a trackpad, but a plain vertical mouse wheel has nothing to
+    // grab onto there by default, which is how tabs past the visible edge
+    // used to become unreachable. Redirect ordinary vertical wheel input
+    // into horizontal scroll here, same trick most horizontal tab/chip
+    // strips use.
+    document.getElementById('tabStrip').addEventListener('wheel', (e) => {
+        if (e.deltaY === 0) return;
+        e.preventDefault();
+        e.currentTarget.scrollLeft += e.deltaY;
+    }, { passive: false });
+
     window.nerobot.getSplashAscii().then(text => {
         document.getElementById('homeAscii').textContent = text;
     }).catch(() => {});
@@ -4720,6 +5194,7 @@
     refreshProfiles();
     refreshOllamaStatus();
     loadNeroPopupShortcut();
+    loadFixTextShortcut();
 </script>
 </body>
 </html>

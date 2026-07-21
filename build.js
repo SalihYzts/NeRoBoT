@@ -1,6 +1,7 @@
 // Sürüm derleme betiği — çalıştırıldığında:
 //   1) Yeni sürüm numarasını sorar (package.json'a yazar)
-//   2) İkonları yeniden oluşturur ve electron-builder ile Windows kurulum
+//   2) Gerekirse (node_modules yok/eski) "npm install" çalıştırır
+//   3) İkonları yeniden oluşturur ve electron-builder ile Windows kurulum
 //      paketini (.exe) YERELDE derler — dist/ klasörüne yazar, GitHub'a
 //      hiçbir şey göndermez/yayınlamaz.
 // Kaynak kodu commit'leyip GitHub'a göndermek ve bu sürümü bir GitHub
@@ -41,9 +42,32 @@ function run(cmd, args) {
     }
 }
 
+// gen-icons (sharp/png-to-ico) ve dist (electron-builder) adımları bir
+// fresh checkout'ta (node_modules hiç yok) ya da package.json'a yeni bir
+// bağımlılık eklendiğinde (electron-updater gibi) node_modules eskiyip
+// kaldığında sessizce "Cannot find module" ile patlıyordu — elle "npm
+// install" hatırlamak yerine burada otomatik kontrol edip gerekiyorsa
+// kendisi kuruyor. node_modules'ın kendi mtime'ı, içine npm'in en son ne
+// zaman dosya ekleyip çıkardığını yansıtır (çoğu dosya sisteminde bir
+// dizine yazmak dizinin kendi mtime'ını da günceller) — package.json bunun
+// SONRASINDA değiştiyse (yeni bağımlılık eklenmiş/silinmiş demektir),
+// yeniden kurulum tetiklenir.
+function ensureDependenciesInstalled() {
+    const nodeModulesPath = path.join(ROOT, 'node_modules');
+    const pkgMtime = fs.statSync(PKG_PATH).mtimeMs;
+    const needsInstall = !fs.existsSync(nodeModulesPath) || pkgMtime > fs.statSync(nodeModulesPath).mtimeMs;
+    if (!needsInstall) return;
+    console.log(fs.existsSync(nodeModulesPath)
+        ? '\npackage.json, node_modules\'tan daha yeni görünüyor — bağımlılıklar güncelleniyor...'
+        : '\nnode_modules bulunamadı — bağımlılıklar kuruluyor...');
+    run('npm', ['install']);
+}
+
 async function main() {
     const pkg = JSON.parse(fs.readFileSync(PKG_PATH, 'utf8'));
     console.log(`Mevcut sürüm: ${pkg.version}`);
+
+    ensureDependenciesInstalled();
 
     let version;
     for (;;) {

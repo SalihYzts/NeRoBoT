@@ -40,7 +40,11 @@ import { createTelegramBot } from '../project_scripts/telegram-bot.js';
 import { getEmbeddedTelegramCredentials } from '../project_scripts/telegram-default-app.js';
 import ollamaClient from 'ollama';
 import QRCode from 'qrcode';
-import { autoUpdater } from 'electron-updater';
+// electron-updater is CommonJS — its named exports aren't statically
+// analyzable from an ESM import, hence the default-import + destructure
+// (Node's own suggestion for this exact error).
+import electronUpdaterPkg from 'electron-updater';
+const { autoUpdater } = electronUpdaterPkg;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // PROJECT_ROOT is the app's OWN install location (where package.json/
@@ -118,7 +122,7 @@ function writeTelegramAppConfig(config) {
 // Same read/write shape as the Telegram app config above, own file since
 // it's a genuinely separate concern.
 const APP_CONFIG_FILE = path.join(DB_DIR, 'app-config.json');
-const DEFAULT_APP_CONFIG = { neroPopupShortcut: 'Ctrl+Shift+K' };
+const DEFAULT_APP_CONFIG = { neroPopupShortcut: 'Ctrl+Shift+K', fixTextShortcut: 'Ctrl+Shift+J', fixTextAutoMode: false };
 
 function readAppConfig() {
     try {
@@ -151,6 +155,38 @@ function matchesNeroShortcut(input) {
     if (!!input.alt !== parts.includes('Alt')) return false;
     if (!!input.shift !== parts.includes('Shift')) return false;
     return String(input.key).toUpperCase() === wantKey.toUpperCase();
+}
+
+// Same shape as matchesNeroShortcut above, just its own configurable combo
+// (see handleFixTextShortcut below) — the "fix this draft" shortcut, only
+// meaningful while a WhatsApp view has focus (see wireGlobalShortcuts).
+function matchesFixTextShortcut(input) {
+    if (input.type !== 'keyDown' || input.isAutoRepeat) return false;
+    const combo = readAppConfig().fixTextShortcut;
+    if (!combo) return false;
+    const parts = combo.split('+');
+    const wantKey = parts[parts.length - 1];
+    if (!!input.control !== parts.includes('Ctrl')) return false;
+    if (!!input.alt !== parts.includes('Alt')) return false;
+    if (!!input.shift !== parts.includes('Shift')) return false;
+    return String(input.key).toUpperCase() === wantKey.toUpperCase();
+}
+
+// Ctrl+Tab / Ctrl+Shift+Tab tab switcher — same "has to work no matter which
+// embedded view has keyboard focus" story as the NeRoChAt shortcut above.
+// Fixed combo (not user-configurable like neroPopupShortcut), so no config
+// read needed: just Tab, held with Ctrl, not an OS key-repeat.
+function matchesTabSwitchStep(input) {
+    return input.type === 'keyDown' && !input.isAutoRepeat && input.control && String(input.key).toUpperCase() === 'TAB';
+}
+// The switcher commits on Ctrl's own release, wherever that happens — not
+// gated on any particular key combo, since by then Tab has already been
+// let go too.
+function isControlKeyUp(input) {
+    return input.type === 'keyUp' && input.key === 'Control';
+}
+function matchesEscapeKeyDown(input) {
+    return input.type === 'keyDown' && !input.isAutoRepeat && input.key === 'Escape';
 }
 
 // ============================
@@ -195,11 +231,32 @@ function pushNotification(session, { chatId, chatName, senderName, body, t, avat
     if (win && !win.isDestroyed()) win.webContents.send('notif:new', entry);
 }
 
-function wireNeroShortcut(webContents) {
+// Hooks one embedded view's 'before-input-event' for every global shortcut
+// that has to work regardless of which view currently has keyboard focus
+// (basically always, once a profile's open — see matchesNeroShortcut's own
+// doc). Renamed from wireNeroShortcut now that it covers the Ctrl+Tab
+// switcher too; still called from the same three setup sites
+// (setupWaView/setupTelegramView/setupOllamaView).
+// `session` is only passed for WA/Telegram views (needed by
+// handleFixTextShortcut, which reads/writes that profile's own embedded
+// page) — the Ollama view passes none, since there's no compose box or bot
+// there for that shortcut to act on.
+function wireGlobalShortcuts(webContents, session) {
     webContents.on('before-input-event', (event, input) => {
-        if (!matchesNeroShortcut(input)) return;
-        event.preventDefault();
-        if (win && !win.isDestroyed()) win.webContents.send('nero:openPopup');
+        if (matchesNeroShortcut(input)) {
+            event.preventDefault();
+            if (win && !win.isDestroyed()) win.webContents.send('nero:openPopup');
+        } else if (matchesTabSwitchStep(input)) {
+            event.preventDefault();
+            if (win && !win.isDestroyed()) win.webContents.send('tabSwitcher:step', input.shift ? -1 : 1);
+        } else if (isControlKeyUp(input)) {
+            if (win && !win.isDestroyed()) win.webContents.send('tabSwitcher:commit');
+        } else if (matchesEscapeKeyDown(input)) {
+            if (win && !win.isDestroyed()) win.webContents.send('tabSwitcher:cancel');
+        } else if (session && matchesFixTextShortcut(input)) {
+            event.preventDefault();
+            handleFixTextShortcut(session).catch(err => console.error('[fixText]', err.message || err));
+        }
     });
 }
 
@@ -271,6 +328,10 @@ let logOpen = false;
 // is open in the renderer's own DOM — see layoutViews() below and the
 // 'modal:toggle' IPC handler.
 let modalOpen = false;
+// Bumped on every 'modal:toggle' call — lets a slow open() notice a close()
+// landed while it was still capturing and bail out instead of clobbering
+// the closed state with a stale result (see the handler below).
+let modalToggleGen = 0;
 let devToolsPort = null;
 // The Ollama chat is an embedded tab (like a WA profile), not a separate
 // OS window — same WebContentsView pattern as a profile's waView, just
@@ -498,6 +559,15 @@ function hideSplash(session) {
 // so this fills that gap. Re-injecting is safe/cheap: the wrap only
 // happens once per page load (__nerobotPatched guard), later calls just
 // update the prefs object the wrapped function reads from.
+//
+// `ideal`, not `exact`, on purpose: a saved deviceId can go stale (USB
+// webcam unplugged, driver update reassigning ids, profile exported/
+// imported onto a different machine) — `exact` turns that into a hard
+// OverconstrainedError on every getUserMedia() call, which is what was
+// surfacing as WhatsApp's generic "kamera bulunamadı" even though a camera
+// was actually available, just not under the id we'd pinned. `ideal` uses
+// the saved device when it's still there and falls back to the system
+// default instead of failing outright when it isn't.
 function buildDeviceOverrideScript(micId, camId) {
     const prefs = JSON.stringify({ mic: micId || '', cam: camId || '' });
     return `(() => {
@@ -509,11 +579,11 @@ function buildDeviceOverrideScript(micId, camId) {
             constraints = constraints ? Object.assign({}, constraints) : {};
             if (p.mic && constraints.audio) {
                 constraints.audio = typeof constraints.audio === 'object' ? Object.assign({}, constraints.audio) : {};
-                constraints.audio.deviceId = { exact: p.mic };
+                constraints.audio.deviceId = { ideal: p.mic };
             }
             if (p.cam && constraints.video) {
                 constraints.video = typeof constraints.video === 'object' ? Object.assign({}, constraints.video) : {};
-                constraints.video.deviceId = { exact: p.cam };
+                constraints.video.deviceId = { ideal: p.cam };
             }
             return orig(constraints);
         };
@@ -592,28 +662,41 @@ async function setupWaView(session) {
     // UA so WhatsApp Web doesn't treat us as an unsupported browser.
     session.waView.webContents.session.setUserAgent(CHROME_UA);
 
-    // WhatsApp needs mic/camera access for voice messages and voice/video
-    // calls — always granted, unconditionally: this embedded view has no
-    // browser chrome at all (no address bar, no padlock icon), so denying
-    // it points WhatsApp's own in-page prompt ("click the icon next to the
-    // address bar") at UI that doesn't exist here, a permanent dead end.
-    // Notifications/location are genuinely optional and per-profile
-    // toggleable (Ayarlar → Genel → İzinler) — session.store doesn't exist
-    // yet at setup time (the bot factory runs after this), so these read it
-    // lazily inside the callback, which only fires once WhatsApp actually
-    // asks (well after the bot is up) — defaulting true covers the gap.
-    // Everything else (midiSysex, pointerLock, etc.) stays denied.
-    function isPermissionAllowed(permission) {
-        if (permission === 'media') return true;
+    // WhatsApp needs mic access for voice messages/calls — always granted,
+    // unconditionally: this embedded view has no browser chrome at all (no
+    // address bar, no padlock icon), so denying it points WhatsApp's own
+    // in-page prompt ("click the icon next to the address bar") at UI that
+    // doesn't exist here, a permanent dead end. Notifications/location/
+    // camera are genuinely optional and per-profile toggleable (Ayarlar →
+    // Genel → İzinler) — session.store doesn't exist yet at setup time (the
+    // bot factory runs after this), so these read it lazily inside the
+    // callback, which only fires once WhatsApp actually asks (well after
+    // the bot is up) — defaulting true covers the gap. Everything else
+    // (midiSysex, pointerLock, etc.) stays denied.
+    //
+    // Camera gets its own toggle instead of riding along with mic under the
+    // single 'media' permission Electron reports both under — `details.
+    // mediaTypes` (only populated for 'media') says which of audio/video was
+    // actually requested, so a request that's audio-only (voice messages,
+    // audio-only calls) is unaffected by cameraEnabled; only a request that
+    // includes video gets denied when it's off. A combined audio+video
+    // request (a video call) with the camera toggle off denies the WHOLE
+    // request, same as a real browser blocking camera mid-video-call would
+    // — there's no partial grant at this API level.
+    function isPermissionAllowed(permission, details) {
         const state = session.store?.state;
+        if (permission === 'media') {
+            if (details?.mediaTypes?.includes('video')) return state?.cameraEnabled ?? true;
+            return true;
+        }
         if (permission === 'notifications') return state?.notificationsEnabled ?? true;
         if (permission === 'geolocation') return state?.locationEnabled ?? true;
         return false;
     }
-    session.waView.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
-        callback(isPermissionAllowed(permission));
+    session.waView.webContents.session.setPermissionRequestHandler((_wc, permission, callback, details) => {
+        callback(isPermissionAllowed(permission, details));
     });
-    session.waView.webContents.session.setPermissionCheckHandler((_wc, permission) => isPermissionAllowed(permission));
+    session.waView.webContents.session.setPermissionCheckHandler((_wc, permission, _origin, details) => isPermissionAllowed(permission, details));
 
     // Screen sharing during a call (getDisplayMedia) — Electron has no
     // built-in picker of its own the way a real browser does, so without
@@ -652,7 +735,7 @@ async function setupWaView(session) {
         return { action: 'deny' };
     });
 
-    wireNeroShortcut(session.waView.webContents);
+    wireGlobalShortcuts(session.waView.webContents, session);
 
     win.contentView.addChildView(session.waView);
     layoutViews();
@@ -685,24 +768,29 @@ async function setupTelegramView(session) {
     // so Telegram Web doesn't flag this as an unsupported browser.
     session.tgView.webContents.session.setUserAgent(CHROME_UA);
 
-    // Telegram Web wants mic/camera for voice messages and voice/video
-    // calls — auto-granted for the same reason WA's view grants them
-    // unconditionally (see setupWaView): no browser chrome here for
-    // Telegram's own in-page permission prompt to point at.
-    // Notifications/geolocation follow this profile's own store toggle when
-    // it has one (connectionMode 'both'); default to allowed when it
-    // doesn't (connectionMode 'web' — no bot/store at all for this profile).
-    function isPermissionAllowed(permission) {
-        if (permission === 'media') return true;
+    // Telegram Web wants mic access for voice messages/calls — auto-granted
+    // for the same reason WA's view grants it unconditionally (see
+    // setupWaView): no browser chrome here for Telegram's own in-page
+    // permission prompt to point at. Notifications/geolocation/camera
+    // follow this profile's own store toggle when it has one (connectionMode
+    // 'both'); default to allowed when it doesn't (connectionMode 'web' —
+    // no bot/store at all for this profile). See setupWaView's own
+    // isPermissionAllowed for why camera gets checked against
+    // details.mediaTypes instead of riding along with mic under 'media'.
+    function isPermissionAllowed(permission, details) {
         const state = session.store?.state;
+        if (permission === 'media') {
+            if (details?.mediaTypes?.includes('video')) return state?.cameraEnabled ?? true;
+            return true;
+        }
         if (permission === 'notifications') return state?.notificationsEnabled ?? true;
         if (permission === 'geolocation') return state?.locationEnabled ?? true;
         return false;
     }
-    session.tgView.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
-        callback(isPermissionAllowed(permission));
+    session.tgView.webContents.session.setPermissionRequestHandler((_wc, permission, callback, details) => {
+        callback(isPermissionAllowed(permission, details));
     });
-    session.tgView.webContents.session.setPermissionCheckHandler((_wc, permission) => isPermissionAllowed(permission));
+    session.tgView.webContents.session.setPermissionCheckHandler((_wc, permission, _origin, details) => isPermissionAllowed(permission, details));
 
     // Screen sharing during a Telegram call — same picker WA's view uses.
     session.tgView.webContents.session.setDisplayMediaRequestHandler(async (_request, callback) => {
@@ -726,7 +814,7 @@ async function setupTelegramView(session) {
         return { action: 'deny' };
     });
 
-    wireNeroShortcut(session.tgView.webContents);
+    wireGlobalShortcuts(session.tgView.webContents);
 
     win.contentView.addChildView(session.tgView);
     layoutViews();
@@ -763,7 +851,7 @@ async function setupOllamaView() {
     ollamaView = new WebContentsView({
         webPreferences: { preload: path.join(__dirname, 'preload.cjs') },
     });
-    wireNeroShortcut(ollamaView.webContents);
+    wireGlobalShortcuts(ollamaView.webContents);
 
     win.contentView.addChildView(ollamaView);
     await ollamaView.webContents.loadFile(path.join(__dirname, 'ui', 'ollama.html'));
@@ -1291,17 +1379,82 @@ ipcMain.on('logs:toggle', (_e, open) => {
 // can show it blurred behind itself instead of just going black (that view
 // is a separate native layer stacked above this page's own DOM — nothing in
 // the page's own CSS can blur it, and once modalOpen collapses it there's
-// nothing left there to blur even if it could). win.capturePage() (on the
-// BrowserWindow itself, not a webContents) composites every child view
-// together with this page, unlike webContents.capturePage() which would
-// only grab this page's own chrome. Closing needs no screenshot, just the
-// reverse layout pass.
-ipcMain.handle('modal:toggle', async (_e, open) => {
-    if (open) {
-        let snapshot = null;
-        if (win && !win.isDestroyed()) {
-            try { snapshot = (await win.capturePage()).toDataURL(); } catch (_) {}
+// nothing left there to blur even if it could).
+//
+// win.capturePage() alone isn't enough here — Electron defines
+// BrowserWindow.prototype.capturePage as a straight passthrough to
+// `this.webContents.capturePage(...)`, i.e. it only ever rasterizes this
+// page's OWN DOM. The WA/Telegram/Ollama content lives in a separate
+// WebContentsView stacked on top via contentView.addChildView (see
+// layoutViews above) — invisible to that call.
+//
+// A previous version of this reached for desktopCapturer's 'window' sources
+// instead (an OS-level grab of the whole composited window, same mechanism
+// the screen-share picker above uses) to get around that — but
+// desktopCapturer.getSources({types:['window']}) has to enumerate + thumbnail
+// EVERY window on the whole desktop before it can hand back the one that's
+// ours, cost roughly proportional to however many windows/apps the user has
+// open, not to our own window's size. That was regularly taking multiple
+// seconds (blocking the modal + the collapse behind it), AND that
+// desktop-wide enumeration was perturbing every other open window's own
+// occlusion/visibility state on Windows in the process — WhatsApp Web's own
+// reconnect logic reacts to that, which is what was making its loading
+// screen show up far more than before once this ran on every tab switch.
+//
+// The actual fix: capture our OWN two layers directly and composite them in
+// the renderer instead — win.webContents.capturePage() for this page's own
+// chrome (topbar/tab strip/status bar) plus getVisibleContentView()'s own
+// capturePage() for whichever WA/Telegram/Ollama/splash view is actually
+// showing. Both are single-surface captures Chromium already has in memory
+// (no desktop enumeration, no touching any other window), so together
+// they're fast — fast enough that grabbing them inline, right before the
+// collapse below, is no longer something the user notices waiting on.
+function getVisibleContentView() {
+    if (ollamaActive) return ollamaView && !ollamaView.webContents.isDestroyed() ? ollamaView : null;
+    if (!activeProfileId) return null;
+    const session = sessions.get(activeProfileId);
+    if (!session) return null;
+    // Splash sits stacked above the profile's own view while it's up (see
+    // showSplash/hideSplash) — that's what's actually visible, not what's
+    // underneath it.
+    if (session.splashView && !session.splashView.webContents.isDestroyed()) return session.splashView;
+    // Mirrors layoutViews' own hideForBotMode check — a 'bot' mode profile's
+    // waView sits offscreen (not actually visible) except during its
+    // first-run QR scan, so there's nothing meaningful to grab from it here.
+    const hideForBotMode = session.mode === 'bot' && session.currentStatus?.key !== 'qr';
+    if (session.waView && !hideForBotMode && !session.waView.webContents.isDestroyed()) return session.waView;
+    if (session.tgView && !session.tgView.webContents.isDestroyed()) return session.tgView;
+    return null;
+}
+
+async function captureModalBackdrop() {
+    if (!win || win.isDestroyed()) return null;
+    try {
+        const [baseImg, contentView] = [await win.webContents.capturePage(), getVisibleContentView()];
+        const base = baseImg.isEmpty() ? null : baseImg.toDataURL();
+        let content = null;
+        if (contentView) {
+            const contentImg = await contentView.webContents.capturePage();
+            if (!contentImg.isEmpty()) content = contentImg.toDataURL();
         }
+        return (base || content) ? { base, content } : null;
+    } catch (err) {
+        console.error('[NeRoBoT] Modal arka plan görüntüsü alınamadı:', err.message || err);
+        return null;
+    }
+}
+
+ipcMain.handle('modal:toggle', async (_e, open) => {
+    // Bumped on every call — if a close() lands while an earlier open()'s
+    // capture is still in flight (rare now that capture is fast, but still
+    // possible), the open() below notices its generation is stale once the
+    // capture resolves and bails instead of clobbering the close that
+    // already happened (modalOpen=true with nothing left to ever undo it —
+    // this was the "stuck behind the blur" bug with the old, slow capture).
+    const gen = ++modalToggleGen;
+    if (open) {
+        const snapshot = await captureModalBackdrop();
+        if (gen !== modalToggleGen) return null;
         modalOpen = true;
         layoutViews();
         return snapshot;
@@ -1908,19 +2061,32 @@ ipcMain.handle('ollama:pickFile', async () => {
 });
 
 ipcMain.handle('ollama:listModels', async () => {
-    try {
-        const { models } = await ollamaClient.list();
-        return {
-            ok: true,
-            models: models.map(m => m.name),
-            // Ayarlar → NeRoChAt's model-management list wants size too (see
-            // renderOllamaModelsList in index.html) — every other caller
-            // (NeRoChAt tab's/quick-popup's model dropdowns) still just uses
-            // `models` above and ignores this.
-            detailed: models.map(m => ({ name: m.name, size: m.size || 0 })),
-        };
-    } catch (err) {
-        return { ok: false, error: err.message || String(err) };
+    // Unlike ollama:activateTab (which calls this same openOllamaApp() before
+    // ever showing the Ollama tab), the NeRoChAt quick-popup can be the very
+    // first thing in the session to touch Ollama at all — e.g. opened via its
+    // shortcut before the AI tab/Ayarlar→NeRoChAt was ever visited. Nudging
+    // the server here too, every call, is cheap (a no-op if it's already
+    // running — see openOllamaApp's own doc) and means the popup no longer
+    // depends on some other screen having opened first. A freshly-spawned
+    // server needs a beat to start listening, so retry a couple times before
+    // reporting no models instead of failing on that first call.
+    openOllamaApp();
+    for (let attempt = 0; ; attempt++) {
+        try {
+            const { models } = await ollamaClient.list();
+            return {
+                ok: true,
+                models: models.map(m => m.name),
+                // Ayarlar → NeRoChAt's model-management list wants size too (see
+                // renderOllamaModelsList in index.html) — every other caller
+                // (NeRoChAt tab's/quick-popup's model dropdowns) still just uses
+                // `models` above and ignores this.
+                detailed: models.map(m => ({ name: m.name, size: m.size || 0 })),
+            };
+        } catch (err) {
+            if (attempt >= 3) return { ok: false, error: err.message || String(err) };
+            await new Promise((r) => setTimeout(r, 400));
+        }
     }
 });
 
@@ -2116,12 +2282,19 @@ ipcMain.handle('chats:list', async (_e, profileId) => {
 // already-loaded chat.msgs collection instead (no id-based re-fetch needed
 // for "recent", since WhatsApp Web already keeps a visited chat's recent
 // history in memory).
+//
+// The renderer also uses this (with a larger limit) to populate the
+// start/end message pickers for loading a specific range into context —
+// see neroPopupChatRangeBar in index.html. There's still just the one
+// "however much WhatsApp Web already has in memory" batch under the hood;
+// the range picker slices client-side from whatever comes back here rather
+// than this handler supporting a second, id-based range fetch.
 ipcMain.handle('chat:recentMessages', async (_e, profileId, limit) => {
     const session = sessions.get(profileId);
     if (!session || !session.client || !session.botReady) {
         return { ok: false, error: 'Bot henüz hazır değil — bağlantıyı bekle.' };
     }
-    const n = Math.max(1, Math.min(50, Number(limit) || 20));
+    const n = Math.max(1, Math.min(300, Number(limit) || 20));
 
     if (session.platform === 'telegram') {
         // No "chat open in the pane" concept for Telegram in this app (see
@@ -2157,6 +2330,247 @@ ipcMain.handle('chat:recentMessages', async (_e, profileId, limit) => {
         return { ok: false, error: err.message || String(err) };
     }
 });
+
+// ============================
+// Fix-text shortcut (see matchesFixTextShortcut/wireGlobalShortcuts above,
+// configurable in Ayarlar → Uygulama as fixTextShortcut) — while a WhatsApp
+// view has focus, reads whatever draft the user has typed but not sent,
+// asks Ollama for a few corrected/re-toned variants, and shows them right
+// under the compose box. Entirely main-process + the WA page itself — no
+// renderer round-trip, unlike the NeRoChAt popup shortcut, since there's
+// nothing for index.html to display here.
+//
+// Nothing in this codebase has ever touched WhatsApp Web's own compose box
+// before (the bot always sends via client.sendMessage(), never by typing
+// into the human's UI) — these selectors are a best-effort guess, not
+// something proven against a live session; may need adjusting.
+// ============================
+const COMPOSE_BOX_SELECTORS = [
+    '#main footer div[contenteditable="true"]',
+    'footer div[contenteditable="true"]',
+    'div[contenteditable="true"][data-tab]',
+];
+
+const FIX_TEXT_PROMPT = `You are a writing assistant. The user will give you a draft WhatsApp message (in whatever language it's written in). Return ONLY a JSON object with three keys — "plain" (same wording, just spelling/grammar fixed, same tone), "formal" (same meaning, rewritten in a more formal/polite tone), "casual" (same meaning, rewritten in a relaxed/friendly tone) — each a string in the same language as the input. Do not add commentary, do not change the meaning. Example: {"plain":"...","formal":"...","casual":"..."}`;
+
+async function readComposeBoxText(session) {
+    return session.client.pupPage.evaluate((selectors) => {
+        const box = selectors.map(s => document.querySelector(s)).find(Boolean);
+        return box ? box.innerText.trim() : '';
+    }, COMPOSE_BOX_SELECTORS);
+}
+
+// Shown the instant the shortcut fires (or auto-mode notices a pause), well
+// before Ollama has replied — a bare spinner + label, replaced by
+// injectFixTextOverlay's real suggestions once they're in, or removed
+// outright if the request fails. Without this the whole thing looked dead
+// for however long the model took to respond.
+//
+// Fixed black/orange styling (not theme-adaptive — same palette regardless
+// of whether WhatsApp Web itself is in light or dark mode; see
+// injectFixTextOverlay below for the identical palette on the real
+// suggestion box).
+async function injectLoadingOverlay(session) {
+    return session.client.pupPage.evaluate((selectors) => {
+        document.getElementById('nerobotFixTextOverlay')?.remove();
+        const box = selectors.map(s => document.querySelector(s)).find(Boolean);
+        if (!box) return false;
+
+        const theme = { bg: '#000000', border: '#ff9800', sub: '#ffb74d', spinnerTrack: '#ff980055', shadow: '0 4px 16px #000c' };
+
+        const rect = box.getBoundingClientRect();
+        const overlay = document.createElement('div');
+        overlay.id = 'nerobotFixTextOverlay';
+        overlay.style.cssText = `position:fixed; left:${rect.left}px; width:${rect.width}px; top:${rect.top}px; transform:translateY(-100%); background:${theme.bg}; border:1px solid ${theme.border}; border-radius:8px; padding:10px 14px; z-index:99999; font-family:sans-serif; font-size:13px; color:${theme.sub}; box-shadow:${theme.shadow}; display:flex; align-items:center; gap:8px;`;
+        overlay.innerHTML = `<style>@keyframes nerobotFixTextSpin{to{transform:rotate(360deg)}}</style><div style="width:14px;height:14px;border:2px solid ${theme.spinnerTrack};border-top-color:${theme.sub};border-radius:50%;animation:nerobotFixTextSpin .7s linear infinite;flex:0 0 auto;"></div><span>Düzeltmeler hazırlanıyor…</span>`;
+        document.body.appendChild(overlay);
+
+        // Typing again (or hitting Enter, which sends the message) means
+        // whatever's about to show is either already stale or about to be
+        // moot — close right away instead of leaving it sitting there.
+        const closeOnActivity = (e) => {
+            if (e.type === 'keydown' && e.key !== 'Enter') return;
+            overlay.remove();
+            box.removeEventListener('input', closeOnActivity);
+            box.removeEventListener('keydown', closeOnActivity);
+        };
+        box.addEventListener('input', closeOnActivity);
+        box.addEventListener('keydown', closeOnActivity);
+        return true;
+    }, COMPOSE_BOX_SELECTORS);
+}
+
+async function removeFixTextOverlay(session) {
+    return session.client.pupPage.evaluate(() => {
+        document.getElementById('nerobotFixTextOverlay')?.remove();
+    });
+}
+
+// Same "one-off chat call, parse a JSON blob out of the reply, fail quiet"
+// shape as ollama:classifyImageIntent above — this is a convenience
+// shortcut, not a core bot feature, so any failure here just means no
+// overlay shows up rather than an error the user has to dismiss.
+async function getTextCorrections(session, draft) {
+    const model = session.store?.state?.aiModel;
+    if (!model) return null;
+    try {
+        const response = await ollamaClient.chat({
+            model,
+            messages: [
+                { role: 'system', content: FIX_TEXT_PROMPT },
+                { role: 'user', content: draft },
+            ],
+        });
+        const match = response.message.content.match(/\{[\s\S]*\}/);
+        if (!match) return null;
+        const parsed = JSON.parse(match[0]);
+        if (!parsed.plain && !parsed.formal && !parsed.casual) return null;
+        return parsed;
+    } catch (err) {
+        console.error('[fixText] Ollama error:', err.message || err);
+        return null;
+    }
+}
+
+// Injects a small suggestion box anchored just above the compose box.
+// Clicking a row writes that variant into the box — see insertIntoComposeBox
+// below for why that's more than a one-liner. Dismisses on an outside click
+// or after 20s so a stale, ignored overlay never lingers indefinitely.
+async function injectFixTextOverlay(session, variants) {
+    return session.client.pupPage.evaluate((variants, selectors) => {
+        document.getElementById('nerobotFixTextOverlay')?.remove();
+        const box = selectors.map(s => document.querySelector(s)).find(Boolean);
+        if (!box) return false;
+
+        const theme = { bg: '#000000', border: '#ff9800', text: '#ffffff', hoverBg: '#ff980033', shadow: '0 4px 16px #000c' };
+
+        // Re-finds the compose box fresh at click time instead of reusing
+        // the reference captured when the overlay was built — WhatsApp Web
+        // can swap out that node (chat switch, a message just sent) between
+        // the two, and focusing/writing into a detached node silently does
+        // nothing, which is exactly the "picking a suggestion does nothing"
+        // symptom this replaces.
+        //
+        // A plain select-all + execCommand('insertText') is the whole thing
+        // — it's a single, atomic native edit that WhatsApp's own React/
+        // Lexical editor observes and reconciles against on its own. An
+        // earlier version of this also manually wrote .textContent as a
+        // "fallback" on top of that, which was the actual cause of the
+        // draft showing up duplicated (WhatsApp's editor already reconciled
+        // its own copy from the execCommand edit, then the manual write
+        // added a second, untracked copy next to it) — so that fallback is
+        // gone, not added back.
+        function insertIntoComposeBox(text) {
+            const liveBox = selectors.map(s => document.querySelector(s)).find(Boolean);
+            if (!liveBox) return;
+            liveBox.focus();
+            document.execCommand('selectAll', false, null);
+            document.execCommand('insertText', false, text);
+        }
+
+        const rect = box.getBoundingClientRect();
+        const overlay = document.createElement('div');
+        overlay.id = 'nerobotFixTextOverlay';
+        overlay.style.cssText = `position:fixed; left:${rect.left}px; width:${rect.width}px; top:${rect.top}px; transform:translateY(-100%); background:${theme.bg}; border:1px solid ${theme.border}; border-radius:8px; padding:6px; z-index:99999; font-family:sans-serif; font-size:13px; color:${theme.text}; box-shadow:${theme.shadow};`;
+
+        const rows = [
+            ['plain', 'Düzeltilmiş'],
+            ['formal', 'Resmi'],
+            ['casual', 'Samimi'],
+        ];
+        for (const [key, label] of rows) {
+            if (!variants[key]) continue;
+            const row = document.createElement('div');
+            row.style.cssText = 'padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:2px;';
+            row.innerHTML = `<b>${label}:</b> ${variants[key]}`;
+            row.onmouseenter = () => row.style.background = theme.hoverBg;
+            row.onmouseleave = () => row.style.background = 'transparent';
+            row.onclick = () => {
+                insertIntoComposeBox(variants[key]);
+                overlay.remove();
+            };
+            overlay.appendChild(row);
+        }
+
+        document.body.appendChild(overlay);
+        const dismiss = (e) => { if (!overlay.contains(e.target)) { overlay.remove(); document.removeEventListener('mousedown', dismiss); } };
+        setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
+        setTimeout(() => overlay.remove(), 20000);
+
+        // Typing again, or hitting Enter (which sends the message), means
+        // these suggestions are for a draft that's already changed or gone
+        // — close instead of leaving stale options sitting there. Also
+        // fires from insertIntoComposeBox's own execCommand above (that's a
+        // real 'input' event too), which is harmless — the row's onclick
+        // already removes the overlay itself, this is just a no-op second
+        // removal in that case.
+        const closeOnActivity = (e) => {
+            if (e.type === 'keydown' && e.key !== 'Enter') return;
+            overlay.remove();
+            box.removeEventListener('input', closeOnActivity);
+            box.removeEventListener('keydown', closeOnActivity);
+        };
+        box.addEventListener('input', closeOnActivity);
+        box.addEventListener('keydown', closeOnActivity);
+        return true;
+    }, variants, COMPOSE_BOX_SELECTORS);
+}
+
+async function handleFixTextShortcut(session) {
+    if (!session.client || !session.botReady) return;
+    const draft = await readComposeBoxText(session);
+    if (!draft) return;
+    await injectLoadingOverlay(session);
+    const variants = await getTextCorrections(session, draft);
+    if (!variants) {
+        await removeFixTextOverlay(session);
+        return;
+    }
+    // Ollama can take a few seconds — if the user kept typing while it
+    // thought, these suggestions are for a draft that no longer exists.
+    // Showing them anyway is exactly the "the box keeps popping up while
+    // I'm still typing" complaint (auto-mode only ever triggers after a
+    // pause, but the reply can still land after typing resumes) — so drop
+    // them quietly instead of surprising the user mid-sentence.
+    const currentDraft = await readComposeBoxText(session);
+    if (currentDraft !== draft) {
+        await removeFixTextOverlay(session);
+        return;
+    }
+    await injectFixTextOverlay(session, variants);
+}
+
+// "Otomatik Düzeltme" (Ayarlar → Uygulama, fixTextAutoMode) — same
+// suggestion flow as the shortcut, just triggered by a typing pause instead
+// of a keypress. No page→Node callback wiring (no precedent for that
+// anywhere in this codebase, e.g. exposeFunction) — plain polling instead,
+// same idiom every other pupPage.evaluate call here already uses. Every
+// tick, each open WhatsApp session's draft is compared to what it was last
+// tick: unchanged across two consecutive ticks reads as "stopped typing"
+// (a ~1.5-3s pause depending on where in the interval the last keystroke
+// landed), and a draft is only ever suggested-for once, not on every idle
+// tick after that.
+const FIX_TEXT_AUTO_POLL_MS = 1500;
+setInterval(async () => {
+    if (!readAppConfig().fixTextAutoMode) return;
+    for (const session of sessions.values()) {
+        if (session.platform === 'telegram' || !session.client || !session.botReady) continue;
+        try {
+            const draft = await readComposeBoxText(session);
+            const auto = session._fixTextAuto || (session._fixTextAuto = { lastSeen: '', lastSuggested: '' });
+            if (!draft) {
+                auto.lastSeen = '';
+                continue;
+            }
+            if (draft === auto.lastSeen && draft !== auto.lastSuggested) {
+                auto.lastSuggested = draft;
+                await handleFixTextShortcut(session);
+            } else {
+                auto.lastSeen = draft;
+            }
+        } catch (_) {}
+    }
+}, FIX_TEXT_AUTO_POLL_MS);
 
 // ============================
 // IPC — notification panel (see pushNotification above) + its quick-reply

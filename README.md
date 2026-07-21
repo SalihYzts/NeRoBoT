@@ -57,7 +57,8 @@ Developer: **Salih Yazıtaş**
 - Multi-Profile — run several WhatsApp accounts and/or Telegram accounts side by side, each with its own login, settings, whitelist, admins, and AI memory
 - Notification Panel — a bell icon collects every profile's incoming messages (newest first), with an inline quick-reply box so you can answer without switching tabs; a profile's tab pulses until you've read its messages
 - NeRoChAt — a full, general-purpose AI chat tab (separate from any WhatsApp/Telegram bot), with saved conversations, image attachments, and AI image generation
-- NeRoChAt Quick Popup — a configurable global keyboard shortcut (default `Ctrl+Shift+K`) opens a small floating AI chat on top of whatever you're doing; "Ask about this chat" pulls that WhatsApp chat's recent messages in as context
+- NeRoChAt Quick Popup — a configurable global keyboard shortcut (default `Ctrl+Shift+K`) opens a small floating AI chat on top of whatever you're doing; "Ask about this chat" lets you pick a start/end message range from that WhatsApp chat's recent history to pull in as context
+- Fix-Text Shortcut — a configurable global keyboard shortcut (default `Ctrl+Shift+J`) while composing a WhatsApp message suggests spelling-corrected, formal, and casual rewrites right under the compose box; an optional "Otomatik Düzeltme" mode suggests them automatically after a typing pause, with no shortcut needed
 - Auto-Update — checks GitHub Releases on every launch and updates itself silently (download → install → relaunch) before the window even opens
 - Persistent Sessions — scan each profile's QR code once; logins survive restarts
 
@@ -246,9 +247,10 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 | `!think on` / `!think off` | Enables/disables the "thinking..." message. |
 | `!think <text>` | Updates the think-message text. |
 | `!replymode` | Toggles quoted-reply mode for AI responses. |
-| `!media` | Shows image/file reading status. |
+| `!media` | Shows image/file reading and image generation status. |
 | `!media image` | Toggles image reading (vision). |
 | `!media file` | Toggles file reading (PDF, Word, TXT, JSON, JS...). |
+| `!media imagegen` | Toggles image generation (auto-detects requests for a picture and generates one). |
 | `!aierror <text>` | Shows or updates the message shown to users on AI failure. |
 
 </details>
@@ -275,6 +277,7 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 | `!clear` | Clears this chat's memory. |
 | `!clear <ID>` | Clears a specific chat's memory. |
 | `!clear all` | Clears all chat memories. *(Requires confirmation.)* |
+| `!upload <n>` | Uploads this chat's last `<n>` messages into its own AI memory (max 300). |
 | `!reset settings` | Resets all of THIS chat's own overrides back to global. *(Requires confirmation.)* |
 | `!reset settings <name>` | Resets a single setting for this chat, no confirmation needed. |
 | `!reset all settings` | Factory-resets everything — settings, whitelist, blacklist, admins, per-chat overrides, memories. *(Requires confirmation.)* |

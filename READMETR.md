@@ -57,7 +57,8 @@ Geliştirici: **Salih Yazıtaş**
 - Çoklu Profil — birden fazla WhatsApp hesabını ve/veya Telegram hesabını yan yana çalıştırın, her biri kendi girişi, ayarları, beyaz listesi, adminleri ve AI hafızasıyla tamamen izole
 - Bildirim Paneli — bir zil ikonu tüm profillerden gelen mesajları (en yeni üstte) topluyor, satır içi hızlı-cevap kutusuyla sekme değiştirmeden yanıt verebiliyorsunuz; bir profilin sekmesi mesajlarını okuyana kadar yanıp sönüyor
 - NeRoChAt — herhangi bir WhatsApp/Telegram botuna bağlı olmayan, tam kapsamlı, genel amaçlı bir AI sohbet sekmesi; kayıtlı konuşmalar, görsel ekleme ve AI görsel üretimi ile
-- NeRoChAt Hızlı Popup — ayarlanabilir bir global klavye kısayolu (varsayılan `Ctrl+Shift+K`) ne yapıyor olursanız olun üzerine küçük, yüzen bir AI sohbeti açıyor; "Bu sohbeti sor" o WhatsApp sohbetinin son mesajlarını bağlam olarak çekiyor
+- NeRoChAt Hızlı Popup — ayarlanabilir bir global klavye kısayolu (varsayılan `Ctrl+Shift+K`) ne yapıyor olursanız olun üzerine küçük, yüzen bir AI sohbeti açıyor; "Bu sohbeti sor" o WhatsApp sohbetinin geçmişinden bir başlangıç/bitiş mesajı aralığı seçip bağlam olarak çekmeni sağlıyor
+- Yazı Düzeltme Kısayolu — ayarlanabilir bir global klavye kısayolu (varsayılan `Ctrl+Shift+J`) bir WhatsApp mesajı yazarken, yazı kutusunun hemen altında imla düzeltmeli/resmi/samimi varyantlar öneriyor; isteğe bağlı "Otomatik Düzeltme" modu kısayola basmana gerek kalmadan bir süre durakladığında önerileri kendiliğinden çıkarıyor
 - Otomatik Güncelleme — her açılışta GitHub Releases'i kontrol edip kendini sessizce güncelliyor (indir → kur → yeniden aç), pencere açılmadan önce
 - Kalıcı Oturumlar — her profilin QR kodunu bir kez okutun; girişler yeniden başlatmalarda korunur
 
@@ -246,9 +247,10 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 | `!think on` / `!think off` | Düşünme mesajını aç/kapat. |
 | `!think <metin>` | Düşünme mesajı metnini günceller. |
 | `!replymode` | AI yanıtları için alıntılı yanıt modunu aç/kapat. |
-| `!media` | Görsel/dosya okuma durumunu gösterir. |
+| `!media` | Görsel/dosya okuma ve görsel üretimi durumunu gösterir. |
 | `!media image` | Görsel okumayı (vision) aç/kapat. |
 | `!media file` | Dosya okumayı (PDF, Word, TXT, JSON, JS...) aç/kapat. |
+| `!media imagegen` | Görsel üretimini aç/kapat (resim isteyen mesajlar otomatik algılanıp üretilir). |
 | `!aierror <metin>` | AI hata verince kullanıcıya gösterilecek mesajı gösterir veya değiştirir. |
 
 </details>
@@ -275,6 +277,7 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 | `!clear` | Bu sohbetin hafızasını temizler. |
 | `!clear <ID>` | Belirtilen sohbetin hafızasını temizler. |
 | `!clear all` | Tüm sohbetlerin hafızasını temizler. *(Onay gerekir.)* |
+| `!upload <n>` | Bu sohbetin son `<n>` mesajını kendi AI hafızasına yükler (en fazla 300). |
 | `!reset settings` | Bu sohbetin kendi ayarlarının tümünü global'e sıfırlar. *(Onay gerekir.)* |
 | `!reset settings <isim>` | Bu sohbet için tek bir ayarı sıfırlar, onay gerekmez. |
 | `!reset all settings` | Her şeyi fabrika ayarlarına sıfırlar — ayarlar, beyaz liste, kara liste, adminler, sohbet bazlı ayarlar, hafızalar. *(Onay gerekir.)* |

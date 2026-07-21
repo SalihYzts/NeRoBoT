@@ -43,8 +43,16 @@ contextBridge.exposeInMainWorld('nerobot', {
     // Fired by main.js whenever the configured shortcut is pressed while a
     // WA/Telegram/Ollama embedded view has keyboard focus (those views can't
     // be reached by this page's own 'keydown' listener — see main.js's
-    // wireNeroShortcut). index.html's script calls openNeroPopup() from this.
+    // wireGlobalShortcuts). index.html's script calls openNeroPopup() from this.
     onOpenNeroPopup: (cb) => ipcRenderer.on('nero:openPopup', () => cb()),
+    // Ctrl+Tab tab switcher — same "embedded view has keyboard focus, so
+    // main.js has to forward it" story as onOpenNeroPopup above (see
+    // wireGlobalShortcuts). step: Ctrl+Tab/Ctrl+Shift+Tab fired (direction
+    // 1/-1). commit: Ctrl was released. cancel: Escape while the switcher's
+    // open.
+    onTabSwitcherStep: (cb) => ipcRenderer.on('tabSwitcher:step', (_e, direction) => cb(direction)),
+    onTabSwitcherCommit: (cb) => ipcRenderer.on('tabSwitcher:commit', () => cb()),
+    onTabSwitcherCancel: (cb) => ipcRenderer.on('tabSwitcher:cancel', () => cb()),
 
     // Global settings (Genel tab) — scoped to the given profile
     getSettings: (profileId) => ipcRenderer.invoke('settings:get', profileId),

@@ -136,6 +136,13 @@ NeRoBoT_db/
 # Token — gerçek bir sır, ASLA commit'lenmemeli.
 .release-token
 
+# release.js'in her sürümde ürettiği tek-seferlik dosyalar — CHANGELOG.md'ye
+# (bilerek repo'da kalır) ve GitHub Release notuna zaten işlendiler,
+# LinkedIn metni de tek kullanımlık; ikisinin de repo'da tekrar tekrar
+# değişen ayrı kopyaları olmasına gerek yok.
+changelog_v*.md
+linkedin_post_*.txt
+
 # ===================================
 # 💻 IDE & Editor
 # ===================================

@@ -1,6 +1,6 @@
 {
   "name": "nerobot",
-  "version": "4.4.17",
+  "version": "4.4.18",
   "description": "",
   "main": "app/main.js",
   "scripts": {
