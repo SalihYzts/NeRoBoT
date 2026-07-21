@@ -3010,6 +3010,14 @@ app.whenReady().then(async () => {
     }
 
     await createWindow();
+    // Windows doesn't reliably keep Ollama's background service running
+    // across a restart/logout — without this, AI features on an already-
+    // configured profile would silently fail until the user happened to
+    // open the NeRoChAt/Ollama tab (previously the only place this got
+    // called; see ollama:activateTab above). Fire-and-forget: harmless if
+    // Ollama's already running, or not installed at all (see
+    // openOllamaApp's own doc — both cases just no-op).
+    openOllamaApp();
     patchPuppeteerConnect();
     devToolsPort = await getDevToolsPort();
     // No auto-start — the renderer opens on the Home screen and the user
