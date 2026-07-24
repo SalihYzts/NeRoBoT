@@ -1,3 +1,27 @@
+## v4.4.23 - 2026-07-24
+
+### Hata Düzeltmeleri
+- GitHub'a yayın yapılırken `.blockmap` dosyasının `.exe`/`latest.yml` ile paralel yüklenmesi bazen aynı sürüm etiketi için iki ayrı release oluşturuyordu; GitHub bu durumda "en son release" olarak eksik olanı (güncelleme dosyası içermeyen) gösterebiliyor ve bu da otomatik güncellemenin çalışmamasına yol açıyordu. Blockmap üretimi kapatılarak bu yarış durumu ortadan kaldırıldı.
+- v4.4.18, v4.4.21 ve v4.4.22 için GitHub'da oluşmuş olan hatalı/boş duplicate release'ler temizlendi.
+
+## v4.4.22 - 2026-07-24
+
+- Release v4.4.22 (4f229de, SalihYzts)
+- Release v4.4.21 (26fe00e, SalihYzts)
+- Release v4.4.20 (bb00579, SalihYzts)
+- Release v4.4.19 (97e9ae2, SalihYzts)
+- Release v4.4.18 (84fe77b, SalihYzts)
+- deneme (1bf3347, SalihYzts)
+- Release v4.4.17 (7cfade5, SalihYzts)
+- Release v4.4.16 (1c8ffa6, SalihYzts)
+- v2.1.1 (3ee24de, SalihYzts)
+- v2.1.0 (0cd3447, SalihYzts)
+- settings update (24dd90a, SalihYzts)
+- stable version 2 (2398f52, SalihYzts)
+- js error fix (ee9d49a, SalihYzts)
+- Readme final (7b8ede3, SalihYzts)
+- Update README.md (10e300b, Salih Yazıtaş)
+
 ## v4.4.21 - 2026-07-24
 
 - Release v4.4.21 (26fe00e, SalihYzts)
