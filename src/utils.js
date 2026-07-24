@@ -211,7 +211,7 @@ export function createUtils(store) {
         return lastSent;
     }
 
-    // Sends raw image bytes (e.g. from project_scripts/imagegen.js) as
+    // Sends raw image bytes (e.g. from src/imagegen.js) as
     // WhatsApp media, with an optional text caption riding in the same
     // message — same pending/error-report conventions as sendText().
     async function sendImage(chatId, buffer, mimetype, caption) {

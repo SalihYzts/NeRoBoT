@@ -27,12 +27,12 @@ export function createCommands({ store, utils, ratelimit }) {
         chatModels, saveChatModels,
         chatPrefixes, saveChatPrefixes,
     } = store;
-    const { sendText } = utils;
+    const { sendText, getOllamaClient } = utils;
     const { resetRateLimitBucket, resetAllRateLimitBuckets } = ratelimit;
 
 // ============================
 // Project version — read from package.json (project root, one level up
-// from this file's project_scripts/ folder). Falls back gracefully if
+// from this file's src/ folder). Falls back gracefully if
 // the file is missing or malformed, so this never crashes Info/Help.
 // ============================
 function getVersion() {
@@ -727,8 +727,7 @@ async function Model(msg, targetId) {
     if (sub === 'installed') {
         let modelList = '';
         try {
-            const { default: ollama } = await import('ollama');
-            const result = await ollama.list();
+            const result = await getOllamaClient().list();
             const models = result.models || [];
             if (models.length === 0) {
                 modelList = '(no models found — is Ollama running?)';
@@ -1181,7 +1180,7 @@ async function ReplyMode(msg, targetId) {
 //   (no args)   → show status
 //   image       → toggle görsel okuma (vision)
 //   file        → toggle dosya okuma (pdf, word, txt, json, js...)
-//   imagegen    → toggle görsel üretimi (see project_scripts/imagegen.js)
+//   imagegen    → toggle görsel üretimi (see src/imagegen.js)
 // ============================
 async function Media(msg, targetId) {
     const sub = msg.body.trim().split(/\s+/)[1]?.toLowerCase();

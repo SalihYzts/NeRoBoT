@@ -103,7 +103,6 @@ nerobot/
 ├── NeRoBoT_Kurulum.bat             # First-time setup for a source checkout (npm install + icons)
 ├── NeRoBoT_Derle.bat               # Builds a versioned installer locally (no publishing)
 ├── NeRoBoT_Yayinla.bat             # Pushes source + publishes a GitHub Release (see below)
-├── build.js / release.js           # Scripts behind the two .bat files above
 ├── app/
 │   ├── main.js                     # Electron main — windows, embedded WhatsApp/Telegram views,
 │   │                                #   profile/session management, auto-update, all IPC
@@ -111,7 +110,7 @@ nerobot/
 │   └── ui/
 │       ├── index.html              # Top bar, tab strip, notification panel, settings, quick popup
 │       └── ollama.html             # NeRoChAt's own full-tab window
-├── project_scripts/
+├── src/
 │   ├── bot.js                      # WhatsApp client & message routing
 │   ├── telegram-bot.js             # Telegram client & message routing (mirrors bot.js)
 │   ├── ai.js                       # Ollama integration (chat, vision, image-intent classification)
@@ -123,8 +122,11 @@ nerobot/
 │   ├── utils.js / telegram-utils.js
 │   ├── file-extract.js             # PDF/Word/text extraction for the AI to read
 │   └── ollama-installer.js         # Detects/silently installs Ollama on Windows
-├── build/installer.nsh             # Custom NSIS install-time hook (best-effort Ollama install)
-└── scripts/gen-icons.js            # Regenerates app/ui/icon.ico + icon.png from logo.svg
+├── scripts/                        # Dev-only tooling, not shipped in the packaged app
+│   ├── build.js                    # Behind NeRoBoT_Derle.bat / npm run build
+│   ├── release.js                  # Behind NeRoBoT_Yayinla.bat / npm run release
+│   └── gen-icons.js                # Regenerates app/ui/icon.ico + icon.png from logo.svg
+└── build/installer.nsh             # Custom NSIS install-time hook (best-effort Ollama install)
 ```
 
 All profile data (WhatsApp/Telegram sessions, per-profile settings, NeRoChAt conversations, app config) is stored **outside** this folder, under `Documents/NeRoBoT/NeRoBoT_db` — so uninstalling/moving the app never touches it. Nothing under it is committed to git (see `.gitignore`).

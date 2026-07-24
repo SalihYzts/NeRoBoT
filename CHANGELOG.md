@@ -1,3 +1,19 @@
+## v4.4.20 - 2026-07-21
+
+### İyileştirmeler
+- Sürüm numaralandırma şeması güncellendi ve `v4.4.x` serisi altında kararlı sürümler yayınlandı.
+- Proje ayarları üzerinde düzenlemeler yapıldı.
+- `README.md` ve `READMETR.md` dosyaları son hâline getirildi; Türkçe dokümantasyon eklendi.
+- Kararlı sürüm (stable) yapısı yeniden düzenlendi.
+
+### Hata Düzeltmeleri
+- JavaScript kaynaklı hata düzeltildi.
+- `deneme` commit'i ile yapılan test/deneme düzeltmeleri birleştirildi.
+
+### Diğer Değişiklikler
+- `v4.4.16`, `v4.4.17`, `v4.4.18`, `v4.4.19` ve `v4.4.20` sürümleri sırasıyla yayımlandı.
+- Eski sürüm serisi (`v2.1.0`, `v2.1.1`) bu sürümle birlikte geçmiş sürüm olarak işaretlendi.
+
 ## v4.4.19 - 2026-07-21
 
 ### Yeni Özellikler

@@ -1,7 +1,7 @@
 @echo off
 rem Yeni bir surum numarasi sorar, gerekirse bagimliliklari kurar (npm
 rem install) ve kurulum paketini (.exe) YERELDE derler (GitHub'a hicbir sey
-rem gondermez/yayinlamaz). Ayrintili akis icin build.js'e bak. "npm run
+rem gondermez/yayinlamaz). Ayrintili akis icin scripts\build.js'e bak. "npm run
 rem build" ile ayni sey. Derledikten sonra yayinlamak icin
 rem NeRoBoT_Yayinla.bat'i calistir.
 setlocal
@@ -14,5 +14,5 @@ if errorlevel 1 (
     exit /b 1
 )
 
-node "%~dp0build.js"
+node "%~dp0scripts\build.js"
 pause

@@ -32,11 +32,16 @@ const { NewMessage } = events;
 // password (2FA) enabled; must resolve with the password.
 // `onStatus(key, extra)` — mirrors bot.js's status events ('starting' |
 // 'qr' | 'ready' | 'auth_failure' | 'disconnected').
-export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessionString, onQr, onPasswordRequired, onStatus, onIncomingMessage, abortSignal }) {
+// `getOllamaClient` — same as bot.js's createBot() (see its own doc): app/
+// main.js passes in a closure over readOllamaStatus() so a local/API mode
+// switch takes effect immediately, stashed onto `utils` for createAi/
+// createCommands to use as-is.
+export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessionString, onQr, onPasswordRequired, onStatus, onIncomingMessage, abortSignal, getOllamaClient }) {
     const store = createProfileStore(profileDir);
     const { state, whitelist, blacklist, admins, noPrefixChats, groupChats, chatPrefixes } = store;
 
     const utils = createTelegramUtils(store);
+    utils.getOllamaClient = getOllamaClient;
     const { setClient, sendText, replyText, sendImage, isBotSentMessage, trackSentMessage, idVariants, setHasAny } = utils;
 
     const ratelimit = createRateLimiter(store);

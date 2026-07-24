@@ -1,6 +1,6 @@
 {
   "name": "nerobot",
-  "version": "4.4.20",
+  "version": "4.4.21",
   "description": "",
   "main": "app/main.js",
   "scripts": {
@@ -8,8 +8,8 @@
     "gen-icons": "node scripts/gen-icons.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --win",
-    "build": "node build.js",
-    "release": "node release.js"
+    "build": "node scripts/build.js",
+    "release": "node scripts/release.js"
   },
   "keywords": [],
   "author": "",
@@ -36,7 +36,7 @@
     "asar": false,
     "files": [
       "app/**/*",
-      "project_scripts/**/*",
+      "src/**/*",
       "ascii.txt",
       "package.json",
       "help.txt",

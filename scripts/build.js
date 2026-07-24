@@ -19,7 +19,7 @@ import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = __dirname; // this file lives at the project root
+const ROOT = path.join(__dirname, '..'); // this file lives in scripts/, one level under the project root
 const PKG_PATH = path.join(ROOT, 'package.json');
 const IS_WIN = process.platform === 'win32';
 

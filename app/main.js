@@ -2,7 +2,7 @@
 // each tab embedding a real WhatsApp Web view (driven by whatsapp-web.js) for
 // one "profile" (WhatsApp account). Multiple profiles can be open and running
 // their own bot at the same time; each has fully isolated settings/lists/AI
-// memory (see project_scripts/config.js's createProfileStore).
+// memory (see src/config.js's createProfileStore).
 //
 // How the embedding works (per profile):
 //   1. Electron is started with ONE remote-debugging port, shared by every
@@ -14,11 +14,12 @@
 //      do — so we patch puppeteer.connect (once, globally) to hand back the
 //      page that belongs to the CORRECT profile's WebContentsView, found via
 //      a per-profile `window.__NEROBOT_WA_<id>__` marker. The profile id
-//      rides along on the puppeteer options object (see project_scripts/bot.js)
+//      rides along on the puppeteer options object (see src/bot.js)
 //      so the shared patched connect() knows which profile is asking.
 // Result: each open tab's bot drives its own WhatsApp Web view, independently.
 import { app, BrowserWindow, WebContentsView, ipcMain, shell, dialog, session as electronSession, desktopCapturer } from 'electron';
 import path from 'node:path';
+import os from 'node:os';
 import util from 'node:util';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -28,17 +29,17 @@ import {
     loadProfiles, createProfile, renameProfile, deleteProfile,
     exportProfile, overwriteProfile, getProfileDir, setProfileMode,
     createTelegramProfile, TELEGRAM_SESSION_FILE,
-} from '../project_scripts/profiles.js';
-import { isOllamaInstalled, installOllama, openOllamaApp } from '../project_scripts/ollama-installer.js';
-import { isImageExt, extractFileText } from '../project_scripts/file-extract.js';
-import { generateImage } from '../project_scripts/imagegen.js';
+} from '../src/profiles.js';
+import { isOllamaInstalled, installOllama, openOllamaApp } from '../src/ollama-installer.js';
+import { isImageExt, extractFileText } from '../src/file-extract.js';
+import { generateImage } from '../src/imagegen.js';
 import {
     IMAGE_CLASSIFY_PROMPT, IMAGE_ACK_NOTE, IMAGE_DESCRIBE_FOR_GEN_PROMPT, IMAGE_READ_FALLBACK_PROMPT,
     pickClassifierModel, modelHasVision, pickVisionFallbackModel, resolveVisionModel,
-} from '../project_scripts/ai.js';
-import { createTelegramBot } from '../project_scripts/telegram-bot.js';
-import { getEmbeddedTelegramCredentials } from '../project_scripts/telegram-default-app.js';
-import ollamaClient from 'ollama';
+} from '../src/ai.js';
+import { createTelegramBot } from '../src/telegram-bot.js';
+import { getEmbeddedTelegramCredentials } from '../src/telegram-default-app.js';
+import { getOllamaClient as resolveOllamaClient } from '../src/ollama-client.js';
 import QRCode from 'qrcode';
 // electron-updater is CommonJS — its named exports aren't statically
 // analyzable from an ESM import, hence the default-import + destructure
@@ -90,13 +91,13 @@ const DB_DIR = path.join(DATA_ROOT, 'NeRoBoT_db');
 const OLLAMA_STATUS_FILE = path.join(DB_DIR, 'ollama.json');
 // The mini Ollama chat window's saved conversations — independent of any
 // WhatsApp profile (it's a standalone Home-screen shortcut, see the
-// Ollama-tile design note in project_scripts/ollama-installer.js).
+// Ollama-tile design note in src/ollama-installer.js).
 const OLLAMA_CHATS_FILE = path.join(DB_DIR, 'ollama-chats.json');
 // api_id/api_hash for Telegram's MTProto login (my.telegram.org) — ONE pair
 // identifies this whole app to Telegram, not each profile; every Telegram
 // profile then logs in as its own real account via QR code through it, the
 // same way every WhatsApp profile here is its own independent WhatsApp Web
-// session. See project_scripts/telegram-bot.js and the telegram:* IPC below.
+// session. See src/telegram-bot.js and the telegram:* IPC below.
 const TELEGRAM_APP_FILE = path.join(DB_DIR, 'telegram-app.json');
 
 // A per-install override (NeRoBoT_db/ is gitignored, never shipped/committed)
@@ -122,7 +123,7 @@ function writeTelegramAppConfig(config) {
 // Same read/write shape as the Telegram app config above, own file since
 // it's a genuinely separate concern.
 const APP_CONFIG_FILE = path.join(DB_DIR, 'app-config.json');
-const DEFAULT_APP_CONFIG = { neroPopupShortcut: 'Ctrl+Shift+K', fixTextShortcut: 'Ctrl+Shift+J', fixTextAutoMode: false, fixTextUseLocalModel: true };
+const DEFAULT_APP_CONFIG = { neroPopupShortcut: 'Ctrl+Shift+K', fixTextShortcut: 'Ctrl+Shift+J', fixTextAutoMode: false, fixTextUseLocalModel: true, gamesPopupShortcut: 'Ctrl+Shift+O', gamesShortcutCreated: false };
 
 function readAppConfig() {
     try {
@@ -163,6 +164,20 @@ function matchesNeroShortcut(input) {
 function matchesFixTextShortcut(input) {
     if (input.type !== 'keyDown' || input.isAutoRepeat) return false;
     const combo = readAppConfig().fixTextShortcut;
+    if (!combo) return false;
+    const parts = combo.split('+');
+    const wantKey = parts[parts.length - 1];
+    if (!!input.control !== parts.includes('Ctrl')) return false;
+    if (!!input.alt !== parts.includes('Alt')) return false;
+    if (!!input.shift !== parts.includes('Shift')) return false;
+    return String(input.key).toUpperCase() === wantKey.toUpperCase();
+}
+
+// Same shape as matchesNeroShortcut above — the Oyunlar (Games) tab's own
+// quick-popup combo (see openGamesPopup in index.html).
+function matchesGamesShortcut(input) {
+    if (input.type !== 'keyDown' || input.isAutoRepeat) return false;
+    const combo = readAppConfig().gamesPopupShortcut;
     if (!combo) return false;
     const parts = combo.split('+');
     const wantKey = parts[parts.length - 1];
@@ -246,6 +261,9 @@ function wireGlobalShortcuts(webContents, session) {
         if (matchesNeroShortcut(input)) {
             event.preventDefault();
             if (win && !win.isDestroyed()) win.webContents.send('nero:openPopup');
+        } else if (matchesGamesShortcut(input)) {
+            event.preventDefault();
+            if (win && !win.isDestroyed()) win.webContents.send('games:openPopup');
         } else if (matchesTabSwitchStep(input)) {
             event.preventDefault();
             if (win && !win.isDestroyed()) win.webContents.send('tabSwitcher:step', input.shift ? -1 : 1);
@@ -396,7 +414,7 @@ for (const level of ['log', 'info', 'warn', 'error']) {
 }
 
 // Global catch-alls — registered ONCE here rather than per profile (see
-// project_scripts/bot.js), so N open profiles never stack N of these.
+// src/bot.js), so N open profiles never stack N of these.
 process.on('unhandledRejection', (reason) => {
     console.error('[NeRoBoT] unhandledRejection:', reason instanceof Error ? (reason.stack || reason.message) : reason);
 });
@@ -840,6 +858,11 @@ async function recreateWaView(session) {
         try { session.waView.webContents.close(); } catch (_) {}
         session.waView = null;
     }
+    // The old page's window.nerobotFixTextAction binding dies with it — a
+    // fresh page needs ensureFixTextBindings to re-expose it, so this flag
+    // has to be cleared here too, same as whatsapp-web.js's own page-bound
+    // bindings need a genuinely fresh page (see this function's own doc).
+    session._fixTextBindingsReady = false;
     await setupWaView(session);
 }
 
@@ -923,7 +946,7 @@ async function findWaPage(browser, profileId) {
 
 // Patched ONCE, globally — every profile's Client.initialize() calls the
 // same puppeteer.connect(), so the profile id smuggled onto the options
-// object (see project_scripts/bot.js) is how this shared wrapper knows
+// object (see src/bot.js) is how this shared wrapper knows
 // which profile's embedded page to hand back.
 function patchPuppeteerConnect() {
     const realConnect = puppeteer.connect.bind(puppeteer);
@@ -977,7 +1000,7 @@ async function attemptBotStart(session) {
     // Dynamic import: bot.js (transitively commands.js) reads package.json/
     // help.txt with cwd-relative paths, so it must load after process.chdir
     // above — a static import would run before it.
-    const { createBot } = await import('../project_scripts/bot.js');
+    const { createBot } = await import('../src/bot.js');
 
     const built = createBot({
         profileId: session.id,
@@ -991,6 +1014,7 @@ async function attemptBotStart(session) {
         // message/AI dispatch (see createBot's automationEnabled doc).
         automationEnabled: session.mode !== 'web',
         onIncomingMessage: (payload) => pushNotification(session, payload),
+        getOllamaClient: currentOllamaClient,
     });
     session.client = built.client;
     session.reportError = built.reportError;
@@ -1209,7 +1233,7 @@ async function openProfile(id) {
 
 // Telegram equivalent of setupWaView+startBotForSession — no browser view,
 // just a real MTProto login (QR code, optionally a 2FA password) followed
-// by listening for messages. See project_scripts/telegram-bot.js.
+// by listening for messages. See src/telegram-bot.js.
 async function openTelegramProfile(session) {
     setStatus(session, 'starting', 'Telegram\'a bağlanılıyor…');
 
@@ -1233,6 +1257,7 @@ async function openTelegramProfile(session) {
         apiHash: appCreds.apiHash,
         sessionString,
         abortSignal: controller.signal,
+        getOllamaClient: currentOllamaClient,
         onQr: async (url) => {
             try {
                 const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 280 });
@@ -1806,6 +1831,16 @@ function writeOllamaStatus(status) {
     fs.writeFileSync(OLLAMA_STATUS_FILE, JSON.stringify(status, null, 2));
 }
 
+// The one place every chat()/list()/embed()/etc. call in this file resolves
+// its Ollama client from — reads the just-saved connection mode
+// fresh every time (readOllamaStatus is a cheap sync file read), so
+// switching between local Ollama and the Ollama Cloud API in Ayarlar →
+// NeRoChAt takes effect on the very next call, no restart needed. See
+// src/ollama-client.js's own doc for what the two modes mean.
+function currentOllamaClient() {
+    return resolveOllamaClient(readOllamaStatus());
+}
+
 ipcMain.handle('ollama:checkInstalled', () => isOllamaInstalled());
 
 // Streams progress back over 'ollama:installProgress' while the single
@@ -1867,11 +1902,42 @@ ipcMain.handle('ollama:setImageGenApiKey', (_e, provider, apiKey) => {
     return status;
 });
 
+// 'local' | 'api' — see src/ollama-client.js / currentOllamaClient
+// above for what each mode actually resolves to. Left unset (undefined)
+// until the user picks one, which index.html's ensureOllamaOrPrompt() reads
+// as "never chosen yet" and shows the local-vs-API picker for.
+ipcMain.handle('ollama:setConnectionMode', (_e, mode) => {
+    const status = readOllamaStatus();
+    status.ollamaConnectionMode = mode === 'api' ? 'api' : 'local';
+    writeOllamaStatus(status);
+    return status;
+});
+
+// Same plain-JSON-in-DB_DIR storage as imageGenApiKeyOpenai/Stability right
+// above (not encrypted — this is local, single-user app data, same tier as
+// the WhatsApp session/whitelist files already sitting there); Ayarlar's
+// own UI is responsible for masking it on screen when showing it back.
+ipcMain.handle('ollama:setCloudApiKey', (_e, apiKey) => {
+    const status = readOllamaStatus();
+    status.ollamaCloudApiKey = apiKey || '';
+    writeOllamaStatus(status);
+    return status;
+});
+
+// The API-key setup panel's "Nasıl Alınır?" tab opens the real ollama.com
+// page in the user's actual browser (not scraped/embedded here — always
+// current, unlike a screenshot baked into this app) instead of a fake
+// mocked-up guide. Only ever called with a fixed https://ollama.com/...
+// URL from index.html, never arbitrary renderer-supplied input.
+ipcMain.handle('app:openExternal', (_e, url) => {
+    if (typeof url === 'string' && url.startsWith('https://ollama.com')) shell.openExternal(url);
+});
+
 // Classifies whether a NeRoChAt message is asking for an image, using
 // whichever model the chat window has selected — same approach and prompt
 // as bot.js's WhatsApp-side classifyImageIntent() (see ai.js), just called
 // directly here since NeRoChAt has no per-profile `store`/`chatHistories` of
-// its own to route through project_scripts/ai.js's factory.
+// its own to route through src/ai.js's factory.
 // `hasImage` — a photo was attached to this message — lets the classifier
 // recognize "redraw/regenerate this" as an image request too (see
 // IMAGE_CLASSIFY_PROMPT); ollama:describeImageForGeneration below turns that
@@ -1880,8 +1946,8 @@ ipcMain.handle('ollama:classifyImageIntent', async (_e, { prompt, model, hasImag
     if (!prompt) return { image: false, prompt: '' };
     try {
         const content = hasImage ? `${prompt}\n\n[the user also attached a photo]` : prompt;
-        const response = await ollamaClient.chat({
-            model: await pickClassifierModel(model),
+        const response = await currentOllamaClient().chat({
+            model: await pickClassifierModel(model, currentOllamaClient()),
             messages: [
                 { role: 'system', content: IMAGE_CLASSIFY_PROMPT },
                 { role: 'user', content },
@@ -1906,9 +1972,9 @@ ipcMain.handle('ollama:classifyImageIntent', async (_e, { prompt, model, hasImag
 // describeImageForGeneration (WhatsApp/Telegram side).
 ipcMain.handle('ollama:describeImageForGeneration', async (_e, { model, imageBase64, extraInstruction }) => {
     try {
-        const visionModel = await resolveVisionModel(model);
+        const visionModel = await resolveVisionModel(model, currentOllamaClient());
         if (!visionModel) return { ok: false, error: 'Görsel okuyabilen bir model yüklü değil — önce bir tane indir (örn. llava, qwen2.5vl).' };
-        const response = await ollamaClient.chat({
+        const response = await currentOllamaClient().chat({
             model: visionModel,
             messages: [
                 { role: 'system', content: IMAGE_DESCRIBE_FOR_GEN_PROMPT },
@@ -1931,11 +1997,11 @@ ipcMain.handle('ollama:describeImageForGeneration', async (_e, { model, imageBas
 // pulled has vision capability, matching this app's behavior before this
 // fallback existed.
 ipcMain.handle('ollama:prepareImageForChat', async (_e, { model, imageBase64 }) => {
-    if (await modelHasVision(model)) return { ok: true, mode: 'vision' };
-    const visionModel = await pickVisionFallbackModel(model);
+    if (await modelHasVision(model, currentOllamaClient())) return { ok: true, mode: 'vision' };
+    const visionModel = await pickVisionFallbackModel(model, currentOllamaClient());
     if (!visionModel) return { ok: true, mode: 'vision' };
     try {
-        const response = await ollamaClient.chat({
+        const response = await currentOllamaClient().chat({
             model: visionModel,
             messages: [
                 { role: 'system', content: IMAGE_READ_FALLBACK_PROMPT },
@@ -1949,7 +2015,7 @@ ipcMain.handle('ollama:prepareImageForChat', async (_e, { model, imageBase64 }) 
 });
 
 // Generates an image for NeRoChAt (same free backend as the WhatsApp side,
-// see project_scripts/imagegen.js) and hands the raw bytes back as base64
+// see src/imagegen.js) and hands the raw bytes back as base64
 // for the renderer to display inline in the chat.
 ipcMain.handle('ollama:generateImage', async (_e, prompt) => {
     try {
@@ -2096,7 +2162,7 @@ ipcMain.handle('ollama:listModels', async () => {
     openOllamaApp();
     for (let attempt = 0; ; attempt++) {
         try {
-            const { models } = await ollamaClient.list();
+            const { models } = await currentOllamaClient().list();
             return {
                 ok: true,
                 models: models.map(m => m.name),
@@ -2120,7 +2186,7 @@ ipcMain.handle('ollama:listModels', async () => {
 // reach the quick-popup's model dropdown too if it's the one open.
 ipcMain.handle('ollama:deleteModel', async (_e, model) => {
     try {
-        await ollamaClient.delete({ model });
+        await currentOllamaClient().delete({ model });
         if (ollamaView && !ollamaView.webContents.isDestroyed()) ollamaView.webContents.send('ollama:modelsChanged');
         if (win && !win.isDestroyed()) win.webContents.send('ollama:modelsChanged');
         return { ok: true };
@@ -2135,7 +2201,7 @@ ipcMain.handle('ollama:deleteModel', async (_e, model) => {
 ipcMain.handle('ollama:pullModel', async (e, model) => {
     const sender = e.sender;
     try {
-        const stream = await ollamaClient.pull({ model, stream: true });
+        const stream = await currentOllamaClient().pull({ model, stream: true });
         for await (const part of stream) {
             if (sender.isDestroyed()) return { ok: false };
             sender.send('ollama:pullProgress', { status: part.status, completed: part.completed, total: part.total });
@@ -2159,7 +2225,7 @@ ipcMain.handle('ollama:pullModel', async (e, model) => {
 ipcMain.handle('ollama:chatSend', async (e, { model, messages }) => {
     const sender = e.sender;
     try {
-        const stream = await ollamaClient.chat({ model, messages, stream: true });
+        const stream = await currentOllamaClient().chat({ model, messages, stream: true });
         for await (const part of stream) {
             if (sender.isDestroyed()) return { ok: false, error: 'Pencere kapatıldı.' };
             sender.send('ollama:chatChunk', { content: part.message?.content || '', done: false });
@@ -2357,11 +2423,22 @@ ipcMain.handle('chat:recentMessages', async (_e, profileId, limit) => {
 // ============================
 // Fix-text shortcut (see matchesFixTextShortcut/wireGlobalShortcuts above,
 // configurable in Ayarlar → Uygulama as fixTextShortcut) — while a WhatsApp
-// view has focus, reads whatever draft the user has typed but not sent,
-// asks Ollama for a few corrected/re-toned variants, and shows them right
-// under the compose box. Entirely main-process + the WA page itself — no
-// renderer round-trip, unlike the NeRoChAt popup shortcut, since there's
-// nothing for index.html to display here.
+// view has focus, reads whatever draft the user has typed but not sent and
+// shows a small two-button choice right under the compose box: "Düzeltme
+// Önerileri" asks Ollama for a few corrected/re-toned variants (the
+// original behavior); "Dile Çevir" instead shows a language picker, then
+// translates the draft into whichever one is picked. Either way the result
+// is the same kind of clickable row list, writing the chosen text into the
+// compose box.
+//
+// Almost entirely main-process + the WA page itself — no renderer round-
+// trip, unlike the NeRoChAt popup shortcut, since there's nothing for
+// index.html to display here. The one exception: the choice/language
+// buttons need to tell Node which follow-up to run (an actual Ollama
+// request), so this is the one spot in the codebase that uses Puppeteer's
+// page.exposeFunction() for a real page→Node callback instead of the
+// one-way pupPage.evaluate() every other WA-page injection here uses (see
+// ensureFixTextBindings/handleFixTextAction below).
 //
 // Nothing in this codebase has ever touched WhatsApp Web's own compose box
 // before (the bot always sends via client.sendMessage(), never by typing
@@ -2376,6 +2453,36 @@ const COMPOSE_BOX_SELECTORS = [
 
 const FIX_TEXT_PROMPT = `You are a writing assistant. The user will give you a draft WhatsApp message (in whatever language it's written in). Return ONLY a JSON object with five keys — "plain" (same wording, just spelling/grammar/punctuation fixed, same tone), "formal" (same meaning, rewritten in a more formal/polite tone), "casual" (same meaning, rewritten in a relaxed/friendly tone), "flirty" (same meaning, rewritten in a playful/flirtatious tone), "playful" (same meaning, rewritten in a witty/humorous tone) — each a string in the same language as the input. Punctuation must be correct and consistent in every single variant, no exceptions. Never insert an apostrophe just to sound casual — if the text is Turkish, only use one where Turkish orthography actually requires it (attaching a suffix to a proper noun, a number, or an abbreviation, e.g. "Ahmet'e", "2024'te"); a random or ungrammatical apostrophe reads as fake and robotic, not human, so when in doubt leave it out entirely. Never add an emoji to any variant unless the original draft already contains at least one emoji itself — if the draft has none, none of your variants may add any either. Do not add commentary, do not change the meaning. Example: {"plain":"...","formal":"...","casual":"...","flirty":"...","playful":"..."}`;
 
+// Which line/label each corrections key renders as (see FIX_TEXT_PROMPT's
+// keys and injectSuggestionRowsOverlay below) — pulled out of the row-
+// building loop itself so getCorrectionRows can reuse it.
+const FIX_TEXT_VARIANT_LABELS = [
+    ['plain', 'Düzeltilmiş'],
+    ['formal', 'Resmi'],
+    ['casual', 'Samimi'],
+    ['flirty', 'Flörtöz'],
+    ['playful', 'Esprili'],
+];
+
+// The "Dile Çevir" language picker's options — a fixed, curated list rather
+// than free text, since these render as a tappable grid, not an input.
+// `code` is only ever used as this list's own lookup key (see
+// handleFixTextAction's 'translate:' branch below), not sent to any API.
+const FIX_TEXT_LANGUAGES = [
+    { code: 'tr', label: 'Türkçe' },
+    { code: 'en', label: 'İngilizce' },
+    { code: 'de', label: 'Almanca' },
+    { code: 'fr', label: 'Fransızca' },
+    { code: 'es', label: 'İspanyolca' },
+    { code: 'it', label: 'İtalyanca' },
+    { code: 'ru', label: 'Rusça' },
+    { code: 'ar', label: 'Arapça' },
+];
+
+function buildTranslatePrompt(targetLabel) {
+    return `You are a translation assistant. The user will give you a draft WhatsApp message. Translate it into ${targetLabel}, preserving tone, meaning, and punctuation as closely as natural phrasing allows. Return ONLY a JSON object with one key, "translated", containing the translation as a string, written in ${targetLabel}. Do not add commentary, quotes around it, or any explanation — just the translation itself. Example: {"translated":"..."}`;
+}
+
 async function readComposeBoxText(session) {
     return session.client.pupPage.evaluate((selectors) => {
         const box = selectors.map(s => document.querySelector(s)).find(Boolean);
@@ -2383,18 +2490,18 @@ async function readComposeBoxText(session) {
     }, COMPOSE_BOX_SELECTORS);
 }
 
-// Shown the instant the shortcut fires (or auto-mode notices a pause), well
+// Shown the instant the user picks "Düzeltme Önerileri" or a language, well
 // before Ollama has replied — a bare spinner + label, replaced by
-// injectFixTextOverlay's real suggestions once they're in, or removed
+// injectSuggestionRowsOverlay's real result once it's in, or removed
 // outright if the request fails. Without this the whole thing looked dead
 // for however long the model took to respond.
 //
 // Fixed black/orange styling (not theme-adaptive — same palette regardless
 // of whether WhatsApp Web itself is in light or dark mode; see
-// injectFixTextOverlay below for the identical palette on the real
+// injectSuggestionRowsOverlay below for the identical palette on the real
 // suggestion box).
-async function injectLoadingOverlay(session) {
-    return session.client.pupPage.evaluate((selectors) => {
+async function injectLoadingOverlay(session, label = 'Düzeltmeler hazırlanıyor…') {
+    return session.client.pupPage.evaluate((label, selectors) => {
         document.getElementById('nerobotFixTextOverlay')?.remove();
         const box = selectors.map(s => document.querySelector(s)).find(Boolean);
         if (!box) return false;
@@ -2405,7 +2512,7 @@ async function injectLoadingOverlay(session) {
         const overlay = document.createElement('div');
         overlay.id = 'nerobotFixTextOverlay';
         overlay.style.cssText = `position:fixed; left:${rect.left}px; width:${rect.width}px; top:${rect.top}px; transform:translateY(-100%); background:${theme.bg}; border:1px solid ${theme.border}; border-radius:8px; padding:10px 14px; z-index:99999; font-family:sans-serif; font-size:13px; color:${theme.sub}; box-shadow:${theme.shadow}; display:flex; align-items:center; gap:8px;`;
-        overlay.innerHTML = `<style>@keyframes nerobotFixTextSpin{to{transform:rotate(360deg)}}</style><div style="width:14px;height:14px;border:2px solid ${theme.spinnerTrack};border-top-color:${theme.sub};border-radius:50%;animation:nerobotFixTextSpin .7s linear infinite;flex:0 0 auto;"></div><span>Düzeltmeler hazırlanıyor…</span>`;
+        overlay.innerHTML = `<style>@keyframes nerobotFixTextSpin{to{transform:rotate(360deg)}}</style><div style="width:14px;height:14px;border:2px solid ${theme.spinnerTrack};border-top-color:${theme.sub};border-radius:50%;animation:nerobotFixTextSpin .7s linear infinite;flex:0 0 auto;"></div><span>${label}</span>`;
         document.body.appendChild(overlay);
 
         // Typing again (or hitting Enter, which sends the message) means
@@ -2420,7 +2527,7 @@ async function injectLoadingOverlay(session) {
         box.addEventListener('input', closeOnActivity);
         box.addEventListener('keydown', closeOnActivity);
         return true;
-    }, COMPOSE_BOX_SELECTORS);
+    }, label, COMPOSE_BOX_SELECTORS);
 }
 
 async function removeFixTextOverlay(session) {
@@ -2449,7 +2556,7 @@ function looksLikeLanguageMismatch(draft, variants) {
 // overlay shows up rather than an error the user has to dismiss.
 async function requestTextCorrections(model, draft) {
     try {
-        const response = await ollamaClient.chat({
+        const response = await currentOllamaClient().chat({
             model,
             messages: [
                 { role: 'system', content: FIX_TEXT_PROMPT },
@@ -2484,7 +2591,7 @@ async function getTextCorrections(session, draft) {
     if (!preferredModel) return null;
 
     const useLocal = readAppConfig().fixTextUseLocalModel !== false;
-    const model = useLocal ? await pickClassifierModel(preferredModel) : preferredModel;
+    const model = useLocal ? await pickClassifierModel(preferredModel, currentOllamaClient()) : preferredModel;
 
     let result = await requestTextCorrections(model, draft);
     if (useLocal && model !== preferredModel && (!result || looksLikeLanguageMismatch(draft, result))) {
@@ -2493,12 +2600,56 @@ async function getTextCorrections(session, draft) {
     return result;
 }
 
-// Injects a small suggestion box anchored just above the compose box.
-// Clicking a row writes that variant into the box — see insertIntoComposeBox
-// below for why that's more than a one-liner. Dismisses on an outside click
-// or after 20s so a stale, ignored overlay never lingers indefinitely.
-async function injectFixTextOverlay(session, variants) {
-    return session.client.pupPage.evaluate((variants, selectors) => {
+// Same "one-off chat call, parse a JSON blob, fail quiet" shape as
+// requestTextCorrections above — the "Dile Çevir" side of the fix-text
+// overlay (see handleFixTextAction's 'translate:' branch).
+async function requestTranslation(model, draft, targetLabel) {
+    try {
+        const response = await currentOllamaClient().chat({
+            model,
+            messages: [
+                { role: 'system', content: buildTranslatePrompt(targetLabel) },
+                { role: 'user', content: draft },
+            ],
+        });
+        const match = response.message.content.match(/\{[\s\S]*\}/);
+        if (!match) return null;
+        const parsed = JSON.parse(match[0]);
+        return typeof parsed.translated === 'string' && parsed.translated ? parsed.translated : null;
+    } catch (err) {
+        console.error('[fixText] translate Ollama error:', err.message || err);
+        return null;
+    }
+}
+
+// Same local-model-first, fall-back-to-the-profile's-configured-model shape
+// as getTextCorrections above — no looksLikeLanguageMismatch-style retry
+// here, since that heuristic specifically detects "ignored the instruction
+// to reply in the SAME language as the input", which doesn't apply to a
+// deliberate translation.
+async function getTranslation(session, draft, targetLabel) {
+    const preferredModel = session.store?.state?.aiModel;
+    if (!preferredModel) return null;
+
+    const useLocal = readAppConfig().fixTextUseLocalModel !== false;
+    const model = useLocal ? await pickClassifierModel(preferredModel, currentOllamaClient()) : preferredModel;
+
+    let result = await requestTranslation(model, draft, targetLabel);
+    if (useLocal && model !== preferredModel && !result) {
+        result = (await requestTranslation(preferredModel, draft, targetLabel)) || result;
+    }
+    return result;
+}
+
+// Injects a small suggestion box anchored just above the compose box —
+// one row per { label, text }. Clicking a row writes that text into the box
+// (see insertIntoComposeBox below for why that's more than a one-liner).
+// Shared by both halves of the fix-text overlay: the corrections list
+// (5 rows, one per FIX_TEXT_VARIANT_LABELS key) and the single-row
+// translation result (see handleFixTextAction) — same "pick a row to use
+// it" interaction either way, so one function builds both.
+async function injectSuggestionRowsOverlay(session, rows) {
+    return session.client.pupPage.evaluate((rows, selectors) => {
         document.getElementById('nerobotFixTextOverlay')?.remove();
         const box = selectors.map(s => document.querySelector(s)).find(Boolean);
         if (!box) return false;
@@ -2512,21 +2663,42 @@ async function injectFixTextOverlay(session, variants) {
         // nothing, which is exactly the "picking a suggestion does nothing"
         // symptom this replaces.
         //
-        // A plain select-all + execCommand('insertText') is the whole thing
-        // — it's a single, atomic native edit that WhatsApp's own React/
-        // Lexical editor observes and reconciles against on its own. An
-        // earlier version of this also manually wrote .textContent as a
-        // "fallback" on top of that, which was the actual cause of the
-        // draft showing up duplicated (WhatsApp's editor already reconciled
-        // its own copy from the execCommand edit, then the manual write
-        // added a second, untracked copy next to it) — so that fallback is
-        // gone, not added back.
+        // Explicit Range/Selection across liveBox's own contents, not a bare
+        // execCommand('selectAll') — that relies on whatever the ambient
+        // focus/selection happens to be a tick after .focus(), which
+        // WhatsApp's own React/Lexical editor can nudge right back out from
+        // under it (it manages its own cursor/selection state) — reported
+        // as "picking a suggestion doesn't change the text" despite the
+        // overlay/click wiring itself working fine. Building the Range
+        // directly against liveBox removes that ambiguity: there's no
+        // "whatever's currently selected" for the editor to have opinions
+        // about, the target is explicit.
+        //
+        // execCommand('insertText') on top of that is still the actual
+        // write — a single, atomic native edit the editor observes and
+        // reconciles against on its own, same reasoning as before. The
+        // fallback below only runs if that verifiably did NOT land (return
+        // value false, or the box's own text still doesn't match) — doing a
+        // raw DOM write unconditionally on top of a working execCommand is
+        // what caused the draft to show up duplicated in an earlier version
+        // of this (the editor already reconciled its own copy from the
+        // execCommand edit, then the unconditional manual write added a
+        // second, untracked copy next to it).
         function insertIntoComposeBox(text) {
             const liveBox = selectors.map(s => document.querySelector(s)).find(Boolean);
             if (!liveBox) return;
             liveBox.focus();
-            document.execCommand('selectAll', false, null);
-            document.execCommand('insertText', false, text);
+            const range = document.createRange();
+            range.selectNodeContents(liveBox);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            const inserted = document.execCommand('insertText', false, text);
+            if (!inserted || liveBox.innerText.trim() !== text.trim()) {
+                while (liveBox.firstChild) liveBox.removeChild(liveBox.firstChild);
+                liveBox.appendChild(document.createTextNode(text));
+                liveBox.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: text }));
+            }
         }
 
         const rect = box.getBoundingClientRect();
@@ -2534,22 +2706,14 @@ async function injectFixTextOverlay(session, variants) {
         overlay.id = 'nerobotFixTextOverlay';
         overlay.style.cssText = `position:fixed; left:${rect.left}px; width:${rect.width}px; top:${rect.top}px; transform:translateY(-100%); background:${theme.bg}; border:1px solid ${theme.border}; border-radius:8px; padding:6px; z-index:99999; font-family:sans-serif; font-size:13px; color:${theme.text}; box-shadow:${theme.shadow};`;
 
-        const rows = [
-            ['plain', 'Düzeltilmiş'],
-            ['formal', 'Resmi'],
-            ['casual', 'Samimi'],
-            ['flirty', 'Flörtöz'],
-            ['playful', 'Esprili'],
-        ];
-        for (const [key, label] of rows) {
-            if (!variants[key]) continue;
+        for (const { label, text } of rows) {
             const row = document.createElement('div');
             row.style.cssText = 'padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:2px;';
-            row.innerHTML = `<b>${label}:</b> ${variants[key]}`;
+            row.innerHTML = `<b>${label}:</b> ${text}`;
             row.onmouseenter = () => row.style.background = theme.hoverBg;
             row.onmouseleave = () => row.style.background = 'transparent';
             row.onclick = () => {
-                insertIntoComposeBox(variants[key]);
+                insertIntoComposeBox(text);
                 overlay.remove();
             };
             overlay.appendChild(row);
@@ -2580,41 +2744,184 @@ async function injectFixTextOverlay(session, variants) {
         box.addEventListener('input', closeOnActivity);
         box.addEventListener('keydown', closeOnActivity);
         return true;
-    }, variants, COMPOSE_BOX_SELECTORS);
+    }, rows, COMPOSE_BOX_SELECTORS);
 }
 
+// First thing the shortcut shows now — two plain buttons, no AI call yet
+// (that only happens once the user actually picks one). Clicking either
+// calls back into Node via window.nerobotFixTextAction (see
+// ensureFixTextBindings/handleFixTextAction below), since continuing either
+// path needs an Ollama request this in-page script can't make itself.
+async function injectFixTextChoiceOverlay(session) {
+    return session.client.pupPage.evaluate((selectors) => {
+        document.getElementById('nerobotFixTextOverlay')?.remove();
+        const box = selectors.map(s => document.querySelector(s)).find(Boolean);
+        if (!box) return false;
+
+        const theme = { bg: '#000000', border: '#ff9800', text: '#ffffff', hoverBg: '#ff980033', shadow: '0 4px 16px #000c' };
+
+        const rect = box.getBoundingClientRect();
+        const overlay = document.createElement('div');
+        overlay.id = 'nerobotFixTextOverlay';
+        overlay.style.cssText = `position:fixed; left:${rect.left}px; width:${rect.width}px; top:${rect.top}px; transform:translateY(-100%); background:${theme.bg}; border:1px solid ${theme.border}; border-radius:8px; padding:6px; z-index:99999; font-family:sans-serif; font-size:13px; color:${theme.text}; box-shadow:${theme.shadow}; display:flex; gap:6px;`;
+
+        function makeChoiceButton(label, action) {
+            const btn = document.createElement('div');
+            btn.textContent = label;
+            btn.style.cssText = `flex:1; text-align:center; padding:9px 8px; border-radius:6px; border:1px solid ${theme.border}; cursor:pointer;`;
+            btn.onmouseenter = () => btn.style.background = theme.hoverBg;
+            btn.onmouseleave = () => btn.style.background = 'transparent';
+            btn.onclick = () => { overlay.remove(); window.nerobotFixTextAction(action); };
+            return btn;
+        }
+        overlay.appendChild(makeChoiceButton('✏️ Düzeltme Önerileri', 'correct'));
+        overlay.appendChild(makeChoiceButton('🌐 Dile Çevir', 'showLanguagePicker'));
+
+        document.body.appendChild(overlay);
+        const dismiss = (e) => { if (!overlay.contains(e.target)) { overlay.remove(); document.removeEventListener('mousedown', dismiss); } };
+        setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
+        const closeOnActivity = (e) => {
+            if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== 'Backspace') return;
+            overlay.remove();
+            box.removeEventListener('input', closeOnActivity);
+            box.removeEventListener('keydown', closeOnActivity);
+        };
+        box.addEventListener('input', closeOnActivity);
+        box.addEventListener('keydown', closeOnActivity);
+        return true;
+    }, COMPOSE_BOX_SELECTORS);
+}
+
+// Shown after "🌐 Dile Çevir" — a grid of FIX_TEXT_LANGUAGES, no AI call
+// yet either (same reasoning as the choice overlay above); picking one
+// calls back with 'translate:<code>', which is what actually triggers the
+// translation request (see handleFixTextAction).
+async function injectLanguagePickerOverlay(session) {
+    return session.client.pupPage.evaluate((languages, selectors) => {
+        document.getElementById('nerobotFixTextOverlay')?.remove();
+        const box = selectors.map(s => document.querySelector(s)).find(Boolean);
+        if (!box) return false;
+
+        const theme = { bg: '#000000', border: '#ff9800', text: '#ffffff', hoverBg: '#ff980033', shadow: '0 4px 16px #000c' };
+
+        const rect = box.getBoundingClientRect();
+        const overlay = document.createElement('div');
+        overlay.id = 'nerobotFixTextOverlay';
+        overlay.style.cssText = `position:fixed; left:${rect.left}px; width:${rect.width}px; top:${rect.top}px; transform:translateY(-100%); background:${theme.bg}; border:1px solid ${theme.border}; border-radius:8px; padding:6px; z-index:99999; font-family:sans-serif; font-size:13px; color:${theme.text}; box-shadow:${theme.shadow}; display:grid; grid-template-columns:1fr 1fr; gap:2px;`;
+
+        for (const { code, label } of languages) {
+            const item = document.createElement('div');
+            item.textContent = label;
+            item.style.cssText = 'padding:8px 10px; border-radius:6px; cursor:pointer; text-align:center;';
+            item.onmouseenter = () => item.style.background = theme.hoverBg;
+            item.onmouseleave = () => item.style.background = 'transparent';
+            item.onclick = () => { overlay.remove(); window.nerobotFixTextAction('translate:' + code); };
+            overlay.appendChild(item);
+        }
+
+        document.body.appendChild(overlay);
+        const dismiss = (e) => { if (!overlay.contains(e.target)) { overlay.remove(); document.removeEventListener('mousedown', dismiss); } };
+        setTimeout(() => document.addEventListener('mousedown', dismiss), 0);
+        const closeOnActivity = (e) => {
+            if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== 'Backspace') return;
+            overlay.remove();
+            box.removeEventListener('input', closeOnActivity);
+            box.removeEventListener('keydown', closeOnActivity);
+        };
+        box.addEventListener('input', closeOnActivity);
+        box.addEventListener('keydown', closeOnActivity);
+        return true;
+    }, FIX_TEXT_LANGUAGES, COMPOSE_BOX_SELECTORS);
+}
+
+// One-time per WA page — lets the choice/language-picker overlays call back
+// into Node (window.nerobotFixTextAction(action)) when clicked, since
+// continuing either path needs an actual Ollama request. Guarded by a flag
+// on the session (not just checking pupPage directly) so a second shortcut
+// press never calls exposeFunction twice on the same page, which Puppeteer
+// throws on ("already has a property with that name"). Must be re-armed
+// whenever the page itself is replaced — see recreateWaView, which resets
+// this flag for exactly that reason (exposeFunction bindings are page-
+// bound, same as whatsapp-web.js's own — see its comment on recreateWaView).
+async function ensureFixTextBindings(session) {
+    if (session._fixTextBindingsReady) return;
+    session._fixTextBindingsReady = true;
+    await session.client.pupPage.exposeFunction('nerobotFixTextAction', (action) => {
+        handleFixTextAction(session, action).catch((err) => console.error('[fixText] action hatası:', err.message || err));
+    });
+}
+
+// The "Düzeltme Önerileri" half of the flow — the actual Ollama request +
+// result overlay, run once handleFixTextAction sees the user picked that
+// button (see below). fixTextAutoMode's typing-pause poll goes through the
+// same choice overlay as the shortcut now (handleFixTextShortcut), not
+// straight to this — this function itself is unaware of which trigger led
+// here.
+async function runFixTextCorrections(session) {
+    const draft = await readComposeBoxText(session);
+    if (!draft) { await removeFixTextOverlay(session); return; }
+    await injectLoadingOverlay(session, 'Düzeltmeler hazırlanıyor…');
+    const variants = await getTextCorrections(session, draft);
+    if (!variants) { await removeFixTextOverlay(session); return; }
+    const currentDraft = await readComposeBoxText(session);
+    if (!currentDraft) { await removeFixTextOverlay(session); return; }
+    const rows = FIX_TEXT_VARIANT_LABELS
+        .filter(([key]) => variants[key])
+        .map(([key, label]) => ({ label, text: variants[key] }));
+    if (!rows.length) { await removeFixTextOverlay(session); return; }
+    await injectSuggestionRowsOverlay(session, rows);
+}
+
+// Routes a choice-overlay/language-picker click to whichever follow-up it
+// asked for. Re-reads the draft fresh at each AI-call point (not just once
+// up front in handleFixTextShortcut) — same reasoning the old single-step
+// flow already used: WhatsApp's compose box can go away (message sent,
+// chat switched) while the user is still looking at the choice/language
+// buttons, and a stale draft would just correct/translate nothing useful.
+async function handleFixTextAction(session, action) {
+    if (action === 'showLanguagePicker') {
+        await injectLanguagePickerOverlay(session);
+        return;
+    }
+    if (action === 'correct') {
+        await runFixTextCorrections(session);
+        return;
+    }
+    if (action.startsWith('translate:')) {
+        const lang = FIX_TEXT_LANGUAGES.find((l) => l.code === action.slice('translate:'.length));
+        if (!lang) return;
+        const draft = await readComposeBoxText(session);
+        if (!draft) { await removeFixTextOverlay(session); return; }
+        await injectLoadingOverlay(session, `${lang.label}'ye çevriliyor…`);
+        const translated = await getTranslation(session, draft, lang.label);
+        if (!translated) { await removeFixTextOverlay(session); return; }
+        const currentDraft = await readComposeBoxText(session);
+        if (!currentDraft) { await removeFixTextOverlay(session); return; }
+        await injectSuggestionRowsOverlay(session, [{ label: lang.label, text: translated }]);
+    }
+}
+
+// Entry point (shortcut press) — no AI call happens here anymore, just the
+// draft check and the two-button choice overlay; getTextCorrections/
+// getTranslation only ever run once the user actually picks one (see
+// handleFixTextAction above). Telegram guard: matchesFixTextShortcut can
+// fire while a Telegram view has focus too (wireGlobalShortcuts wires it
+// into both), but session.client there is a teleproto client, not a
+// Puppeteer page — readComposeBoxText's session.client.pupPage.evaluate()
+// would throw without this.
 async function handleFixTextShortcut(session) {
-    if (!session.client || !session.botReady) return;
+    if (session.platform === 'telegram' || !session.client || !session.botReady) return;
     const draft = await readComposeBoxText(session);
     if (!draft) return;
-    await injectLoadingOverlay(session);
-    const variants = await getTextCorrections(session, draft);
-    if (!variants) {
-        await removeFixTextOverlay(session);
-        return;
-    }
-    // Only bail here if the message is actually gone (sent, or cleared) —
-    // an earlier version compared the draft for an *exact* match instead,
-    // which any harmless WhatsApp-side re-render (not necessarily the user
-    // typing at all) could nudge just enough to trip, quietly dropping a
-    // perfectly good result and leaving the loading spinner's disappearance
-    // as the only thing that ever happened — exactly the "it thinks, then
-    // does nothing and closes" symptom. If the user genuinely kept typing,
-    // the overlay's own close-on-activity listener (see injectFixTextOverlay)
-    // hides it the instant they type again anyway, so there's no need to
-    // pre-emptively guess "did they change it" here at all.
-    const currentDraft = await readComposeBoxText(session);
-    if (!currentDraft) {
-        await removeFixTextOverlay(session);
-        return;
-    }
-    await injectFixTextOverlay(session, variants);
+    await ensureFixTextBindings(session);
+    await injectFixTextChoiceOverlay(session);
 }
 
-// "Otomatik Düzeltme" (Ayarlar → Uygulama, fixTextAutoMode) — same
-// suggestion flow as the shortcut, just triggered by a typing pause instead
-// of a keypress. No page→Node callback wiring (no precedent for that
-// anywhere in this codebase, e.g. exposeFunction) — plain polling instead,
+// "Otomatik Düzeltme" (Ayarlar → Uygulama, fixTextAutoMode) — shows the exact
+// same two-button choice overlay as the shortcut (handleFixTextShortcut),
+// just triggered by a typing pause instead of a keypress. Detecting that
+// pause is still plain polling (unlike the choice/language buttons
+// themselves, which do use exposeFunction — see ensureFixTextBindings),
 // same idiom every other pupPage.evaluate call here already uses. Every
 // tick, each open WhatsApp session's draft is compared to what it was last
 // tick: unchanged across two consecutive ticks reads as "stopped typing"
@@ -2908,36 +3215,42 @@ ipcMain.handle('chat:idVariants', (_e, profileId, chatId) => {
 });
 
 // ============================
-// Auto-update — checked once at every startup, BEFORE the window opens (see
-// app.whenReady() below), against this repo's GitHub Releases (see
-// package.json's build.publish + release.js, which is what actually
-// uploads a new version there). Two separate timeouts, same reasoning as
-// installOllama's (see ollama-installer.js): a stalled network must never
-// leave the app stuck on a blank screen forever — 15s just to learn WHETHER
-// a newer version exists (give up and open normally if that's slow/
-// unreachable), up to 5 minutes to actually download one once we know it's
-// there (give up and open the CURRENT version if THAT stalls instead).
-// Gated on app.isPackaged in app.whenReady() below: there's no installed
-// NSIS app for electron-updater to update in place during a dev run (`npm
-// start`), and no bundled app-update.yml outside a real build either.
+// Auto-update — checked once every startup, AFTER the window opens (so the
+// Home screen shows immediately no matter how the check goes), against this
+// repo's GitHub Releases (see package.json's build.publish + release.js,
+// which is what actually uploads a new version there). If one's found, a
+// visible prompt (#updateAvailableOverlay in index.html) asks the user to
+// update now or keep using this version — this USED TO happen silently and
+// automatically before the window even opened, which looked exactly like
+// "the app just isn't opening" for however long a download took. Gated on
+// app.isPackaged in app.whenReady() below: there's no installed NSIS app
+// for electron-updater to update in place during a dev run (`npm start`),
+// and no bundled app-update.yml outside a real build either.
 // ============================
 autoUpdater.autoDownload = false; // this file drives download/install by hand, below
 
 function checkForUpdate() {
     return new Promise((resolve, reject) => {
-        autoUpdater.once('update-available', () => resolve(true));
-        autoUpdater.once('update-not-available', () => resolve(false));
+        autoUpdater.once('update-available', (info) => resolve({ hasUpdate: true, version: info?.version }));
+        autoUpdater.once('update-not-available', () => resolve({ hasUpdate: false }));
         autoUpdater.once('error', reject);
         autoUpdater.checkForUpdates().catch(reject);
     });
 }
 
+// Streams real download progress to the renderer (#updateProgressOverlay's
+// bar) as it comes in, then quitAndInstall()s once it's fully down — true/
+// true = apply silently (no separate NSIS UI popping up) and relaunch
+// NeRoBoT once the update's applied ("kapatıp güncelleyip öyle açsın
+// kendini" — close it, update it, then open itself). Only ever runs once
+// the user actually clicks "Şimdi Güncelle" (see the update:startDownload
+// handler below) — checking for an update never downloads one on its own.
 function downloadAndInstallUpdate() {
     return new Promise((resolve, reject) => {
+        autoUpdater.on('download-progress', (progress) => {
+            if (win && !win.isDestroyed()) win.webContents.send('update:downloadProgress', { percent: progress.percent });
+        });
         autoUpdater.once('update-downloaded', () => {
-            // true = silent (no NSIS UI), true = relaunch NeRoBoT once the
-            // update's applied — "kapatıp güncelleyip öyle açsın kendini"
-            // (close it, update it, then open itself).
             autoUpdater.quitAndInstall(true, true);
             resolve();
         });
@@ -2946,36 +3259,42 @@ function downloadAndInstallUpdate() {
     });
 }
 
-// Resolves true if an update was found, downloaded, and quitAndInstall()
-// was called — the caller should stop right there, the app's on its way
-// out. Resolves false if there's nothing new, or the check/download
-// failed/timed out for any reason — the caller should just continue
-// starting up normally on the CURRENT version either way, never block on
-// this longer than the timeouts above allow.
-async function checkAndApplyUpdate() {
-    let hasUpdate;
+// Runs once per launch (see app.whenReady() below), well after the window's
+// already open. 15s just to learn WHETHER a newer version exists — gives up
+// quietly if that's slow/unreachable, there's always next launch. Never
+// downloads anything by itself; just tells the renderer a version number so
+// it can show the prompt.
+async function notifyIfUpdateAvailable() {
+    let result;
     try {
-        hasUpdate = await Promise.race([
+        result = await Promise.race([
             checkForUpdate(),
-            new Promise((resolve) => setTimeout(() => resolve(false), 15000)),
+            new Promise((resolve) => setTimeout(() => resolve({ hasUpdate: false }), 15000)),
         ]);
     } catch (err) {
-        console.error('[NeRoBoT] Güncelleme kontrolü başarısız, normal açılışa devam ediliyor:', err.message || err);
-        return false;
+        console.error('[NeRoBoT] Güncelleme kontrolü başarısız:', err.message || err);
+        return;
     }
-    if (!hasUpdate) return false;
+    if (!result.hasUpdate) return;
+    if (win && !win.isDestroyed()) win.webContents.send('update:available', { version: result.version });
+}
 
+// Triggered by the renderer's "Şimdi Güncelle" button. 5-minute cap same as
+// before — if a download genuinely stalls that long, give up and let the
+// user keep using the current version rather than hanging indefinitely.
+ipcMain.handle('update:startDownload', async () => {
     try {
         await Promise.race([
             downloadAndInstallUpdate(),
             new Promise((_resolve, reject) => setTimeout(() => reject(new Error('Güncelleme indirme zaman aşımına uğradı.')), 5 * 60 * 1000)),
         ]);
-        return true;
+        return { ok: true }; // never actually reached — quitAndInstall() tears the process down first
     } catch (err) {
-        console.error('[NeRoBoT] Güncelleme indirilemedi, mevcut sürümle devam ediliyor:', err.message || err);
-        return false;
+        console.error('[NeRoBoT] Güncelleme indirilemedi:', err.message || err);
+        if (win && !win.isDestroyed()) win.webContents.send('update:downloadError', { error: err.message || String(err) });
+        return { ok: false, error: err.message || String(err) };
     }
-}
+});
 
 // ============================
 // App lifecycle
@@ -3001,12 +3320,41 @@ app.whenReady().then(async () => {
         return;
     }
 
-    // See checkAndApplyUpdate's own doc above — only meaningful for a real
-    // installed build (app.isPackaged), and skipped for TEST_MODE (headless
-    // test runs shouldn't ever quit-and-relaunch themselves).
-    if (app.isPackaged && !TEST_MODE) {
-        const updating = await checkAndApplyUpdate();
-        if (updating) return; // quitAndInstall() already tore the app down
+    // Headless hook for build/installer.nsh's customInstall macro (runs
+    // right after THIS version's own files land in $INSTDIR) — checks
+    // whether this build is actually the latest GitHub release, and reports
+    // back via a plain-text file (NSIS has no JSON parser, and hand-rolling
+    // an HTTP call + JSON parse in raw NSIS script is far more fragile than
+    // doing it here in Node — same reasoning as --install-ollama above
+    // keeping Ollama's own install logic out of NSIS). 8s timeout: a stale-
+    // installer check must never hang someone's install over a slow
+    // network — see the ISLATEST=true fallback below, which fails OPEN
+    // (lets the install proceed) rather than blocking a perfectly good
+    // install just because GitHub was unreachable for a moment.
+    if (process.argv.includes('--check-latest-version')) {
+        const versionCheckFile = path.join(os.tmpdir(), 'nerobot-version-check.txt');
+        const latestUrl = 'https://github.com/SalihYzts/NeRoBoT/releases/latest';
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8000);
+            let isLatest = true;
+            try {
+                const res = await fetch('https://api.github.com/repos/SalihYzts/NeRoBoT/releases/latest', {
+                    headers: { 'User-Agent': 'NeRoBoT-installer' },
+                    signal: controller.signal,
+                });
+                const data = await res.json();
+                const latestTag = String(data.tag_name || '').replace(/^v/, '');
+                isLatest = !latestTag || latestTag === APP_VERSION;
+            } finally {
+                clearTimeout(timer);
+            }
+            fs.writeFileSync(versionCheckFile, `ISLATEST=${isLatest}\nLATESTURL=${latestUrl}\n`);
+        } catch (_) {
+            fs.writeFileSync(versionCheckFile, `ISLATEST=true\nLATESTURL=${latestUrl}\n`);
+        }
+        app.quit();
+        return;
     }
 
     await createWindow();
@@ -3020,6 +3368,14 @@ app.whenReady().then(async () => {
     openOllamaApp();
     patchPuppeteerConnect();
     devToolsPort = await getDevToolsPort();
+    // Fire-and-forget, well after the window's already showing — only
+    // meaningful for a real installed build (app.isPackaged), and skipped
+    // for TEST_MODE (headless test runs shouldn't get an update prompt).
+    // See notifyIfUpdateAvailable's own doc above for why this moved here
+    // instead of blocking startup before the window even existed.
+    if (app.isPackaged && !TEST_MODE) {
+        notifyIfUpdateAvailable();
+    }
     // No auto-start — the renderer opens on the Home screen and the user
     // picks (or creates) a profile to open.
 });

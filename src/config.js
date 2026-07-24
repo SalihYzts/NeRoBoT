@@ -37,7 +37,7 @@ const DEFAULTS = {
     // raw history to the model, embed each message and only send the most
     // recent turns plus the most semantically relevant older ones. Falls
     // back to a plain recency window automatically if the embed model
-    // below isn't pulled (see project_scripts/ai.js), so leaving this on
+    // below isn't pulled (see src/ai.js), so leaving this on
     // is safe even without the extra model.
     vectorMemoryEnabled:   true,
     embedModel:            "nomic-embed-text",
@@ -70,7 +70,7 @@ const DEFAULTS = {
 
     // Image generation — Ollama itself can't draw, so a request that's
     // clearly asking for a picture gets routed to a separate image backend
-    // instead (see project_scripts/imagegen.js + ai.js's
+    // instead (see src/imagegen.js + ai.js's
     // classifyImageIntent()). On by default (Pollinations needs no API key,
     // so there's nothing to configure before it works).
     imageGenEnabled:       true,

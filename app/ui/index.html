@@ -328,6 +328,13 @@
     .tileAction.delete:hover { color: var(--red); border-color: var(--red); }
     .tileAction svg { width: 12px; height: 12px; display: block; }
 
+    /* ===== Games (Oyunlar) shortcut tile — same idea as the NeRoChAt tile
+       below, own holder so the two sit side by side under the profile grid. */
+    #gamesTileHolder { display: flex; justify-content: center; }
+    .profileTile.gamesTile .tileName { font-size: 11px; }
+    .profileTile.gamesTile.disabled { opacity: .5; }
+    .profileTile.gamesTile.disabled:hover { border-color: var(--border); }
+
     /* ===== Ollama shortcut tile — smaller & centered below the profile
        grid, not a profile itself (see ensureOllamaOrPrompt/renderOllamaTile) */
     #ollamaTileHolder { display: flex; justify-content: center; }
@@ -813,6 +820,73 @@
     }
     #telegramPasswordField { width: 260px; }
 
+    /* ===== Oyunlar (Games) tab — plain renderer content, not a native
+       WebContentsView like WA/Telegram/NeRoChAt (a canvas game needs none of
+       that isolation), so it lives right here in #middle next to
+       #homeScreen and toggles the same way (see updateViewVisibility). ===== */
+    #gamesScreen {
+        position: relative;
+        flex: 1;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        overflow-y: auto;
+        padding: 20px;
+    }
+    #gamesScreen.visible { display: flex; }
+    .gameScoreRow {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 13px;
+        color: var(--muted);
+    }
+    .gameScoreRow b { color: var(--text); font-size: 15px; }
+    .gameCanvas {
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        image-rendering: pixelated;
+    }
+    .gameHint { font-size: 11px; color: var(--muted); }
+
+    /* Games menu — shown first every time Oyunlar is entered fresh (see
+       gamesCurrentView in the script); a small game-picker grid reusing the
+       same .profileTile look as the Home screen's own tiles. Just one entry
+       (Yılan) for now, more to come later. */
+    .gamesMenu { display: flex; }
+    .gamesMenu.hidden { display: none; }
+    .gamesMenuGrid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        justify-content: center;
+    }
+    .gameMenuTile .tileIcon { background: #241a33; }
+    /* A picked game's own view (canvas + score + back button) — hidden
+       until its menu tile is clicked, see showGamesMenu()/showGamesSnake(). */
+    .gamesSubView {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+    .gamesSubView.visible { display: flex; }
+    .gamesBackBtn { align-self: flex-start; }
+
+    /* Games quick-access popup — same idea/size class as neroPopupPanel,
+       just no toolbar/messages, one canvas instead. */
+    #gamesPopupPanel { width: 420px; }
+    #gamesPopupBody {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        padding: 14px;
+    }
+
     /* ===== A profile's own settings — now living inside #gsSection-profile
        (see openGlobalSettings()/showGsSection() below) instead of the old
        standalone sliding drawer this used to be; #settingsHeader/#tabBar/
@@ -1187,8 +1261,34 @@
         <div id="homeScreen">
             <pre id="homeAscii"></pre>
             <div id="homeGrid"></div>
-            <div id="ollamaTileHolder"></div>
+            <div style="display:flex; gap:16px; justify-content:center;">
+                <div id="ollamaTileHolder"></div>
+                <div id="gamesTileHolder"></div>
+            </div>
             <div id="homeCredit">Salih Yazıtaş tarafından yapıldı<span id="homeVersion"></span></div>
+        </div>
+        <div id="gamesScreen">
+            <!-- Shown first every time Oyunlar is entered fresh (see
+                 gamesCurrentView in the script) — a small library of tiny
+                 games, just Yılan (Snake) for now. Picking one switches to
+                 its own view below; a "← Oyunlar" back button returns here. -->
+            <div id="gamesMenu" class="gamesMenu">
+                <div class="gamesMenuGrid">
+                    <div class="profileTile gameMenuTile" id="gameTileSnake">
+                        <div class="tileIcon"><span style="font-size:22px;">🐍</span></div>
+                        <div class="tileName" id="gameSnakeName">Yılan</div>
+                    </div>
+                </div>
+            </div>
+            <div id="gamesSnakeView" class="gamesSubView">
+                <button id="gamesBackToMenuBtn" class="miniBtn gamesBackBtn">← <span id="gamesBackBtnText">Oyunlar</span></button>
+                <div class="gameScoreRow">
+                    <span id="gameScoreLabelText">Skor:</span>
+                    <b id="gameScoreValue">0</b>
+                </div>
+                <canvas id="gameTabCanvas" class="gameCanvas" width="400" height="400"></canvas>
+                <div class="gameHint" id="gameHintText">Ok tuşları / WASD ile yön ver</div>
+            </div>
         </div>
     </div>
 
@@ -1257,6 +1357,15 @@
                         <img src="logo.svg" alt="" style="height:18px;width:auto;">
                     </div>
                     <span id="platformOllamaLabel">NeRoChAt</span>
+                </div>
+                <div class="platformOption" id="platformGames">
+                    <div class="tileIcon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 12h4M8 10v4"></path><circle cx="15" cy="11" r="1" fill="#a78bfa"></circle><circle cx="18" cy="13" r="1" fill="#a78bfa"></circle>
+                            <path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.152A4 4 0 0 0 17.32 5z"></path>
+                        </svg>
+                    </div>
+                    <span id="platformGamesLabel">Oyunlar</span>
                 </div>
             </div>
         </div>
@@ -1349,6 +1458,22 @@
                             </div>
                             <button id="telegramCredsSaveBtn" class="miniBtn" style="width:100%">Kaydet</button>
                         </div>
+                        <!-- Local Ollama vs Ollama Cloud API key — see
+                             ensureOllamaOrPrompt/openOllamaApiKeyPanel above for
+                             the same choice shown the first time AI features are
+                             ever turned on; this just lets it be switched later.
+                             Lives in Uygulama (not NeRoChAt's own Genel tab) since
+                             it's a "which AI backend the whole app talks to" toggle,
+                             not something scoped to the NeRoChAt tab itself — same
+                             reasoning fixTextUseLocalModelToggle below already
+                             applies to WA's own AI features. -->
+                        <div class="section">
+                            <div class="sectionTitle" id="ollamaConnectionTitle">Bağlantı</div>
+                            <div class="hint" id="ollamaConnectionStatusText">Şu an: —</div>
+                            <button id="ollamaConnectionSwitchToApiBtn" class="miniBtn" style="width:100%; margin-top:8px;">API Anahtarı Kullan</button>
+                            <button id="ollamaConnectionSwitchToLocalBtn" class="miniBtn" style="width:100%; margin-top:8px;">Yerel Ollama Bağlantısı</button>
+                            <button id="ollamaConnectionChangeKeyBtn" class="miniBtn" style="width:100%; margin-top:8px;">Anahtarı Değiştir</button>
+                        </div>
                         <div class="section">
                             <div class="sectionTitle" id="neroShortcutTitle">NeRoChAt Hızlı Erişim</div>
                             <div class="hint" id="neroShortcutHint">Uygulama açıkken, herhangi bir sekmedeyken bu kısayola basınca küçük bir NeRoChAt penceresi açılır.</div>
@@ -1361,8 +1486,19 @@
                             </div>
                         </div>
                         <div class="section">
+                            <div class="sectionTitle" id="gamesShortcutTitle">Oyunlar Hızlı Erişim</div>
+                            <div class="hint" id="gamesShortcutHint">Uygulama açıkken, herhangi bir sekmedeyken bu kısayola basınca küçük bir oyun penceresi açılır.</div>
+                            <div class="field">
+                                <label class="name" id="gamesShortcutLabel">Kısayol</label>
+                                <div class="btnRow">
+                                    <input type="text" id="gamesShortcutInput" readonly placeholder="örn: Ctrl+Shift+O">
+                                    <button id="gamesShortcutRecordBtn" class="miniBtn">Değiştir</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="section">
                             <div class="sectionTitle" id="fixTextShortcutTitle">Yazı Düzeltme Kısayolu</div>
-                            <div class="hint" id="fixTextShortcutHint">WhatsApp'ta bir mesaj yazarken (henüz göndermeden) bu kısayola basınca, yazdığın metnin düzeltilmiş/resmi/samimi varyantları yazı kutusunun altında önerilir.</div>
+                            <div class="hint" id="fixTextShortcutHint">WhatsApp'ta bir mesaj yazarken (henüz göndermeden) bu kısayola basınca, yazı kutusunun altında iki seçenek çıkar: "Düzeltme Önerileri" düzeltilmiş/resmi/samimi varyantlar önerir, "Dile Çevir" ise seçtiğin dile çevirir.</div>
                             <div class="field">
                                 <label class="name" id="fixTextShortcutLabel">Kısayol</label>
                                 <div class="btnRow">
@@ -1374,7 +1510,7 @@
                                 <span id="fixTextAutoModeLabel">Otomatik Düzeltme (kısayolsuz)</span>
                                 <span class="switch"><input type="checkbox" id="fixTextAutoModeToggle"><span class="track"></span></span>
                             </label>
-                            <div class="hint" id="fixTextAutoModeHint">Açıkken, WhatsApp'ta yazarken bir süre durduğunda kısayola basmana gerek kalmadan öneriler otomatik çıkar.</div>
+                            <div class="hint" id="fixTextAutoModeHint">Açıkken, WhatsApp'ta yazarken bir süre durduğunda kısayola basmana gerek kalmadan yukarıdaki "Düzeltme Önerileri / Dile Çevir" paneli otomatik açılır.</div>
                             <label class="toggleRow">
                                 <span id="fixTextUseLocalModelLabel">Özellikler İçin Yerel AI Kullan</span>
                                 <span class="switch"><input type="checkbox" id="fixTextUseLocalModelToggle"><span class="track"></span></span>
@@ -1406,7 +1542,15 @@
                                  inline "+" pull form in ollama.html) + the global
                                  personality every NeRoChAt conversation falls back to. -->
                             <div id="tab-ollama-general" class="oTabContent active">
-                                <div class="section">
+                                <!-- The local-vs-API "Bağlantı" switch used to live here —
+                                     moved to Ayarlar → Uygulama (see gsSection-app above),
+                                     since it's an app-wide backend choice, not something
+                                     scoped to the NeRoChAt tab. ollamaModelsSection/
+                                     ollamaCloudModelHint below still toggle based on that
+                                     same mode though (see updateOllamaConnectionSection),
+                                     they're NeRoChAt-tab-specific (model management only
+                                     makes sense against a local install). -->
+                                <div class="section" id="ollamaModelsSection">
                                     <div class="sectionTitle" id="ollamaModelsTitle">Model Yönetimi</div>
                                     <div id="ollamaModelsList" class="ollamaModelsList"></div>
                                     <div class="field">
@@ -1418,6 +1562,17 @@
                                         </div>
                                         <div class="hint" id="ollamaPullStatus"></div>
                                     </div>
+                                </div>
+                                <!-- API mode: nothing to "pull" locally — cloud models are
+                                     just a name/tag (see ai.js's isCloudModel), so the
+                                     pull/delete list above is hidden and replaced with a
+                                     pointer to where a model NAME is actually set: each
+                                     profile's own Ayarlar → Genel → Model field
+                                     (state.aiModel, line ~3488's settings schema) already
+                                     accepts any typed name, cloud tag included — no
+                                     separate "cloud model" input needed here. -->
+                                <div class="section" id="ollamaCloudModelHint" style="display:none">
+                                    <div class="hint">Cloud modunda model "indirilmez" — hangi modeli kullanacağını her profilin kendi Ayarlar → AI sekmesindeki "Model (Ollama)" alanına yazarsın (örn. minimax-m3:cloud, gpt-oss:120b-cloud).</div>
                                 </div>
                                 <div class="section">
                                     <div class="sectionTitle" id="ollamaPersonalityTitle">Kişilik</div>
@@ -1759,6 +1914,39 @@
         </div>
     </div>
 
+    <!-- Oyunlar (Games) quick-access popup — same shortcut-driven, ephemeral
+         idea as neroPopupOverlay above, just a small Snake board instead of
+         a chat. Resets every time it's opened (see openGamesPopup()); the
+         full Oyunlar TAB (see #gamesScreen) keeps its own separate, longer-
+         lived game/score instead. -->
+    <div id="gamesPopupOverlay" class="modalOverlay">
+        <div class="modalPanel" id="gamesPopupPanel">
+            <div class="modalHeader">
+                <span id="gamesPopupTitle">Oyunlar</span>
+                <button class="modalClose" id="gamesPopupClose">✕</button>
+            </div>
+            <div id="gamesPopupBody">
+                <div id="gamesPopupMenu" class="gamesMenu">
+                    <div class="gamesMenuGrid">
+                        <div class="profileTile gameMenuTile" id="gamesPopupTileSnake">
+                            <div class="tileIcon"><span style="font-size:22px;">🐍</span></div>
+                            <div class="tileName" id="gamesPopupSnakeName">Yılan</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="gamesPopupSnakeView" class="gamesSubView">
+                    <button id="gamesPopupBackToMenuBtn" class="miniBtn gamesBackBtn">← <span id="gamesPopupBackBtnText">Oyunlar</span></button>
+                    <div class="gameScoreRow">
+                        <span id="gamesPopupScoreLabelText">Skor:</span>
+                        <b id="gamesPopupScoreValue">0</b>
+                    </div>
+                    <canvas id="gamesPopupCanvas" class="gameCanvas" width="320" height="320"></canvas>
+                    <div class="gameHint" id="gamesPopupHintText">Ok tuşları / WASD ile yön ver</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Alt+Tab-style tab switcher — Ctrl+Tab (see wireGlobalShortcuts in
          main.js / the document keydown/keyup listeners below) opens this
          and steps the selection forward, Ctrl+Shift+Tab steps it backward,
@@ -1825,6 +2013,101 @@
                 <div id="ollamaInstallStatus" class="hint">Hazırlanıyor…</div>
                 <div id="ollamaProgressWrap" style="height:6px; background:var(--bg3); border-radius:3px; overflow:hidden;">
                     <div id="ollamaProgressFill" style="height:100%; width:0%; background:var(--accent); border-radius:3px; transition:width .15s linear;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- First-ever encounter with the Ollama gate (see ensureOllamaOrPrompt
+         in the script) — asks once whether to install Ollama locally or use
+         Ollama's hosted Cloud API with a key instead, so no one HAS to
+         install anything just to try the app's AI features. The choice is
+         saved (ollamaConnectionMode) and reused on every later gate check —
+         this panel only ever shows again if the user explicitly switches
+         modes from Ayarlar → NeRoChAt's "Bağlantı" section. -->
+    <div id="ollamaModeChoiceOverlay" class="modalOverlay">
+        <div class="modalPanel">
+            <div class="modalHeader">
+                <span id="ollamaModeChoiceTitle">AI Nasıl Çalışsın?</span>
+            </div>
+            <div class="modalBody">
+                <div class="hint" id="ollamaModeChoiceHint">AI özellikleri Ollama kullanıyor — bilgisayarına kurabilir, ya da hiçbir şey kurmadan Ollama'nın bulut API'sine bir anahtarla bağlanabilirsin. İstediğin zaman Ayarlar'dan değiştirebilirsin.</div>
+                <button id="ollamaModeChoiceLocalBtn" class="miniBtn" style="width:100%; margin-top:12px;">💻 Yerel Ollama Kur</button>
+                <button id="ollamaModeChoiceApiBtn" class="miniBtn" style="width:100%; margin-top:8px;">☁️ API Anahtarı Kullan</button>
+                <button id="ollamaModeChoiceCancelBtn" class="miniBtn" style="width:100%; margin-top:8px; opacity:.7;">Şimdi Değil</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Opened whenever ollamaConnectionMode is 'api' but no key is saved
+         yet (first choice, or switched to API mode from Ayarlar without one)
+         — also reachable any time from Ayarlar → NeRoChAt to change an
+         existing key. "Nasıl Alınır?" is plain numbered steps + a button
+         that opens the REAL ollama.com page in the user's own browser,
+         deliberately not a screenshot baked into the app (always current,
+         and nothing here can actually capture/verify a live one anyway). -->
+    <div id="ollamaApiKeyOverlay" class="modalOverlay">
+        <div class="modalPanel">
+            <div class="modalHeader">
+                <span id="ollamaApiKeyTitle">Ollama API Anahtarı</span>
+                <button class="modalClose" id="ollamaApiKeyClose">✕</button>
+            </div>
+            <div class="miniTabBar">
+                <button class="tabBtn active" data-akatab="enter" id="tabBtnApiKeyEnter">Anahtar Gir</button>
+                <button class="tabBtn" data-akatab="guide" id="tabBtnApiKeyGuide">Nasıl Alınır?</button>
+            </div>
+            <div class="modalBody">
+                <div id="tab-akey-enter">
+                    <div class="hint" id="ollamaApiKeyHint">Ollama Cloud hesabından aldığın API anahtarını buraya yapıştır.</div>
+                    <div class="field">
+                        <input type="password" id="ollamaApiKeyInput" placeholder="ollama_...">
+                    </div>
+                    <div class="hint warn" id="ollamaApiKeyError" style="display:none"></div>
+                    <button id="ollamaApiKeySaveBtn" class="miniBtn" style="width:100%">Kaydet</button>
+                </div>
+                <div id="tab-akey-guide" style="display:none">
+                    <div class="hint" id="ollamaApiKeyGuideSteps">
+                        1. ollama.com adresine git ve giriş yap<br>
+                        2. Sağ üstten hesap menüsü → Settings'e git<br>
+                        3. API Keys sekmesinde "Create API Key" ile yeni bir anahtar oluştur<br>
+                        4. Anahtarı kopyala ve "Anahtar Gir" sekmesine yapıştır
+                    </div>
+                    <button id="ollamaApiKeyOpenSiteBtn" class="miniBtn" style="width:100%; margin-top:10px;">ollama.com/settings/keys sayfasını aç</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto-update — checked once every launch (see main.js's
+         notifyIfUpdateAvailable), well after the window's already open, so
+         a slow/failed check never looks like the app isn't opening. Only
+         ever appears if a newer version was actually found. -->
+    <div id="updateAvailableOverlay" class="modalOverlay">
+        <div class="modalPanel">
+            <div class="modalHeader">
+                <span id="updateAvailableTitle">Güncelleme Var</span>
+            </div>
+            <div class="modalBody">
+                <div class="hint" id="updateAvailableText">Yeni bir sürüm var.</div>
+                <button id="updateNowBtn" class="miniBtn" style="width:100%; margin-top:10px;">Şimdi Güncelle</button>
+                <button id="updateLaterBtn" class="miniBtn" style="width:100%; margin-top:8px; opacity:.7;">Daha Sonra</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Opened once "Şimdi Güncelle" is clicked — same visual pattern as
+         #ollamaInstallOverlay's progress bar. Downloaded silently
+         (autoUpdater.quitAndInstall(true,...)), so this is the only
+         feedback the user gets before the app closes/reopens itself. -->
+    <div id="updateProgressOverlay" class="modalOverlay">
+        <div class="modalPanel">
+            <div class="modalHeader">
+                <span id="updateProgressTitle">Güncelleniyor</span>
+            </div>
+            <div class="modalBody">
+                <div id="updateProgressStatus" class="hint">Hazırlanıyor…</div>
+                <div id="updateProgressWrap" style="height:6px; background:var(--bg3); border-radius:3px; overflow:hidden;">
+                    <div id="updateProgressFill" style="height:100%; width:0%; background:var(--accent); border-radius:3px; transition:width .15s linear;"></div>
                 </div>
             </div>
         </div>
@@ -1957,6 +2240,18 @@
             ollamaInstallInstalling: 'Kuruluyor…',
             ollamaInstallFailed: err => `Ollama kurulamadı: ${err}`,
             confirmResetOllamaShortcut: 'NeRoChAt kısayolu sıfırlansın mı? (Ollama\'nın kendisi kaldırılmaz, sadece NeRoBoT bu kısayolu tekrar "oluşturulabilir" gösterir.)',
+            gamesPlatformOption: 'Oyunlar',
+            gamesTileName: 'Oyunlar', gamesTileTitle: 'Oyunlar\'ı aç',
+            gamesTileResetTitle: 'Sıfırla',
+            confirmResetGamesShortcut: 'Oyunlar kısayolu sıfırlansın mı? (Sekme kapanır, "+" menüsünden tekrar eklenebilir.)',
+            gamesPopupTitle: 'Oyunlar', gameScoreLabelText: 'Skor:',
+            gameHintText: 'Ok tuşları / WASD ile yön ver',
+            gameOverText: 'Oyun bitti', gameRestartHint: 'Tekrar oynamak için Enter\'a bas',
+            gamesShortcutTitleStr: 'Oyunlar Hızlı Erişim',
+            gamesShortcutHintStr: 'Uygulama açıkken, herhangi bir sekmedeyken bu kısayola basınca küçük bir oyun penceresi açılır.',
+            gamesShortcutLabelStr: 'Kısayol',
+            gameSnakeName: 'Yılan',
+            gameStartHint: 'Başlamak için bir tuşa bas',
             newProfileTitle: 'Yeni Profil', renameFieldLabel: 'İsim',
             defaultProfileName: 'NeRoBoT',
             gsNavApp: 'Uygulama',
@@ -2085,6 +2380,18 @@
             ollamaInstallInstalling: 'Installing…',
             ollamaInstallFailed: err => `Could not install Ollama: ${err}`,
             confirmResetOllamaShortcut: "Reset the NeRoChAt shortcut? (This doesn't uninstall Ollama itself — it just makes NeRoBoT show the shortcut as re-creatable.)",
+            gamesPlatformOption: 'Games',
+            gamesTileName: 'Games', gamesTileTitle: 'Open Games',
+            gamesTileResetTitle: 'Reset',
+            confirmResetGamesShortcut: 'Reset the Games shortcut? (Closes the tab — it can be added again from the "+" menu.)',
+            gamesPopupTitle: 'Games', gameScoreLabelText: 'Score:',
+            gameHintText: 'Arrow keys / WASD to steer',
+            gameOverText: 'Game over', gameRestartHint: 'Press Enter to play again',
+            gamesShortcutTitleStr: 'Games Quick Access',
+            gamesShortcutHintStr: 'While the app is open, on any tab, pressing this shortcut opens a small game window.',
+            gamesShortcutLabelStr: 'Shortcut',
+            gameSnakeName: 'Snake',
+            gameStartHint: 'Press any key to start',
             newProfileTitle: 'New Profile', renameFieldLabel: 'Name',
             defaultProfileName: 'NeRoBoT',
             gsNavApp: 'App',
@@ -2131,6 +2438,13 @@
     // can both stay open while only one is active.
     let ollamaTabOpen = false;
     let ollamaTabActive = false;
+    // Oyunlar (Games) tab — same open/active split as NeRoChAt above, just
+    // with no backing native view at all (see createSnakeGame/openGamesTab
+    // further down): a canvas game needs none of the WebContentsView
+    // isolation WA/Telegram/NeRoChAt need, so this tab is plain renderer
+    // content living in #gamesScreen instead.
+    let gamesTabOpen = false;
+    let gamesTabActive = false;
 
     function applyLanguage() {
         document.documentElement.lang = lang;
@@ -2141,6 +2455,19 @@
         document.getElementById('homeTabBtn').title = t('homeTabTitle');
         document.getElementById('newProfileTitle').textContent = t('newProfileTitle');
         document.getElementById('platformOllamaLabel').textContent = t('ollamaPlatformOption');
+        document.getElementById('platformGamesLabel').textContent = t('gamesPlatformOption');
+        document.getElementById('gamesShortcutTitle').textContent = t('gamesShortcutTitleStr');
+        document.getElementById('gamesShortcutHint').textContent = t('gamesShortcutHintStr');
+        document.getElementById('gamesShortcutLabel').textContent = t('gamesShortcutLabelStr');
+        document.getElementById('gamesPopupTitle').textContent = t('gamesPopupTitle');
+        document.getElementById('gameScoreLabelText').textContent = t('gameScoreLabelText');
+        document.getElementById('gameHintText').textContent = t('gameHintText');
+        document.getElementById('gamesPopupScoreLabelText').textContent = t('gameScoreLabelText');
+        document.getElementById('gamesPopupHintText').textContent = t('gameHintText');
+        document.getElementById('gameSnakeName').textContent = t('gameSnakeName');
+        document.getElementById('gamesPopupSnakeName').textContent = t('gameSnakeName');
+        document.getElementById('gamesBackBtnText').textContent = t('gamesTileName');
+        document.getElementById('gamesPopupBackBtnText').textContent = t('gamesTileName');
         document.getElementById('connectionModeTitle').textContent = t('connectionModeTitle');
         document.getElementById('modeBotLabel').textContent = t('modeBotLabel');
         document.getElementById('modeWebLabel').textContent = t('modeWebLabel');
@@ -2603,6 +2930,12 @@
         if (key === 'app') {
             document.getElementById('gsTitle').textContent = t('gsNavApp');
             document.getElementById('neroShortcutInput').value = neroPopupShortcut;
+            // "Bağlantı" (local Ollama vs API key) now lives here instead of
+            // inside NeRoChAt's own Genel tab — refresh its status/button
+            // visibility every time Uygulama is opened, same as
+            // loadOllamaGeneralTab() already does for whoever's looking at
+            // NeRoChAt's tab instead.
+            updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
             return;
         }
 
@@ -2672,6 +3005,11 @@
     // here.
     let fixTextShortcut = 'Ctrl+Shift+J';
     let recordingFixTextShortcut = false;
+    // Oyunlar (Games) quick-access popup shortcut — same story as
+    // neroPopupShortcut above, just its own combo/config key (see
+    // openGamesPopup further down).
+    let gamesPopupShortcut = 'Ctrl+Shift+O';
+    let recordingGamesShortcut = false;
 
     function formatShortcutCombo(e) {
         const parts = [];
@@ -2735,6 +3073,20 @@
         window.nerobot.setAppConfig({ fixTextUseLocalModel: e.target.checked });
     });
 
+    async function loadGamesPopupShortcut() {
+        const config = await window.nerobot.getAppConfig();
+        gamesPopupShortcut = config.gamesPopupShortcut || gamesPopupShortcut;
+        const input = document.getElementById('gamesShortcutInput');
+        if (input) input.value = gamesPopupShortcut;
+    }
+
+    document.getElementById('gamesShortcutRecordBtn').addEventListener('click', () => {
+        recordingGamesShortcut = true;
+        const input = document.getElementById('gamesShortcutInput');
+        input.value = '…';
+        input.focus();
+    });
+
     // One listener does double duty: while `recordingNeroShortcut` is armed,
     // the next keypress anywhere becomes the new combo (works even though
     // the input itself is readonly, since focus is still on it); otherwise,
@@ -2760,11 +3112,39 @@
             await window.nerobot.setAppConfig({ fixTextShortcut });
             return;
         }
+        if (recordingGamesShortcut) {
+            e.preventDefault();
+            if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
+            recordingGamesShortcut = false;
+            gamesPopupShortcut = formatShortcutCombo(e);
+            document.getElementById('gamesShortcutInput').value = gamesPopupShortcut;
+            await window.nerobot.setAppConfig({ gamesPopupShortcut });
+            return;
+        }
         const typingInField = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
         if (typingInField) return;
         if (matchesShortcutCombo(e, neroPopupShortcut)) {
             e.preventDefault();
             openNeroPopup();
+            return;
+        }
+        if (matchesShortcutCombo(e, gamesPopupShortcut)) {
+            e.preventDefault();
+            openGamesPopup();
+            return;
+        }
+        // Snake gameplay input — only while its own view is actually the one
+        // on screen (not the games menu/picker), in either the full Oyunlar
+        // tab or its quick popup; arrow keys otherwise fall through
+        // untouched (e.g. scrolling), and pressing one while the menu shows
+        // doesn't silently arm a game the player isn't even looking at.
+        if (gamesTabActive && gamesCurrentView === 'snake' && gameTabInstance.handleKey(e)) {
+            e.preventDefault();
+            return;
+        }
+        if (gamesPopupOverlay.classList.contains('open') && gamesPopupCurrentView === 'snake' && gamesPopupInstance.handleKey(e)) {
+            e.preventDefault();
+            return;
         }
     });
 
@@ -2775,6 +3155,9 @@
     // catches the combo while THIS page itself has focus (Home screen, or a
     // modal up), which in practice is rare once a profile is open.
     window.nerobot.onOpenNeroPopup(() => openNeroPopup());
+    // Same story, for the Oyunlar (Games) tab's own quick-popup shortcut —
+    // see main.js's matchesGamesShortcut/wireGlobalShortcuts.
+    window.nerobot.onOpenGamesPopup(() => openGamesPopup());
 
     // A model finished pulling/got deleted from Ayarlar → NeRoChAt, or from
     // the separate NeRoChAt tab's own "+" — if the quick popup happens to be
@@ -2799,6 +3182,7 @@
     function buildTabSwitcherItems() {
         const items = [{ kind: 'home', id: null, name: t('homeTabTitle') }];
         if (ollamaTabOpen) items.push({ kind: 'ollama', id: 'ollama', name: t('ollamaTileName') });
+        if (gamesTabOpen) items.push({ kind: 'games', id: 'games', name: t('gamesTileName') });
         for (const p of orderedOpenProfiles()) {
             items.push({ kind: 'profile', id: p.id, name: p.name });
         }
@@ -2818,6 +3202,8 @@
                 img.src = 'logo.svg';
                 img.alt = '';
                 icon.appendChild(img);
+            } else if (item.kind === 'games') {
+                icon.textContent = '🎮';
             } else if (item.kind === 'home') {
                 icon.textContent = '⌂';
             } else {
@@ -2845,8 +3231,9 @@
             tabSwitcherItems = buildTabSwitcherItems();
             if (tabSwitcherItems.length < 2) return; // nothing to switch to
             const activeIdx = tabSwitcherItems.findIndex((it) =>
-                it.kind === 'home' ? (!activeProfileId && !ollamaTabActive) :
+                it.kind === 'home' ? (!activeProfileId && !ollamaTabActive && !gamesTabActive) :
                 it.kind === 'ollama' ? ollamaTabActive :
+                it.kind === 'games' ? gamesTabActive :
                 it.id === activeProfileId);
             tabSwitcherIndex = activeIdx === -1 ? 0 : activeIdx;
             tabSwitcherOpen = true;
@@ -2865,6 +3252,7 @@
         if (!item) return;
         if (item.kind === 'home') await activateTab(null);
         else if (item.kind === 'ollama') await openOllamaTab();
+        else if (item.kind === 'games') await openGamesTab();
         else await activateTab(item.id);
     }
 
@@ -2973,6 +3361,32 @@
     document.getElementById('neroPopupClose').addEventListener('click', () => closeModal('neroPopupOverlay'));
     neroPopupOverlay.addEventListener('click', (e) => {
         if (e.target.id === 'neroPopupOverlay') closeModal('neroPopupOverlay');
+    });
+
+    // ============================
+    // Oyunlar (Games) quick-access popup — same shortcut-driven idea as
+    // NeRoChAt's popup above, but ephemeral in the other direction: instead
+    // of reusing gameTabInstance (the full tab's persistent game), it resets
+    // gamesPopupInstance fresh every open, so a quick game here never
+    // clobbers whatever's in progress on the actual Oyunlar tab.
+    // ============================
+    const gamesPopupOverlay = document.getElementById('gamesPopupOverlay');
+
+    function openGamesPopup() {
+        if (recordingGamesShortcut) return; // a combo is being recorded right now — don't hijack that keypress
+        gamesPopupInstance.reset();
+        showGamesPopupMenu();
+        openModal('gamesPopupOverlay');
+    }
+
+    function closeGamesPopup() {
+        gamesPopupInstance.stop();
+        closeModal('gamesPopupOverlay');
+    }
+
+    document.getElementById('gamesPopupClose').addEventListener('click', closeGamesPopup);
+    gamesPopupOverlay.addEventListener('click', (e) => {
+        if (e.target.id === 'gamesPopupOverlay') closeGamesPopup();
     });
 
     // One line per <option> in the start/end pickers below — how many
@@ -3175,11 +3589,27 @@
         return new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
     }
 
+    // Toggles just one tab's unread-pulse class in place — NOT a full
+    // renderTabs() (which tears down and recreates every tab in the strip).
+    // A background profile's incoming message fires this on every single
+    // message while the bot is active, so a full rebuild here was making the
+    // whole strip flicker/stutter constantly, and could yank a tab's DOM
+    // node out from under an in-progress click or drag-to-reorder (native
+    // HTML5 drag breaks if its source element gets removed mid-drag) —
+    // exactly the "takılıyor / sürükleyemiyorum / sekmeyi seçemiyorum"
+    // symptoms. Same tabDot-style in-place update handleStatusEvent already
+    // does for status changes, just for the unread pulse instead.
+    function updateTabUnreadIndicator(profileId) {
+        const tabEl = document.querySelector(`.profileTab[data-id="${CSS.escape(profileId)}"]`);
+        if (tabEl) tabEl.classList.toggle('hasUnread', hasUnreadNotifications(profileId));
+    }
+
     async function dismissNotification(id) {
+        const removed = notifications.find(n => n.id === id);
         notifications = notifications.filter(n => n.id !== id);
         await window.nerobot.markNotificationsRead([id]);
         renderNotifBadge();
-        renderTabs();
+        if (removed) updateTabUnreadIndicator(removed.profileId);
         if (notifOverlay.classList.contains('open')) renderNotifPanel();
     }
     async function dismissProfileNotifications(profileId) {
@@ -3187,7 +3617,7 @@
         notifications = notifications.filter(n => n.profileId !== profileId);
         await window.nerobot.markProfileNotificationsRead(profileId);
         renderNotifBadge();
-        renderTabs();
+        updateTabUnreadIndicator(profileId);
         if (notifOverlay.classList.contains('open')) renderNotifPanel();
     }
 
@@ -3330,7 +3760,7 @@
     window.nerobot.onNewNotification((entry) => {
         notifications.push(entry);
         renderNotifBadge();
-        renderTabs();
+        updateTabUnreadIndicator(entry.profileId);
         if (notifOverlay.classList.contains('open')) renderNotifPanel();
     });
     window.nerobot.listNotifications().then((list) => {
@@ -3351,7 +3781,7 @@
     // Genuinely AI-independent settings only — everything here still means
     // something with AI Bot turned off. whitelistMode/noPrefixAll/prefix/
     // ignorePrefix all live inside `if (state.aiChatEnabled)` in bot.js
-    // (see project_scripts/bot.js's message handler) — they have literally
+    // (see src/bot.js's message handler) — they have literally
     // zero effect while AI is off, so they belong in AI_SECTIONS_I18N below,
     // not here. debugPrefix (admin commands like !help) works regardless of
     // AI Bot state, so it stays.
@@ -4298,7 +4728,45 @@
         ollamaImageGenApiKeyOpenai.value = status.imageGenApiKeyOpenai || '';
         ollamaImageGenApiKeyStability.value = status.imageGenApiKeyStability || '';
         updateOllamaImageGenVisibility();
+        updateOllamaConnectionSection(status);
     }
+
+    // "Bağlantı" section — mirrors ensureOllamaOrPrompt's own local/api
+    // distinction (see above), just as an explicit later-switch instead of
+    // the one-time first-choice panel. Exactly one of the two switch
+    // buttons ever shows — never both, never neither (see the plan this
+    // was built from: "biri açıkken diğeri kapalı").
+    function maskApiKey(key) {
+        if (!key) return '';
+        return key.length <= 4 ? '••••' : '•'.repeat(Math.max(4, key.length - 4)) + key.slice(-4);
+    }
+    function updateOllamaConnectionSection(status) {
+        const isApi = status.ollamaConnectionMode === 'api';
+        document.getElementById('ollamaConnectionStatusText').textContent = isApi
+            ? `Şu an: API Anahtarı (${maskApiKey(status.ollamaCloudApiKey) || 'kaydedilmedi'})`
+            : 'Şu an: Yerel Ollama';
+        document.getElementById('ollamaConnectionSwitchToApiBtn').style.display = isApi ? 'none' : '';
+        document.getElementById('ollamaConnectionSwitchToLocalBtn').style.display = isApi ? '' : 'none';
+        document.getElementById('ollamaConnectionChangeKeyBtn').style.display = isApi ? '' : 'none';
+        document.getElementById('ollamaModelsSection').style.display = isApi ? 'none' : '';
+        document.getElementById('ollamaCloudModelHint').style.display = isApi ? '' : 'none';
+    }
+    document.getElementById('ollamaConnectionSwitchToApiBtn').addEventListener('click', async () => {
+        const status = await window.nerobot.setOllamaConnectionMode('api');
+        updateOllamaConnectionSection(status);
+        if (!status.ollamaCloudApiKey) await openOllamaApiKeyPanel();
+        updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+    });
+    document.getElementById('ollamaConnectionSwitchToLocalBtn').addEventListener('click', async () => {
+        const ok = await ensureLocalOllamaOrPrompt();
+        if (ok) await window.nerobot.setOllamaConnectionMode('local');
+        updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+        if (ok) await loadOllamaGeneralTab(); // model list is meaningful again — refresh it
+    });
+    document.getElementById('ollamaConnectionChangeKeyBtn').addEventListener('click', async () => {
+        await openOllamaApiKeyPanel();
+        updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+    });
 
     ollamaImageGenEnabled.addEventListener('change', async () => {
         await window.nerobot.setOllamaImageGenEnabled(ollamaImageGenEnabled.checked);
@@ -4416,6 +4884,13 @@
         + '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>';
     const TELEGRAM_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#29a9eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
         + '<path d="M22 2 11 13"></path><path d="M22 2 15 22l-4-9-9-4 20-7z"></path></svg>';
+    // Oyunlar (Games) tile/tab icon — same stroke-icon convention as WA/
+    // Telegram above (a raw 🎮 emoji glyph rendered noticeably bigger/bolder
+    // than these at the same box size, which is what made the Home tile look
+    // mismatched next to NeRoChAt's).
+    const GAMEPAD_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        + '<path d="M6 12h4M8 10v4"></path><circle cx="15" cy="11" r="1" fill="#a78bfa"></circle><circle cx="18" cy="13" r="1" fill="#a78bfa"></circle>'
+        + '<path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.152A4 4 0 0 0 17.32 5z"></path></svg>';
 
     // Small gear glyph for the per-tile "profile settings" hover button —
     // same shape as the topbar Settings icon, just reused at 12px.
@@ -4474,7 +4949,7 @@
 
     // ============================
     // Ollama shortcut — a small tile below the profile grid, NOT a profile
-    // itself (see project_scripts/ollama-installer.js's design note: profiles
+    // itself (see src/ollama-installer.js's design note: profiles
     // are strictly WhatsApp-session-bound). Tracks a simple on/off flag via
     // ollama:getStatus/setShortcutCreated instead. Clicking it (or turning on
     // the AI Bot toggle in the new AI tab) runs ensureOllamaOrPrompt(), which
@@ -4554,11 +5029,315 @@
         await openOllamaTab();
     }
 
-    // Shared "Ollama gate": resolves true if Ollama is already installed, or
-    // becomes installed after the user agrees to a prompt. Resolves false if
-    // it's missing and the user declines, or the install fails. Used by both
-    // the Ollama tile above and the AI Bot toggle (see the AI tab).
-    async function ensureOllamaOrPrompt() {
+    // ============================
+    // Oyunlar (Games) — same "+ menu → Home tile → tab" shape as NeRoChAt
+    // above, minus the install gate (Snake needs nothing installed) and
+    // minus a backing native view (see the big state-variable comment near
+    // gamesTabOpen/gamesTabActive up top). "created" is persisted the same
+    // way NeRoChAt's shortcut is, just folded into the generic app-config
+    // file instead of its own status file — there's no separate
+    // install/connection state to track here, just the one flag.
+    // ============================
+    let gamesShortcutCreated = false;
+
+    async function refreshGamesStatus() {
+        try {
+            const config = await window.nerobot.getAppConfig();
+            gamesShortcutCreated = !!config.gamesShortcutCreated;
+        } catch (_) {}
+        renderGamesTile();
+    }
+
+    function renderGamesTile() {
+        const holder = document.getElementById('gamesTileHolder');
+        holder.innerHTML = '';
+        const platformOption = document.getElementById('platformGames');
+        if (platformOption) platformOption.classList.toggle('disabled', gamesShortcutCreated);
+        if (!gamesShortcutCreated) return;
+
+        const tile = document.createElement('div');
+        tile.className = 'profileTile gamesTile';
+        tile.title = t('gamesTileTitle');
+
+        const actions = document.createElement('div');
+        actions.className = 'tileActions';
+        const resetBtn = document.createElement('button');
+        resetBtn.className = 'tileAction delete';
+        resetBtn.title = t('gamesTileResetTitle');
+        resetBtn.innerHTML = GEAR_ICON_SVG;
+        resetBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!(await showConfirmPanel(t('confirmResetGamesShortcut')))) return;
+            if (gamesTabOpen) await closeGamesTab();
+            gameTabInstance.reset();
+            showGamesMenu();
+            gamesShortcutCreated = false;
+            await window.nerobot.setAppConfig({ gamesShortcutCreated: false });
+            renderGamesTile();
+        });
+        actions.appendChild(resetBtn);
+        tile.appendChild(actions);
+
+        const icon = document.createElement('div');
+        icon.className = 'tileIcon';
+        icon.innerHTML = GAMEPAD_ICON_SVG;
+
+        const name = document.createElement('div');
+        name.className = 'tileName';
+        name.textContent = t('gamesTileName');
+
+        tile.appendChild(icon);
+        tile.appendChild(name);
+        tile.addEventListener('click', () => openGamesTab());
+        holder.appendChild(tile);
+    }
+
+    // Triggered from the "+" modal's Oyunlar option — no install gate to run
+    // first (unlike createOllamaShortcut above), so this just marks the
+    // shortcut created and switches straight to the tab.
+    async function createGamesShortcut() {
+        closeModal('newProfileOverlay');
+        gamesShortcutCreated = true;
+        await window.nerobot.setAppConfig({ gamesShortcutCreated: true });
+        renderGamesTile();
+        await openGamesTab();
+    }
+
+    // ----------------------------
+    // Snake — a small, self-contained canvas game. One factory instantiated
+    // twice: once for the full Oyunlar tab's canvas (persists — pausing on
+    // tab-away, resuming on tab-back, same score kept the whole session) and
+    // once for the quick-access popup's canvas (reset fresh every time the
+    // popup opens, same "ephemeral" story as the NeRoChAt popup's chat — see
+    // openGamesPopup further down).
+    // ----------------------------
+    function createSnakeGame(canvas, scoreEl) {
+        const ctx = canvas.getContext('2d');
+        const CELL = 20;
+        const COLS = Math.floor(canvas.width / CELL);
+        const ROWS = Math.floor(canvas.height / CELL);
+        const TICK_MS = 120;
+        let snake, dir, nextDir, food, score, loopId, gameOver;
+        // Whether the snake has actually started moving yet (post first
+        // input) — reset() leaves this false so a freshly (re)opened game
+        // sits idle instead of running straight into a wall unattended.
+        let started;
+
+        function placeFood() {
+            let pos;
+            do {
+                pos = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
+            } while (snake.some((s) => s.x === pos.x && s.y === pos.y));
+            food = pos;
+        }
+
+        function draw() {
+            ctx.fillStyle = '#101013';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ff8c1a';
+            for (const seg of snake) ctx.fillRect(seg.x * CELL + 1, seg.y * CELL + 1, CELL - 2, CELL - 2);
+            ctx.fillStyle = '#25d366';
+            ctx.fillRect(food.x * CELL + 1, food.y * CELL + 1, CELL - 2, CELL - 2);
+            if (!started && !gameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,.55)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#ececec';
+                ctx.textAlign = 'center';
+                ctx.font = '13px "Segoe UI", sans-serif';
+                ctx.fillText(t('gameStartHint'), canvas.width / 2, canvas.height / 2);
+            } else if (gameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,.6)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#ececec';
+                ctx.textAlign = 'center';
+                ctx.font = '16px "Segoe UI", sans-serif';
+                ctx.fillText(t('gameOverText'), canvas.width / 2, canvas.height / 2 - 8);
+                ctx.font = '12px "Segoe UI", sans-serif';
+                ctx.fillText(t('gameRestartHint'), canvas.width / 2, canvas.height / 2 + 14);
+            }
+        }
+
+        function stop() {
+            if (loopId) clearInterval(loopId);
+            loopId = null;
+        }
+
+        function tick() {
+            dir = nextDir;
+            const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+            const hitWall = head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS;
+            const hitSelf = snake.some((s) => s.x === head.x && s.y === head.y);
+            if (hitWall || hitSelf) {
+                gameOver = true;
+                stop();
+                draw();
+                return;
+            }
+            snake.unshift(head);
+            if (head.x === food.x && head.y === food.y) {
+                score++;
+                if (scoreEl) scoreEl.textContent = String(score);
+                placeFood();
+            } else {
+                snake.pop();
+            }
+            draw();
+        }
+
+        function reset() {
+            stop();
+            started = false;
+            snake = [{ x: Math.floor(COLS / 2), y: Math.floor(ROWS / 2) }];
+            dir = { x: 1, y: 0 };
+            nextDir = dir;
+            score = 0;
+            gameOver = false;
+            if (scoreEl) scoreEl.textContent = '0';
+            placeFood();
+            draw();
+        }
+
+        // Begins ticking — called only in response to real input (see
+        // handleKey below), never automatically, so a freshly (re)opened
+        // game waits for the player instead of running unattended.
+        function start() {
+            if (gameOver) return;
+            started = true;
+            if (!loopId) loopId = setInterval(tick, TICK_MS);
+            draw(); // clear the idle overlay right away, don't wait for the first tick
+        }
+
+        // Re-ticking after switching tabs away and back — a no-op unless
+        // the game was already under way (started, not over) before the
+        // interval got paused (see leaveGamesTabIfActive/closeGamesTab).
+        // Deliberately does NOT arm a never-yet-played game — that still
+        // needs a real keypress via handleKey below.
+        function resume() {
+            if (started && !gameOver && !loopId) loopId = setInterval(tick, TICK_MS);
+        }
+
+        // Returns true if the key was consumed (game input), false otherwise
+        // (caller should treat it as an ordinary, unrelated keypress).
+        function handleKey(e) {
+            const key = e.key;
+            let want = null;
+            if (key === 'ArrowUp' || key === 'w' || key === 'W') want = { x: 0, y: -1 };
+            else if (key === 'ArrowDown' || key === 's' || key === 'S') want = { x: 0, y: 1 };
+            else if (key === 'ArrowLeft' || key === 'a' || key === 'A') want = { x: -1, y: 0 };
+            else if (key === 'ArrowRight' || key === 'd' || key === 'D') want = { x: 1, y: 0 };
+            else if (gameOver && (key === 'Enter' || key === ' ')) { reset(); start(); return true; }
+            if (!started) {
+                // Idle, waiting for the very first input — a direction key
+                // both arms the game AND sets that as the initial heading;
+                // Enter/Space just starts it moving in its default direction.
+                if (want) { nextDir = want; start(); return true; }
+                if (key === 'Enter' || key === ' ') { start(); return true; }
+                return false;
+            }
+            if (!want) return false;
+            // No reversing straight into the segment right behind the head.
+            if (snake.length > 1 && want.x === -dir.x && want.y === -dir.y) return true;
+            nextDir = want;
+            return true;
+        }
+
+        reset();
+        return { start, stop, resume, reset, handleKey };
+    }
+
+    const gameTabInstance = createSnakeGame(document.getElementById('gameTabCanvas'), document.getElementById('gameScoreValue'));
+    const gamesPopupInstance = createSnakeGame(document.getElementById('gamesPopupCanvas'), document.getElementById('gamesPopupScoreValue'));
+
+    // Which of the Oyunlar tab's own two screens is showing — the game
+    // picker (menu) or Yılan's own view (snake). Every fresh "+"-created tab
+    // starts on the menu (see createGamesShortcut/openGamesTab); switching
+    // away and back to an already-open tab remembers whichever one you had
+    // picked, same as the game's own score/position is remembered.
+    let gamesCurrentView = 'menu';
+    function showGamesMenu() {
+        gamesCurrentView = 'menu';
+        document.getElementById('gamesMenu').classList.remove('hidden');
+        document.getElementById('gamesSnakeView').classList.remove('visible');
+    }
+    function showGamesSnake() {
+        gamesCurrentView = 'snake';
+        document.getElementById('gamesMenu').classList.add('hidden');
+        document.getElementById('gamesSnakeView').classList.add('visible');
+        gameTabInstance.resume();
+    }
+    document.getElementById('gameTileSnake').addEventListener('click', showGamesSnake);
+    document.getElementById('gamesBackToMenuBtn').addEventListener('click', () => {
+        gameTabInstance.stop();
+        showGamesMenu();
+    });
+
+    // Same menu/game split for the quick-access popup, fully independent of
+    // the tab's own gamesCurrentView — the popup already resets to a fresh
+    // game every time it opens (see openGamesPopup), so it resets back to
+    // its menu each time too, for the same "ephemeral" reason.
+    let gamesPopupCurrentView = 'menu';
+    function showGamesPopupMenu() {
+        gamesPopupCurrentView = 'menu';
+        document.getElementById('gamesPopupMenu').classList.remove('hidden');
+        document.getElementById('gamesPopupSnakeView').classList.remove('visible');
+    }
+    function showGamesPopupSnake() {
+        gamesPopupCurrentView = 'snake';
+        document.getElementById('gamesPopupMenu').classList.add('hidden');
+        document.getElementById('gamesPopupSnakeView').classList.add('visible');
+    }
+    document.getElementById('gamesPopupTileSnake').addEventListener('click', showGamesPopupSnake);
+    document.getElementById('gamesPopupBackToMenuBtn').addEventListener('click', () => {
+        gamesPopupInstance.stop();
+        showGamesPopupMenu();
+    });
+
+    // Opens (or, if already open, just switches to) the Oyunlar tab — mirrors
+    // openOllamaTab above, minus any install gate and minus the IPC call to
+    // spin up a native view (there isn't one; see the class comment above).
+    // activateProfile(null) still has to go out to main — it's what hides
+    // whichever WA/Telegram view was on screen (see layoutViews in main.js),
+    // exactly like leaving to Home would.
+    async function openGamesTab() {
+        if (gamesTabActive) return;
+        await leaveOllamaTabIfActive();
+        gamesTabOpen = true;
+        gamesTabActive = true;
+        applyProfilesPayload(await window.nerobot.activateProfile(null));
+        await onActiveProfileChanged();
+        // Re-ticks Yılan if it was already under way when the tab was last
+        // left (resume() no-ops on a never-started or already-running game)
+        // — never auto-starts a fresh one, that still needs a real keypress.
+        if (gamesCurrentView === 'snake') gameTabInstance.resume();
+    }
+
+    // Leaving the Oyunlar tab for a WA/Telegram profile, NeRoChAt, or Home —
+    // pauses the game (state/score kept) rather than resetting it, so
+    // switching back picks up exactly where it left off.
+    async function leaveGamesTabIfActive() {
+        if (!gamesTabActive) return;
+        gamesTabActive = false;
+        gameTabInstance.stop();
+    }
+
+    async function closeGamesTab() {
+        const wasActive = gamesTabActive;
+        gamesTabOpen = false;
+        gamesTabActive = false;
+        gameTabInstance.stop();
+        if (wasActive) {
+            applyProfilesPayload(await window.nerobot.activateProfile(null));
+            await onActiveProfileChanged();
+        } else {
+            renderTabs();
+        }
+    }
+
+    // Today's original gate, unchanged — checks/installs a LOCAL Ollama.
+    // Used both as the 'local' branch of ensureOllamaOrPrompt below and
+    // directly by Ayarlar → NeRoChAt's "Yerel Ollama Bağlantısı" button
+    // (switching back from API mode).
+    async function ensureLocalOllamaOrPrompt() {
         if (await window.nerobot.checkOllamaInstalled()) return true;
         if (!(await showConfirmPanel(t('ollamaInstallConfirm')))) return false;
 
@@ -4585,6 +5364,164 @@
         closeModal('ollamaInstallOverlay');
         if (!result.ok) await showAlertPanel(t('ollamaInstallFailed')(result.error || '?'));
         return !!result.ok;
+    }
+
+    // First-ever encounter with the gate (see #ollamaModeChoiceOverlay in
+    // the markup) — resolves 'local' | 'api' | null (user backed out).
+    function showOllamaModeChoicePanel() {
+        return new Promise((resolve) => {
+            const localBtn = document.getElementById('ollamaModeChoiceLocalBtn');
+            const apiBtn = document.getElementById('ollamaModeChoiceApiBtn');
+            const cancelBtn = document.getElementById('ollamaModeChoiceCancelBtn');
+            const overlay = document.getElementById('ollamaModeChoiceOverlay');
+
+            function cleanup(result) {
+                closeModal('ollamaModeChoiceOverlay');
+                localBtn.removeEventListener('click', onLocal);
+                apiBtn.removeEventListener('click', onApi);
+                cancelBtn.removeEventListener('click', onCancel);
+                overlay.removeEventListener('click', onOverlay);
+                resolve(result);
+            }
+            function onLocal() { cleanup('local'); }
+            function onApi() { cleanup('api'); }
+            function onCancel() { cleanup(null); }
+            function onOverlay(e) { if (e.target === overlay) cleanup(null); }
+
+            localBtn.addEventListener('click', onLocal);
+            apiBtn.addEventListener('click', onApi);
+            cancelBtn.addEventListener('click', onCancel);
+            overlay.addEventListener('click', onOverlay);
+            openModal('ollamaModeChoiceOverlay');
+        });
+    }
+
+    // Opens the API-key entry panel (#ollamaApiKeyOverlay) — resolves true
+    // once a key is saved, false if closed without saving. Reused both by
+    // the gate below (mode already 'api' but no key yet) and Ayarlar →
+    // NeRoChAt's own "Değiştir"/"API Anahtarı Kullan" buttons.
+    function openOllamaApiKeyPanel() {
+        return new Promise((resolve) => {
+            const overlay = document.getElementById('ollamaApiKeyOverlay');
+            const closeBtn = document.getElementById('ollamaApiKeyClose');
+            const saveBtn = document.getElementById('ollamaApiKeySaveBtn');
+            const input = document.getElementById('ollamaApiKeyInput');
+            const errorEl = document.getElementById('ollamaApiKeyError');
+            input.value = '';
+            errorEl.style.display = 'none';
+
+            function cleanup(result) {
+                closeModal('ollamaApiKeyOverlay');
+                closeBtn.removeEventListener('click', onClose);
+                saveBtn.removeEventListener('click', onSave);
+                overlay.removeEventListener('click', onOverlay);
+                resolve(result);
+            }
+            async function onSave() {
+                const key = input.value.trim();
+                if (!key) {
+                    errorEl.textContent = 'Bir anahtar gir.';
+                    errorEl.style.display = '';
+                    return;
+                }
+                await window.nerobot.setOllamaCloudApiKey(key);
+                cleanup(true);
+            }
+            function onClose() { cleanup(false); }
+            function onOverlay(e) { if (e.target === overlay) cleanup(false); }
+
+            closeBtn.addEventListener('click', onClose);
+            saveBtn.addEventListener('click', onSave);
+            overlay.addEventListener('click', onOverlay);
+            // Always starts on the "Anahtar Gir" tab, even if a previous
+            // open left it on "Nasıl Alınır?".
+            switchApiKeyTab('enter');
+            openModal('ollamaApiKeyOverlay');
+        });
+    }
+
+    function switchApiKeyTab(tab) {
+        document.getElementById('tabBtnApiKeyEnter').classList.toggle('active', tab === 'enter');
+        document.getElementById('tabBtnApiKeyGuide').classList.toggle('active', tab === 'guide');
+        document.getElementById('tab-akey-enter').style.display = tab === 'enter' ? '' : 'none';
+        document.getElementById('tab-akey-guide').style.display = tab === 'guide' ? '' : 'none';
+    }
+    document.getElementById('tabBtnApiKeyEnter').addEventListener('click', () => switchApiKeyTab('enter'));
+    document.getElementById('tabBtnApiKeyGuide').addEventListener('click', () => switchApiKeyTab('guide'));
+    document.getElementById('ollamaApiKeyOpenSiteBtn').addEventListener('click', () => {
+        window.nerobot.openExternalLink('https://ollama.com/settings/keys');
+    });
+
+    // ============================
+    // Auto-update — see main.js's notifyIfUpdateAvailable/update:startDownload.
+    // Fires at most once per launch, only if a newer version was actually
+    // found; "Daha Sonra" just closes the prompt — next launch checks again
+    // on its own, nothing to remember here.
+    // ============================
+    window.nerobot.onUpdateAvailable(({ version }) => {
+        document.getElementById('updateAvailableText').textContent = version
+            ? `Yeni bir sürüm var: v${version}`
+            : 'Yeni bir sürüm var.';
+        openModal('updateAvailableOverlay');
+    });
+    document.getElementById('updateLaterBtn').addEventListener('click', () => {
+        closeModal('updateAvailableOverlay');
+    });
+    document.getElementById('updateNowBtn').addEventListener('click', async () => {
+        closeModal('updateAvailableOverlay');
+        document.getElementById('updateProgressStatus').textContent = 'Hazırlanıyor…';
+        document.getElementById('updateProgressFill').style.width = '0%';
+        openModal('updateProgressOverlay');
+        const result = await window.nerobot.startUpdateDownload();
+        // Normally never reached — a successful download ends in
+        // quitAndInstall(), which tears this whole process down before the
+        // promise above even resolves. Only gets here on failure (see
+        // onUpdateDownloadError below for the actual error text).
+        if (result && !result.ok) closeModal('updateProgressOverlay');
+    });
+    window.nerobot.onUpdateDownloadProgress(({ percent }) => {
+        const pct = Math.round(percent || 0);
+        document.getElementById('updateProgressStatus').textContent = `%${pct} indiriliyor…`;
+        document.getElementById('updateProgressFill').style.width = pct + '%';
+    });
+    window.nerobot.onUpdateDownloadError(({ error }) => {
+        closeModal('updateProgressOverlay');
+        showAlertPanel(`Güncelleme indirilemedi: ${error || '?'}`);
+    });
+
+    // Makes sure the profile's chosen connection is actually ready to use —
+    // installs/connects LOCAL Ollama, or makes sure an API key is saved,
+    // whichever ollamaConnectionMode currently says (see Ayarlar →
+    // NeRoChAt's "Bağlantı" section to switch). The very first time this
+    // runs (mode never chosen), asks once via showOllamaModeChoicePanel and
+    // remembers the answer — every call after that is silent unless
+    // something's actually missing (not installed yet / no key saved yet).
+    // Resolves true if ready to go, false if the user backed out or
+    // install/key-entry failed. Used by the Ollama tile, the AI Bot toggle,
+    // and Ayarlar → NeRoChAt's own connection buttons.
+    async function ensureOllamaOrPrompt() {
+        let status = await window.nerobot.getOllamaStatus();
+
+        if (!status.ollamaConnectionMode) {
+            // Someone with an already-working local install from before this
+            // choice existed shouldn't suddenly get asked to pick a mode —
+            // silently default them to 'local' instead of interrupting a
+            // setup that's already fine. Only genuinely fresh installs (no
+            // Ollama, no mode chosen yet) see the picker.
+            if (await window.nerobot.checkOllamaInstalled()) {
+                status = await window.nerobot.setOllamaConnectionMode('local');
+            } else {
+                const choice = await showOllamaModeChoicePanel();
+                if (!choice) return false;
+                status = await window.nerobot.setOllamaConnectionMode(choice);
+            }
+        }
+
+        if (status.ollamaConnectionMode === 'api') {
+            if (status.ollamaCloudApiKey) return true;
+            return await openOllamaApiKeyPanel();
+        }
+        return await ensureLocalOllamaOrPrompt();
     }
 
     // Purely a UI concern — which order the OPEN profile tabs show in,
@@ -4667,7 +5604,7 @@
     }
 
     function renderTabs() {
-        document.getElementById('homeTabBtn').classList.toggle('active', !activeProfileId && !ollamaTabActive);
+        document.getElementById('homeTabBtn').classList.toggle('active', !activeProfileId && !ollamaTabActive && !gamesTabActive);
         const container = document.getElementById('profileTabs');
         container.innerHTML = '';
 
@@ -4695,6 +5632,33 @@
             tab.appendChild(nameEl);
             tab.appendChild(closeEl);
             tab.addEventListener('click', () => openOllamaTab());
+            container.appendChild(tab);
+        }
+
+        // Oyunlar — same "open" gating/markup shape as NeRoChAt above, just
+        // an emoji instead of a logo image.
+        if (gamesTabOpen) {
+            const tab = document.createElement('div');
+            tab.className = 'profileTab' + (gamesTabActive ? ' active' : '');
+
+            const iconEl = document.createElement('span');
+            iconEl.innerHTML = GAMEPAD_ICON_SVG;
+            iconEl.style.cssText = 'display:flex; flex:0 0 auto;';
+            iconEl.firstElementChild.style.cssText = 'width:12px; height:12px;';
+
+            const nameEl = document.createElement('span');
+            nameEl.className = 'tabName';
+            nameEl.textContent = t('gamesTileName');
+
+            const closeEl = document.createElement('button');
+            closeEl.className = 'tabClose';
+            closeEl.textContent = '✕';
+            closeEl.addEventListener('click', (e) => { e.stopPropagation(); closeGamesTab(); });
+
+            tab.appendChild(iconEl);
+            tab.appendChild(nameEl);
+            tab.appendChild(closeEl);
+            tab.addEventListener('click', () => openGamesTab());
             container.appendChild(tab);
         }
 
@@ -4733,15 +5697,16 @@
     }
 
     function updateViewVisibility() {
-        const showHome = !activeProfileId && !ollamaTabActive;
-        // Neither a WA profile view nor the Ollama tab is on screen — the
-        // topbar's per-profile controls (settings/AI/status) don't apply.
-        const blank = showHome || ollamaTabActive;
+        const showHome = !activeProfileId && !ollamaTabActive && !gamesTabActive;
+        // Neither a WA profile view nor the Ollama/Oyunlar tab is on screen —
+        // the topbar's per-profile controls (settings/AI/status) don't apply.
+        const blank = showHome || ollamaTabActive || gamesTabActive;
         const activeEntry = allProfiles.find(p => p.id === activeProfileId);
         const isTelegram = activeEntry?.platform === 'telegram';
         document.getElementById('homeScreen').classList.toggle('visible', showHome);
-        document.getElementById('waPlaceholder').style.display = (activeProfileId && !ollamaTabActive && !isTelegram) ? 'flex' : 'none';
-        document.getElementById('telegramPlaceholder').classList.toggle('visible', !!(activeProfileId && !ollamaTabActive && isTelegram));
+        document.getElementById('gamesScreen').classList.toggle('visible', gamesTabActive);
+        document.getElementById('waPlaceholder').style.display = (activeProfileId && !ollamaTabActive && !gamesTabActive && !isTelegram) ? 'flex' : 'none';
+        document.getElementById('telegramPlaceholder').classList.toggle('visible', !!(activeProfileId && !ollamaTabActive && !gamesTabActive && isTelegram));
         // mode 'bot': the placeholder IS the screen, keep it in sync with
         // the latest status. mode 'web'/'both': the real web.telegram.org
         // page (tgView, in main.js) covers this placeholder once loaded, so
@@ -4853,13 +5818,15 @@
 
     async function openTile(id) {
         await leaveOllamaTabIfActive();
+        await leaveGamesTabIfActive();
         applyProfilesPayload(await window.nerobot.openProfile(id));
         await onActiveProfileChanged();
     }
 
     async function activateTab(id) {
-        if (id === activeProfileId && !ollamaTabActive) return;
+        if (id === activeProfileId && !ollamaTabActive && !gamesTabActive) return;
         await leaveOllamaTabIfActive();
+        await leaveGamesTabIfActive();
         applyProfilesPayload(await window.nerobot.activateProfile(id));
         await onActiveProfileChanged();
         dismissProfileNotifications(id);
@@ -4872,6 +5839,7 @@
     // looking at a WA profile) is instant, no re-check needed.
     async function openOllamaTab() {
         if (ollamaTabActive) return;
+        await leaveGamesTabIfActive();
         if (!ollamaTabOpen) {
             const ok = await ensureOllamaOrPrompt();
             if (!ok) return;
@@ -5042,13 +6010,14 @@
         openModal('connectionModeOverlay');
     });
     document.getElementById('platformOllama').addEventListener('click', createOllamaShortcut);
+    document.getElementById('platformGames').addEventListener('click', createGamesShortcut);
 
     // ============================
     // Telegram — one-time app-wide api_id/api_hash (my.telegram.org) is only
     // needed once the chosen mode actually involves the bot (teleproto) —
     // see the modeBot/modeBoth handling below. Every profile after that
     // point just QR-logs-in. See main.js's telegram:* IPC /
-    // project_scripts/telegram-bot.js.
+    // src/telegram-bot.js.
     // ============================
     document.getElementById('platformTelegram').addEventListener('click', () => {
         closeModal('newProfileOverlay');
@@ -5297,6 +6266,8 @@
     refreshOllamaStatus();
     loadNeroPopupShortcut();
     loadFixTextShortcut();
+    refreshGamesStatus();
+    loadGamesPopupShortcut();
 </script>
 </body>
 </html>

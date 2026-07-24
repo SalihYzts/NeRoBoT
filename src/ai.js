@@ -1,4 +1,7 @@
-import ollama from 'ollama';
+// No more `import ollama from 'ollama'` — every call below takes the
+// resolved client (local daemon or Ollama Cloud API, see
+// src/ollama-client.js's getOllamaClient) as an explicit
+// parameter instead, so this file never assumes which one is in use.
 
 // How much of a chat's history actually gets sent to the model on every
 // request. Previously this was "the entire raw array, forever" — fine for
@@ -64,11 +67,11 @@ export const IMAGE_READ_FALLBACK_PROMPT =
 // re-querying Ollama on every single image sent.
 const visionCapabilityCache = new Map();
 
-export async function modelHasVision(modelName) {
+export async function modelHasVision(modelName, ollamaClient) {
     if (!modelName) return false;
     if (visionCapabilityCache.has(modelName)) return visionCapabilityCache.get(modelName);
     try {
-        const info = await ollama.show({ model: modelName });
+        const info = await ollamaClient.show({ model: modelName });
         const has = Array.isArray(info.capabilities) && info.capabilities.includes('vision');
         visionCapabilityCache.set(modelName, has);
         return has;
@@ -87,14 +90,14 @@ export async function modelHasVision(modelName) {
 // resolveVisionModel below). Prefers a genuinely local one first — same
 // quota-saving spirit as pickClassifierModel — then any vision-capable
 // model at all, cloud or not, rather than giving up.
-export async function pickVisionFallbackModel(excludeModel) {
+export async function pickVisionFallbackModel(excludeModel, ollamaClient) {
     try {
-        const { models } = await ollama.list();
+        const { models } = await ollamaClient.list();
         const candidates = models.filter(m => m.name !== excludeModel);
         for (const localOnly of [true, false]) {
             for (const m of candidates) {
                 if (localOnly && !isLocallyStored(m)) continue;
-                if (await modelHasVision(m.name)) return m.name;
+                if (await modelHasVision(m.name, ollamaClient)) return m.name;
             }
         }
     } catch (_) {}
@@ -105,9 +108,9 @@ export async function pickVisionFallbackModel(excludeModel) {
 // pickVisionFallbackModel finds — null if nothing pulled supports vision at
 // all. Used both by askModel's inline fallback below and by
 // describeImageForGeneration (the "redraw this attached photo" flow).
-export async function resolveVisionModel(preferredModel) {
-    if (await modelHasVision(preferredModel)) return preferredModel;
-    return pickVisionFallbackModel(preferredModel);
+export async function resolveVisionModel(preferredModel, ollamaClient) {
+    if (await modelHasVision(preferredModel, ollamaClient)) return preferredModel;
+    return pickVisionFallbackModel(preferredModel, ollamaClient);
 }
 
 // Folded straight into the user turn's own content (not a separate system
@@ -155,9 +158,9 @@ function isLocallyStored(modelListEntry) {
 // purely internal check doesn't spend any of that allowance. Falls back to
 // the preferred model itself if it's already local (or its size can't be
 // checked at all), or if nothing local is pulled.
-export async function pickClassifierModel(preferredModel) {
+export async function pickClassifierModel(preferredModel, ollamaClient) {
     try {
-        const { models } = await ollama.list();
+        const { models } = await ollamaClient.list();
         const preferredEntry = models.find(m => m.name === preferredModel);
         if (preferredEntry && isLocallyStored(preferredEntry)) return preferredModel;
         const local = models.find(isLocallyStored);
@@ -183,7 +186,7 @@ function cosineSimilarity(a, b) {
 // merge into one conversation.
 export function createAi({ store, utils }) {
     const { state, chatHistories, chatModels } = store;
-    const { mapGetAny } = utils;
+    const { mapGetAny, getOllamaClient } = utils;
 
     // Only warn once per profile run — an unpulled embed model would
     // otherwise log the same warning on every single message.
@@ -192,7 +195,7 @@ export function createAi({ store, utils }) {
     async function embed(text) {
         if (!state.vectorMemoryEnabled) return null;
         try {
-            const res = await ollama.embed({ model: state.embedModel, input: text });
+            const res = await getOllamaClient().embed({ model: state.embedModel, input: text });
             return res.embeddings?.[0] || null;
         } catch (err) {
             if (!embedUnavailableWarned) {
@@ -241,7 +244,7 @@ export function createAi({ store, utils }) {
     // Same idea as describeImageForGeneration below, just for reading rather
     // than generating: a one-off captioning call to a vision-capable model.
     async function describeImageForReading(model, imageBase64) {
-        const response = await ollama.chat({
+        const response = await getOllamaClient().chat({
             model,
             messages: [
                 { role: 'system', content: IMAGE_READ_FALLBACK_PROMPT },
@@ -276,10 +279,10 @@ export function createAi({ store, utils }) {
         let content = prompt;
         let attachImages = null;
         if (images.length > 0) {
-            if (await modelHasVision(modelToUse)) {
+            if (await modelHasVision(modelToUse, getOllamaClient())) {
                 attachImages = images;
             } else {
-                const visionModel = await pickVisionFallbackModel(modelToUse);
+                const visionModel = await pickVisionFallbackModel(modelToUse, getOllamaClient());
                 if (visionModel) {
                     const captions = await Promise.all(images.map(img => describeImageForReading(visionModel, img)));
                     content = `${prompt}\n\n[Attached image — description: ${captions.join(' | ')}]`;
@@ -300,7 +303,7 @@ export function createAi({ store, utils }) {
             const context = selectContext(chatHistories[userId], latestEmbedding);
             const apiMessages = toApiMessages(context);
             if (extraInstruction) apiMessages.push({ role: 'system', content: extraInstruction });
-            const response = await ollama.chat({
+            const response = await getOllamaClient().chat({
                 model: modelToUse,
                 messages: apiMessages
             });
@@ -334,8 +337,8 @@ export function createAi({ store, utils }) {
         if (!prompt) return { image: false, prompt: '' };
         try {
             const content = hasImage ? `${prompt}\n\n[the user also attached a photo]` : prompt;
-            const response = await ollama.chat({
-                model: await pickClassifierModel(state.aiModel),
+            const response = await getOllamaClient().chat({
+                model: await pickClassifierModel(state.aiModel, getOllamaClient()),
                 messages: [
                     { role: 'system', content: IMAGE_CLASSIFY_PROMPT },
                     { role: 'user', content },
@@ -362,11 +365,11 @@ export function createAi({ store, utils }) {
     // typed alongside the photo (e.g. "make it more colorful"), folded in as
     // extra guidance.
     async function describeImageForGeneration(imageBase64, extraInstruction) {
-        const visionModel = await resolveVisionModel(state.aiModel);
+        const visionModel = await resolveVisionModel(state.aiModel, getOllamaClient());
         if (!visionModel) {
             throw new Error('No vision-capable model is available to read the attached image — pull one (e.g. llava, qwen2.5vl) first.');
         }
-        const response = await ollama.chat({
+        const response = await getOllamaClient().chat({
             model: visionModel,
             messages: [
                 { role: 'system', content: IMAGE_DESCRIBE_FOR_GEN_PROMPT },

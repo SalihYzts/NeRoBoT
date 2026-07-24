@@ -45,6 +45,8 @@ contextBridge.exposeInMainWorld('nerobot', {
     // be reached by this page's own 'keydown' listener — see main.js's
     // wireGlobalShortcuts). index.html's script calls openNeroPopup() from this.
     onOpenNeroPopup: (cb) => ipcRenderer.on('nero:openPopup', () => cb()),
+    // Same story, for the Oyunlar (Games) tab's own quick-popup shortcut.
+    onOpenGamesPopup: (cb) => ipcRenderer.on('games:openPopup', () => cb()),
     // Ctrl+Tab tab switcher — same "embedded view has keyboard focus, so
     // main.js has to forward it" story as onOpenNeroPopup above (see
     // wireGlobalShortcuts). step: Ctrl+Tab/Ctrl+Shift+Tab fired (direction
@@ -116,6 +118,12 @@ contextBridge.exposeInMainWorld('nerobot', {
     setOllamaImageGenEnabled: (enabled) => ipcRenderer.invoke('ollama:setImageGenEnabled', enabled),
     setOllamaImageGenProvider: (provider) => ipcRenderer.invoke('ollama:setImageGenProvider', provider),
     setOllamaImageGenApiKey: (provider, apiKey) => ipcRenderer.invoke('ollama:setImageGenApiKey', provider, apiKey),
+    // 'local' (today's install-gate flow) vs 'api' (Ollama Cloud API key,
+    // no local install) — see ensureOllamaOrPrompt/the Ayarlar → NeRoChAt
+    // "Bağlantı" section in index.html, and currentOllamaClient in main.js.
+    setOllamaConnectionMode: (mode) => ipcRenderer.invoke('ollama:setConnectionMode', mode),
+    setOllamaCloudApiKey: (apiKey) => ipcRenderer.invoke('ollama:setCloudApiKey', apiKey),
+    openExternalLink: (url) => ipcRenderer.invoke('app:openExternal', url),
     classifyOllamaImageIntent: (prompt, model, hasImage) => ipcRenderer.invoke('ollama:classifyImageIntent', { prompt, model, hasImage }),
     describeOllamaImageForGeneration: (model, imageBase64, extraInstruction) => ipcRenderer.invoke('ollama:describeImageForGeneration', { model, imageBase64, extraInstruction }),
     prepareImageForChat: (model, imageBase64) => ipcRenderer.invoke('ollama:prepareImageForChat', { model, imageBase64 }),
@@ -138,6 +146,13 @@ contextBridge.exposeInMainWorld('nerobot', {
     saveOllamaConversation: (id, messages, title) => ipcRenderer.invoke('ollama:saveConversation', id, messages, title),
     deleteOllamaConversation: (id) => ipcRenderer.invoke('ollama:deleteConversation', id),
     onOllamaInstallProgress: (cb) => ipcRenderer.on('ollama:installProgress', (_e, progress) => cb(progress)),
+    // App auto-update — see notifyIfUpdateAvailable/update:startDownload in
+    // main.js. Checked once per launch, well after the window's already
+    // open; onUpdateAvailable only ever fires if one's actually found.
+    onUpdateAvailable: (cb) => ipcRenderer.on('update:available', (_e, info) => cb(info)),
+    onUpdateDownloadProgress: (cb) => ipcRenderer.on('update:downloadProgress', (_e, progress) => cb(progress)),
+    onUpdateDownloadError: (cb) => ipcRenderer.on('update:downloadError', (_e, info) => cb(info)),
+    startUpdateDownload: () => ipcRenderer.invoke('update:startDownload'),
     // Returns an unsubscribe function — unlike the other on* listeners here,
     // this one is (re)registered per chat message, so the caller needs a way
     // to remove its own listener before the next message instead of stacking.

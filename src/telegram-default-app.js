@@ -1,7 +1,7 @@
 // Embedded fallback api_id/api_hash (my.telegram.org) — every NeRoChAt/
 // Telegram profile needs SOME app identity to talk to Telegram's MTProto
 // servers at all (Telegram's own requirement, not ours — see
-// project_scripts/telegram-bot.js). Baked in here so downloading the app
+// src/telegram-bot.js). Baked in here so downloading the app
 // and scanning a QR code is the whole setup, same as WhatsApp — nobody has
 // to visit my.telegram.org themselves.
 //

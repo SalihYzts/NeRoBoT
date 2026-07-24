@@ -3,7 +3,7 @@
 // instead (see ai.js's classifyImageIntent() for how a message gets flagged
 // as an image request, and bot.js's handleAiMessage for where the two paths
 // split). Pollinations needs no API key; OpenAI/Stability AI do — see
-// project_scripts/config.js's imageGenApiKeyOpenai/imageGenApiKeyStability.
+// src/config.js's imageGenApiKeyOpenai/imageGenApiKeyStability.
 
 // Pollinations.ai: https://image.pollinations.ai/prompt/{prompt} returns
 // the generated image directly as the HTTP response body. Anonymous use is

@@ -41,21 +41,21 @@ import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = __dirname; // this file lives at the project root
+const ROOT = path.join(__dirname, '..'); // this file lives in scripts/, one level under the project root
 const PKG_PATH = path.join(ROOT, 'package.json');
 const CHANGELOG_PATH = path.join(ROOT, 'CHANGELOG.md');
 // Bir kere sorulur, sonra buraya kaydedilir (.gitignore'da — asla
 // commit'lenmez) — sonraki her "npm run release" tekrar sormaz.
-const TOKEN_FILE = path.join(__dirname, '.release-token');
+const TOKEN_FILE = path.join(ROOT, '.release-token');
 // Aynı fikir, Claude API için — tamamen opsiyonel: boş geçilirse (ya da
 // hiç sorulmadan Enter'a basılırsa) generateText Ollama'ya düşer, bu betik
 // hiçbir şekilde Claude'u zorunlu kılmaz.
-const CLAUDE_KEY_FILE = path.join(__dirname, '.claude-api-key');
+const CLAUDE_KEY_FILE = path.join(ROOT, '.claude-api-key');
 const ASSETS_DIR = path.join(ROOT, 'release-assets');
 const IS_WIN = process.platform === 'win32';
 
 // Değişiklik özetini changelog'a/duyuru metnine çeviren yerel model —
-// project_scripts/config.js'in aiModel varsayılanıyla aynı (uygulamanın
+// src/config.js'in aiModel varsayılanıyla aynı (uygulamanın
 // kendisi zaten kurulumda bunu bekliyor), başka bir yüklü modelle
 // değiştirmek istersen burayı düzenlemen yeterli. generateText önce Claude'u
 // dener (varsa anahtar), o da yoksa/başarısız olursa buraya düşer.

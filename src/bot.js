@@ -39,11 +39,18 @@ const { Client } = pkg;
 // needs to exist either way, whatsapp-web.js has no other way to drive the
 // session, this just keeps it a plain manual WhatsApp Web tab with no bot
 // reading/replying to anything.
-export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, userAgent, automationEnabled = true, onIncomingMessage } = {}) {
+// `getOllamaClient` — resolves which Ollama instance (local daemon or
+// Ollama Cloud API, see src/ollama-client.js) this profile's AI
+// calls should use right now; app/main.js passes in a closure over its own
+// readOllamaStatus() so a mode switch takes effect on the very next call,
+// no restart needed. Stashed onto `utils` (rather than added to createAi/
+// createCommands' own signatures) since both already receive `utils` as-is.
+export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, userAgent, automationEnabled = true, onIncomingMessage, getOllamaClient } = {}) {
     const store = createProfileStore(profileDir);
     const { state, whitelist, blacklist, admins, noPrefixChats, groupChats, chatPrefixes } = store;
 
     const utils = createUtils(store);
+    utils.getOllamaClient = getOllamaClient;
     const { setClient, sendText, replyText, sendImage, isBotSentMessage, idVariants, setHasAny } = utils;
 
     const ratelimit = createRateLimiter(store);

@@ -103,7 +103,6 @@ nerobot/
 ├── NeRoBoT_Kurulum.bat             # Kaynak koddan ilk kurulum (npm install + ikonlar)
 ├── NeRoBoT_Derle.bat               # Sürüm numaralı bir installer'ı yerelde derler (yayınlamaz)
 ├── NeRoBoT_Yayinla.bat             # Kaynağı gönderir + GitHub Release olarak yayınlar (aşağıya bakın)
-├── build.js / release.js           # Yukarıdaki iki .bat dosyasının arkasındaki betikler
 ├── app/
 │   ├── main.js                     # Electron ana süreç — pencereler, gömülü WhatsApp/Telegram
 │   │                                #   görünümleri, profil/oturum yönetimi, otomatik güncelleme, tüm IPC
@@ -111,7 +110,7 @@ nerobot/
 │   └── ui/
 │       ├── index.html              # Üst çubuk, sekme şeridi, bildirim paneli, ayarlar, hızlı popup
 │       └── ollama.html             # NeRoChAt'ın kendi tam sekme penceresi
-├── project_scripts/
+├── src/
 │   ├── bot.js                      # WhatsApp istemcisi & mesaj yönlendirme
 │   ├── telegram-bot.js             # Telegram istemcisi & mesaj yönlendirme (bot.js'in yansıması)
 │   ├── ai.js                       # Ollama entegrasyonu (sohbet, görsel anlama, görsel-niyet sınıflandırma)
@@ -123,8 +122,11 @@ nerobot/
 │   ├── utils.js / telegram-utils.js
 │   ├── file-extract.js             # AI'ın okuyabilmesi için PDF/Word/metin çıkarımı
 │   └── ollama-installer.js         # Windows'ta Ollama'yı algılar/sessizce kurar
-├── build/installer.nsh             # Özel NSIS kurulum-zamanı kancası (en iyi çaba Ollama kurulumu)
-└── scripts/gen-icons.js            # logo.svg'den app/ui/icon.ico + icon.png'yi yeniden üretir
+├── scripts/                        # Sadece geliştirme sırasında kullanılan araçlar, pakete dahil edilmez
+│   ├── build.js                    # NeRoBoT_Derle.bat / npm run build'in arkasındaki betik
+│   ├── release.js                  # NeRoBoT_Yayinla.bat / npm run release'in arkasındaki betik
+│   └── gen-icons.js                # logo.svg'den app/ui/icon.ico + icon.png'yi yeniden üretir
+└── build/installer.nsh             # Özel NSIS kurulum-zamanı kancası (en iyi çaba Ollama kurulumu)
 ```
 
 Tüm profil verisi (WhatsApp/Telegram oturumları, profil bazlı ayarlar, NeRoChAt konuşmaları, uygulama config'i) bu klasörün **dışında**, `Documents/NeRoBoT/NeRoBoT_db` altında saklanır — yani uygulamayı kaldırmak/taşımak ona hiç dokunmaz. Altındaki hiçbir şey git'e commit edilmez (bkz. `.gitignore`).
