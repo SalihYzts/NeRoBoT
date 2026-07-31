@@ -27,6 +27,59 @@
         flex-direction: column;
     }
 
+    /* ===== App lock overlay (see #appLockOverlay's own inline script,
+       right after <body>, for why its shown/hidden state is set before
+       this stylesheet's default `display: none` would otherwise apply) ===== */
+    #appLockOverlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: var(--bg);
+        align-items: center;
+        justify-content: center;
+        -webkit-app-region: drag; /* window stays movable while locked */
+    }
+    #appLockPanel {
+        -webkit-app-region: no-drag;
+        width: 300px;
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 28px 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        text-align: center;
+    }
+    #appLockLogo { width: 48px; height: 48px; margin-bottom: 4px; }
+    #appLockTitle { font-weight: 700; font-size: 16px; }
+    #appLockHint { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    #appLockPasswordInput {
+        width: 100%;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+    #appLockPasswordInput:focus { outline: none; border-color: var(--accent); }
+    #appLockError { font-size: 12px; color: var(--red); min-height: 14px; }
+    #appLockUnlockBtn {
+        width: 100%;
+        background: var(--accent);
+        border: none;
+        border-radius: 6px;
+        color: #0b0b0d;
+        font-weight: 600;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+    #appLockUnlockBtn:hover { opacity: .9; }
+
     /* ===== Top bar ===== */
     #topbar {
         height: var(--topbar-h);
@@ -147,7 +200,14 @@
         display: flex;
         align-items: center;
         gap: 4px;
-        flex: 1 1 auto;
+        /* flex-grow: 0 — must size to its own tabs, not steal the topbar's
+           leftover width. Growing here would swallow #spacer's drag region
+           (it's the ONLY no-drag distinction between the two), leaving a
+           visually-empty strip of topbar that silently can't drag the
+           window. flex-shrink stays 1 so a crowded strip still yields to
+           the window controls and scrolls (see overflow-x) instead of
+           overflowing them. */
+        flex: 0 1 auto;
         min-width: 0;
         overflow-x: auto;
         overflow-y: hidden;
@@ -1200,6 +1260,25 @@
 </style>
 </head>
 <body>
+    <div id="appLockOverlay">
+        <div id="appLockPanel">
+            <img id="appLockLogo" src="logo.svg" alt="">
+            <div id="appLockTitle">NeRoBoT Kilitli</div>
+            <div id="appLockHint">Devam etmek için şifreni gir.</div>
+            <input type="password" id="appLockPasswordInput" placeholder="Şifre" autocomplete="off">
+            <div id="appLockError"></div>
+            <button id="appLockUnlockBtn">Kilidi Aç</button>
+        </div>
+    </div>
+    <script>
+        // Synchronous, before anything else on the page parses/paints — see
+        // main.js's createWindow(), which passes this as a query param
+        // (not something fetched over IPC after load) specifically so
+        // there's no gap where the Home screen could flash unlocked before
+        // an async status check resolves.
+        window.__nerobotLocked = new URLSearchParams(location.search).get('locked') === '1';
+        if (window.__nerobotLocked) document.getElementById('appLockOverlay').style.display = 'flex';
+    </script>
     <div id="topbar">
         <img id="brandLogo" src="logo.svg" alt="">
         <span id="brand">NeRoBoT</span>
@@ -1516,6 +1595,27 @@
                                 <span class="switch"><input type="checkbox" id="fixTextUseLocalModelToggle"><span class="track"></span></span>
                             </label>
                             <div class="hint" id="fixTextUseLocalModelHint">Açıkken, yazı düzeltme gibi yardımcı özellikler önce yerelde kurulu bir modeli dener (daha hızlı, cloud kotanı harcamaz) — model uygun bir sonuç üretemezse (ör. yanlış dilde yazarsa) otomatik olarak ayarlı asıl modele döner. Kapalıyken doğrudan ayarlı modeli kullanır.</div>
+                        </div>
+                        <div class="section">
+                            <div class="sectionTitle">Uygulama Kilidi</div>
+                            <div class="hint">Açıkken, NeRoBoT her başlatıldığında burada belirlediğin şifre istenir — bir ekran kilidi. Profil verileri diskte şifrelenmez.</div>
+                            <label class="toggleRow">
+                                <span>Şifre ile kilitle</span>
+                                <span class="switch"><input type="checkbox" id="appLockToggle"><span class="track"></span></span>
+                            </label>
+                            <div id="appLockFields" style="display:none">
+                                <div class="field" id="appLockCurrentField" style="display:none">
+                                    <label class="name">Mevcut şifre</label>
+                                    <input type="password" id="appLockCurrentPasswordInput" autocomplete="off">
+                                </div>
+                                <div class="field" id="appLockNewField">
+                                    <label class="name">Yeni şifre</label>
+                                    <input type="password" id="appLockNewPasswordInput" placeholder="En az 4 karakter" autocomplete="off">
+                                </div>
+                                <div class="hint warn" id="appLockSettingsError"></div>
+                                <button id="appLockSaveBtn" class="miniBtn" style="width:100%">Kaydet</button>
+                            </div>
+                            <button id="appLockChangeBtn" class="miniBtn" style="width:100%; margin-top:8px; display:none">Şifreyi Değiştir</button>
                         </div>
                         <div class="section">
                             <div class="sectionTitle" id="gsAppAboutTitle">Hakkında</div>
@@ -2422,6 +2522,37 @@
     function t(key) { return STR[lang][key]; }
 
     // ============================
+    // App lock — #appLockOverlay's own tiny inline script (right after
+    // <body>) already showed/hid it synchronously from the `locked` query
+    // param; this wires up actually unlocking it. `appLocked` gates the
+    // document-level keydown shortcuts further down (NeRoChAt/Games popups,
+    // Ctrl+Tab switcher) so they can't reach anything while the overlay's up.
+    // ============================
+    let appLocked = window.__nerobotLocked === true;
+    const appLockPasswordInput = document.getElementById('appLockPasswordInput');
+    const appLockErrorEl = document.getElementById('appLockError');
+    async function attemptUnlock() {
+        const password = appLockPasswordInput.value;
+        if (!password) return;
+        const { ok } = await window.nerobot.verifyAppLockPassword(password);
+        if (ok) {
+            appLocked = false;
+            document.getElementById('appLockOverlay').style.display = 'none';
+            appLockPasswordInput.value = '';
+            appLockErrorEl.textContent = '';
+        } else {
+            appLockErrorEl.textContent = 'Yanlış şifre.';
+            appLockPasswordInput.value = '';
+            appLockPasswordInput.focus();
+        }
+    }
+    document.getElementById('appLockUnlockBtn').addEventListener('click', attemptUnlock);
+    appLockPasswordInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') attemptUnlock();
+    });
+    if (appLocked) setTimeout(() => appLockPasswordInput.focus(), 0);
+
+    // ============================
     // Profiles — shared state used by both the status/log wiring below and
     // the Home screen + tab strip section near the end of this script.
     // ============================
@@ -3073,6 +3204,74 @@
         window.nerobot.setAppConfig({ fixTextUseLocalModel: e.target.checked });
     });
 
+    // ============================
+    // App lock settings (Ayarlar → Uygulama) — enable/disable + change the
+    // password used by #appLockOverlay at next launch. See main.js's
+    // applock:* IPC handlers; only booleans/plaintext-in ever cross the
+    // bridge, the stored hash/salt never does.
+    // ============================
+    const appLockToggle = document.getElementById('appLockToggle');
+    const appLockFieldsEl = document.getElementById('appLockFields');
+    const appLockCurrentField = document.getElementById('appLockCurrentField');
+    const appLockNewField = document.getElementById('appLockNewField');
+    const appLockCurrentPasswordInput = document.getElementById('appLockCurrentPasswordInput');
+    const appLockNewPasswordInput = document.getElementById('appLockNewPasswordInput');
+    const appLockSettingsError = document.getElementById('appLockSettingsError');
+    const appLockSaveBtn = document.getElementById('appLockSaveBtn');
+    const appLockChangeBtn = document.getElementById('appLockChangeBtn');
+
+    async function refreshAppLockUI() {
+        const { enabled } = await window.nerobot.getAppLockStatus();
+        appLockToggle.checked = enabled;
+        appLockChangeBtn.style.display = enabled ? 'block' : 'none';
+        appLockFieldsEl.style.display = 'none';
+        appLockSettingsError.textContent = '';
+    }
+
+    appLockToggle.addEventListener('change', () => {
+        appLockSettingsError.textContent = '';
+        appLockFieldsEl.style.display = 'block';
+        if (appLockToggle.checked) {
+            appLockCurrentField.style.display = 'none';
+            appLockNewField.style.display = 'block';
+            appLockNewPasswordInput.value = '';
+            appLockSaveBtn.textContent = 'Şifreyi Belirle ve Kilitle';
+            appLockSaveBtn.onclick = async () => {
+                const { ok, error } = await window.nerobot.setAppLockPassword(appLockNewPasswordInput.value);
+                if (ok) await refreshAppLockUI();
+                else appLockSettingsError.textContent = error || 'Bir hata oluştu.';
+            };
+            appLockNewPasswordInput.focus();
+        } else {
+            appLockCurrentField.style.display = 'block';
+            appLockNewField.style.display = 'none';
+            appLockCurrentPasswordInput.value = '';
+            appLockSaveBtn.textContent = 'Kilidi Kaldır';
+            appLockSaveBtn.onclick = async () => {
+                const { ok, error } = await window.nerobot.disableAppLock(appLockCurrentPasswordInput.value);
+                if (ok) await refreshAppLockUI();
+                else { appLockSettingsError.textContent = error || 'Bir hata oluştu.'; appLockToggle.checked = true; }
+            };
+            appLockCurrentPasswordInput.focus();
+        }
+    });
+
+    appLockChangeBtn.addEventListener('click', () => {
+        appLockSettingsError.textContent = '';
+        appLockCurrentField.style.display = 'block';
+        appLockNewField.style.display = 'block';
+        appLockCurrentPasswordInput.value = '';
+        appLockNewPasswordInput.value = '';
+        appLockFieldsEl.style.display = 'block';
+        appLockSaveBtn.textContent = 'Şifreyi Değiştir';
+        appLockSaveBtn.onclick = async () => {
+            const { ok, error } = await window.nerobot.changeAppLockPassword(appLockCurrentPasswordInput.value, appLockNewPasswordInput.value);
+            if (ok) await refreshAppLockUI();
+            else appLockSettingsError.textContent = error || 'Bir hata oluştu.';
+        };
+        appLockCurrentPasswordInput.focus();
+    });
+
     async function loadGamesPopupShortcut() {
         const config = await window.nerobot.getAppConfig();
         gamesPopupShortcut = config.gamesPopupShortcut || gamesPopupShortcut;
@@ -3094,6 +3293,7 @@
     // skipped while focus is in a normal text field so ordinary typing (e.g.
     // an actual Shift+K while composing a message) is never hijacked.
     document.addEventListener('keydown', async (e) => {
+        if (appLocked) return;
         if (recordingNeroShortcut) {
             e.preventDefault();
             if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return; // wait for a real key, not just the modifier
@@ -3272,6 +3472,7 @@
     // main.js's wireGlobalShortcuts + the onTabSwitcher*() listeners below
     // — same split as the NeRoChAt popup shortcut above.
     document.addEventListener('keydown', (e) => {
+        if (appLocked) return;
         if (e.key === 'Tab' && e.ctrlKey && !e.repeat) {
             e.preventDefault();
             stepTabSwitcher(e.shiftKey ? -1 : 1);
@@ -6268,6 +6469,7 @@
     loadFixTextShortcut();
     refreshGamesStatus();
     loadGamesPopupShortcut();
+    refreshAppLockUI();
 </script>
 </body>
 </html>

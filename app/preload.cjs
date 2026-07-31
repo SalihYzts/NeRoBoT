@@ -40,6 +40,14 @@ contextBridge.exposeInMainWorld('nerobot', {
     // App-wide config (today just the NeRoChAt quick-popup shortcut)
     getAppConfig: () => ipcRenderer.invoke('app:getConfig'),
     setAppConfig: (updates) => ipcRenderer.invoke('app:setConfig', updates),
+
+    // App lock (Ayarlar → Uygulama) — only booleans/plaintext-in cross this
+    // bridge, never the stored hash/salt (see main.js's APP_LOCK_FILE).
+    getAppLockStatus: () => ipcRenderer.invoke('applock:status'),
+    verifyAppLockPassword: (password) => ipcRenderer.invoke('applock:verify', password),
+    setAppLockPassword: (password) => ipcRenderer.invoke('applock:setPassword', password),
+    changeAppLockPassword: (current, next) => ipcRenderer.invoke('applock:changePassword', current, next),
+    disableAppLock: (current) => ipcRenderer.invoke('applock:disable', current),
     // Fired by main.js whenever the configured shortcut is pressed while a
     // WA/Telegram/Ollama embedded view has keyboard focus (those views can't
     // be reached by this page's own 'keydown' listener — see main.js's

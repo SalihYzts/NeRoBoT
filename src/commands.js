@@ -1,4 +1,11 @@
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// This file's own location anchors package.json/help.txt regardless of the
+// process's cwd (which app/main.js no longer forces to the project root —
+// see PROJECT_ROOT there).
+const PROJECT_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // Commands that only make sense when AI Bot (state.aiChatEnabled) is on —
 // blocked over WhatsApp while it's off (bot.js checks this before dispatch),
@@ -37,7 +44,7 @@ export function createCommands({ store, utils, ratelimit }) {
 // ============================
 function getVersion() {
     try {
-        const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+        const pkg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
         return pkg.version || 'unknown';
     } catch (_) {
         return 'unknown';
@@ -1142,7 +1149,7 @@ async function Help(msg, targetId) {
         return sendText(targetId, `NeRoBoT v${getVersion()} — GitHub:\nhttps://github.com/SalihYzts/NeRoBoT`);
     }
 
-    const helpText  = fs.readFileSync('./help.txt', 'utf8');
+    const helpText  = fs.readFileSync(path.join(PROJECT_ROOT, 'help.txt'), 'utf8');
     const trMatch   = helpText.match(/===TR===\s*([\s\S]*?)(?====EN===|$)/);
     const enMatch   = helpText.match(/===EN===\s*([\s\S]*?)$/);
     const trSection = trMatch ? trMatch[1].trim() : 'TR bölümü bulunamadı.';

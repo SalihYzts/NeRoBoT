@@ -1,6 +1,6 @@
 {
   "name": "nerobot",
-  "version": "4.4.23",
+  "version": "4.4.24",
   "description": "",
   "main": "app/main.js",
   "scripts": {
@@ -33,14 +33,16 @@
   "build": {
     "appId": "com.nerobot.app",
     "productName": "NeRoBoT",
-    "asar": false,
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
     "files": [
       "app/**/*",
       "src/**/*",
       "ascii.txt",
       "package.json",
-      "help.txt",
-      "node_modules/**/*"
+      "help.txt"
     ],
     "win": {
       "target": "nsis",

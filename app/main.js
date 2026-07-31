@@ -17,7 +17,7 @@
 //      rides along on the puppeteer options object (see src/bot.js)
 //      so the shared patched connect() knows which profile is asking.
 // Result: each open tab's bot drives its own WhatsApp Web view, independently.
-import { app, BrowserWindow, WebContentsView, ipcMain, shell, dialog, session as electronSession, desktopCapturer } from 'electron';
+import { app, BrowserWindow, WebContentsView, ipcMain, shell, dialog, session as electronSession, desktopCapturer, screen } from 'electron';
 import path from 'node:path';
 import os from 'node:os';
 import util from 'node:util';
@@ -136,6 +136,42 @@ function readAppConfig() {
 function writeAppConfig(config) {
     fs.mkdirSync(DB_DIR, { recursive: true });
     fs.writeFileSync(APP_CONFIG_FILE, JSON.stringify(config, null, 2));
+}
+
+// App-lock — an optional password gate shown before the Home screen (see
+// createWindow's `locked` query param + index.html's #appLockOverlay). Only
+// the salted hash ever touches disk/IPC; the plaintext password itself never
+// leaves the small verify/setPassword calls below. This is a privacy screen
+// against someone picking up the device, NOT at-rest encryption — every
+// profile's WhatsApp/Telegram session data is exactly as readable on disk as
+// it always was.
+const APP_LOCK_FILE = path.join(DB_DIR, 'app-lock.json');
+const DEFAULT_APP_LOCK = { enabled: false, salt: '', hash: '' };
+
+function readAppLock() {
+    try {
+        return { ...DEFAULT_APP_LOCK, ...JSON.parse(fs.readFileSync(APP_LOCK_FILE, 'utf8')) };
+    } catch (_) {
+        return { ...DEFAULT_APP_LOCK };
+    }
+}
+
+function writeAppLock(lock) {
+    fs.mkdirSync(DB_DIR, { recursive: true });
+    fs.writeFileSync(APP_LOCK_FILE, JSON.stringify(lock, null, 2));
+}
+
+function hashAppLockPassword(password, salt) {
+    return crypto.scryptSync(String(password), salt, 64).toString('hex');
+}
+
+function verifyAppLockPassword(password) {
+    const lock = readAppLock();
+    if (!lock.enabled) return true;
+    if (!lock.hash || !lock.salt) return false;
+    const candidate = Buffer.from(hashAppLockPassword(password, lock.salt), 'hex');
+    const stored = Buffer.from(lock.hash, 'hex');
+    return candidate.length === stored.length && crypto.timingSafeEqual(candidate, stored);
 }
 
 // The NeRoChAt popup shortcut also has to work while a WA/Telegram/Ollama
@@ -286,12 +322,6 @@ try {
     APP_VERSION = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf8')).version || 'unknown';
 } catch (_) {}
 
-// Bot code (commands.js's getVersion/Help) still reads package.json/help.txt
-// with cwd-relative paths, so anchor the cwd to the project root no matter
-// where the app was launched from (shortcut, bat…). Per-profile data itself
-// no longer depends on this — config.js takes an absolute profile directory.
-process.chdir(PROJECT_ROOT);
-
 const require = createRequire(import.meta.url);
 // Same hoisted instance whatsapp-web.js resolves — patching connect() here
 // is what lets us inject the right embedded page into each profile's
@@ -311,6 +341,17 @@ const TEST_MODE = process.env.NEROBOT_HIDE === '1';
 // serves every profile — Electron exposes every WebContentsView's page over
 // the same CDP connection regardless of which profile it belongs to.
 app.commandLine.appendSwitch('remote-debugging-port', '0');
+
+// Chromium's "native window occlusion" tracking (added ~M85, on by default
+// on Windows) periodically asks the OS which part of the window is actually
+// visible, to throttle work for fully-covered windows — a known class of
+// Windows-only hangs/stalls (widely reported across Electron apps, not
+// specific to us) traces back to this interacting badly with certain GPU
+// driver/overlay software intercepting those same window-visibility queries
+// (RGB/capture/overlay tools, hybrid-GPU laptops). Nothing here depends on
+// occlusion-based throttling, so disabling it outright is a safe, well-worn
+// troubleshooting step for exactly this hang shape.
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 if (TEST_MODE) {
     app.setPath('userData', path.join(app.getPath('temp'), 'nerobot-test-profile'));
@@ -559,6 +600,11 @@ async function showSplash(session) {
 function hideSplash(session) {
     if (!session.splashView) return;
     try { win.contentView.removeChildView(session.splashView); } catch (_) {}
+    // removeChildView only detaches it from the window — the underlying
+    // WebContents/renderer process stays alive (and kept showing up as its
+    // own page in DevTools/CDP target lists) unless explicitly closed, same
+    // as waView/tgView's own teardown in closeProfile below.
+    try { session.splashView.webContents.close(); } catch (_) {}
     session.splashView = null;
 }
 
@@ -673,6 +719,17 @@ async function setupWaView(session) {
             // bot at full speed — default Chromium throttling of hidden/
             // zero-bounds views would stall their message processing.
             backgroundThrottling: false,
+            // Chromium's default spellchecker re-checks the whole editable
+            // element on focus/every edit — on WhatsApp's compose box (a
+            // deep, React/Lexical-managed contenteditable, not a plain
+            // <textarea>) that pass can take long enough to peg the
+            // renderer's main thread for many seconds, which from the user's
+            // side looks exactly like "the app hangs the moment I click the
+            // message box" (scroll still works because that's compositor-
+            // thread, not main-thread). No in-app UI ever exposed spellcheck
+            // toggling/red-squiggly-underline suggestions here anyway, so
+            // there's no feature loss in turning it off outright.
+            spellcheck: false,
         },
     });
 
@@ -755,6 +812,20 @@ async function setupWaView(session) {
 
     wireGlobalShortcuts(session.waView.webContents, session);
 
+    // Self-healing for a genuinely hung renderer (main thread pegged, no
+    // longer processing input/CDP — the class of bug behind "WhatsApp stops
+    // responding to clicks" reports, whatever externally triggers it:
+    // conflicting overlay/capture software, a GPU driver hiccup, etc. — see
+    // the accessibility/spellcheck/occlusion-tracking settings above, which
+    // remove the causes found so far, but this is the backstop for whatever
+    // wasn't. Deliberately NOT built on webContents' own 'unresponsive'
+    // event — confirmed live (a genuinely hung renderer, minutes into a real
+    // hang) that it simply never fires for this failure shape, so it's not
+    // a trustworthy signal here. startHealthCheck below pings the view
+    // itself on a timer instead, the same technique that reliably caught
+    // the hang from outside during investigation.
+    startHealthCheck(session);
+
     win.contentView.addChildView(session.waView);
     layoutViews();
 
@@ -779,6 +850,9 @@ async function setupTelegramView(session) {
         webPreferences: {
             partition: session.partition,
             backgroundThrottling: false,
+            // Same reasoning as waView's own spellcheck:false above — same
+            // class of heavy contenteditable, same freeze risk.
+            spellcheck: false,
         },
     });
 
@@ -848,14 +922,63 @@ async function setupTelegramView(session) {
     if (session.mode === 'web') setStatus(session, 'ready', 'Telegram Web açıldı');
 }
 
+// Actively pings a profile's WhatsApp view on a timer instead of trusting
+// webContents' own 'unresponsive' event — confirmed live, against a real
+// multi-minute hang, that event simply never fired, so it's not a
+// trustworthy signal for whatever this hang class actually is. A single
+// missed ping isn't itself proof (a real page can be legitimately busy for
+// a moment, e.g. rendering a huge restored chat history); only
+// MAX_MISSED_HEALTH_PINGS in a row — genuinely stuck across
+// HEALTH_CHECK_INTERVAL_MS apart, not a blip — triggers recovery.
+const HEALTH_CHECK_INTERVAL_MS = 15_000;
+const HEALTH_PING_TIMEOUT_MS = 8_000;
+const MAX_MISSED_HEALTH_PINGS = 2;
+
+function startHealthCheck(session) {
+    stopHealthCheck(session);
+    let missed = 0;
+    let pinging = false;
+    session.healthCheckTimer = setInterval(async () => {
+        if (pinging || !session.waView || session.waView.webContents.isDestroyed()) return;
+        pinging = true;
+        // A real JS/navigation error out of executeJavaScript still means
+        // the renderer itself answered — only silence (the timeout branch)
+        // counts as a miss.
+        const alive = await Promise.race([
+            session.waView.webContents.executeJavaScript('1').then(() => true, () => true),
+            new Promise((resolve) => setTimeout(() => resolve(false), HEALTH_PING_TIMEOUT_MS)),
+        ]);
+        pinging = false;
+        if (alive) { missed = 0; return; }
+        missed++;
+        if (missed < MAX_MISSED_HEALTH_PINGS) {
+            console.warn(`[${session.name}] WhatsApp görünümü sağlık kontrolüne cevap vermedi (${missed}/${MAX_MISSED_HEALTH_PINGS}).`);
+            return;
+        }
+        missed = 0;
+        console.warn(`[${session.name}] WhatsApp görünümü donmuş görünüyor — otomatik olarak yenileniyor...`);
+        session.autoRecoverFn?.();
+    }, HEALTH_CHECK_INTERVAL_MS);
+}
+
+function stopHealthCheck(session) {
+    if (session.healthCheckTimer) { clearInterval(session.healthCheckTimer); session.healthCheckTimer = null; }
+}
+
 // Tears down a profile's current WhatsApp view and builds a fresh one in
 // its place — a lighter-weight recovery than closing/reopening the whole
 // tab: the window, topbar and settings stay up the whole time, only that
 // profile's WhatsApp pane blanks and reloads.
 async function recreateWaView(session) {
+    stopHealthCheck(session);
     if (session.waView) {
         try { win.contentView.removeChildView(session.waView); } catch (_) {}
-        try { session.waView.webContents.close(); } catch (_) {}
+        // waitForBeforeUnload: false — this is specifically the recovery
+        // path for a renderer that's stopped responding at all; waiting on
+        // a beforeunload handshake with it would just hang the recovery
+        // itself and leave the old, still CPU-pegged process running
+        // underneath even longer.
+        try { session.waView.webContents.close({ waitForBeforeUnload: false }); } catch (_) {}
         session.waView = null;
     }
     // The old page's window.nerobotFixTextAction binding dies with it — a
@@ -878,6 +1001,63 @@ async function setupOllamaView() {
 
     win.contentView.addChildView(ollamaView);
     await ollamaView.webContents.loadFile(path.join(__dirname, 'ui', 'ollama.html'));
+}
+
+// Windows' own Snap (drag-to-edge, Snap Layouts, Win+Arrow) occasionally
+// hands a frameless BrowserWindow bounds that don't actually fit the target
+// display's own work area — seen mainly with a portrait/rotated secondary
+// monitor, where the snapped bounds appear to still be computed against a
+// landscape-shaped work area, leaving part (sometimes most) of the window
+// off-screen and unreachable. Re-clamps into whichever display the window
+// now mostly overlaps, shortly after the drag/snap settles (NOT on every
+// 'move' tick — that fires continuously while the user is still actively
+// dragging, and fighting that mid-drag would just make the window jitter).
+//
+// Two guards keep this from fighting completely ordinary multi-monitor use:
+//  - Only steps in when the window is MOSTLY unreachable (<50% of its own
+//    area overlaps any display's work area), not merely "not fully inside
+//    one display" — a window straddling two adjacent monitors, or just a
+//    few px past an edge, is normal and must be left alone.
+//  - `adjustingBounds` ignores the 'move'/'resize' our own setBounds() call
+//    below immediately produces. Without it, sub-pixel rounding differences
+//    Windows applies when a frameless window's bounds are converted across
+//    two differently-scaled displays (very common: laptop @150% + external
+//    monitor @100%) meant getBounds() right after setBounds() could come
+//    back a pixel or two off from what was just set — which re-armed this
+//    same timer forever, visibly nudging the window (and, via the 'resize'
+//    listener below re-running layoutViews on every one of those nudges,
+//    kept resetting every WA/Telegram WebContentsView's bounds too — losing
+//    in-flight clicks to whichever profile tab was active at the time).
+let clampBoundsTimer = null;
+let adjustingBounds = false;
+function scheduleClampWindowBounds() {
+    if (adjustingBounds) return;
+    clearTimeout(clampBoundsTimer);
+    clampBoundsTimer = setTimeout(clampWindowToVisibleArea, 250);
+}
+function intersectArea(a, b) {
+    const width = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
+    const height = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+    return width * height;
+}
+function clampWindowToVisibleArea() {
+    if (!win || win.isDestroyed() || win.isMinimized() || win.isMaximized() || win.isFullScreen()) return;
+    const bounds = win.getBounds();
+    const windowArea = bounds.width * bounds.height;
+    if (windowArea <= 0) return;
+    const visibleArea = screen.getAllDisplays().reduce((sum, d) => sum + intersectArea(bounds, d.workArea), 0);
+    if (visibleArea >= windowArea * 0.5) return;
+    const { workArea } = screen.getDisplayMatching(bounds);
+    let { x, y, width, height } = bounds;
+    width = Math.min(width, workArea.width);
+    height = Math.min(height, workArea.height);
+    x = Math.min(Math.max(x, workArea.x), workArea.x + workArea.width - width);
+    y = Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - height);
+    if (x !== bounds.x || y !== bounds.y || width !== bounds.width || height !== bounds.height) {
+        adjustingBounds = true;
+        win.setBounds({ x, y, width, height });
+        setImmediate(() => { adjustingBounds = false; });
+    }
 }
 
 async function createWindow() {
@@ -906,10 +1086,19 @@ async function createWindow() {
     });
     win.setMenuBarVisibility(false);
     win.on('resize', layoutViews);
+    win.on('resize', scheduleClampWindowBounds);
+    win.on('move', scheduleClampWindowBounds);
     win.on('maximize', () => { layoutViews(); win.webContents.send('window:maximizedChanged', true); });
     win.on('unmaximize', () => { layoutViews(); win.webContents.send('window:maximizedChanged', false); });
 
-    await win.loadFile(path.join(__dirname, 'ui', 'index.html'));
+    // Passed as a query param (not fetched via IPC after load) so the lock
+    // overlay's shown/hidden state is known from index.html's very first
+    // script tick — no gap where the Home screen could flash unlocked before
+    // an async status check resolves. Never gated in TEST_MODE, since that
+    // profile dir is thrown away every run and has no business prompting for
+    // a password a human isn't there to type.
+    const locked = !TEST_MODE && readAppLock().enabled;
+    await win.loadFile(path.join(__dirname, 'ui', 'index.html'), { query: { locked: locked ? '1' : '0' } });
 
     // Make sure every open profile's WhatsApp session (IndexedDB/cookies) is
     // flushed to disk before the process dies — an unflushed close is
@@ -1065,7 +1254,9 @@ async function attemptBotStart(session) {
             console.warn(`[${session.name}] Kullanıcı "Yeniden dene" butonuna bastı — WhatsApp görünümü tazeleniyor...`);
         } else {
             session.autoRetryCount++;
-            const why = reason === 'stuck' ? `${STUCK_TIMEOUT_MS / 1000} saniyedir ilerlemiyor` : 'başlatılamadı';
+            const why = reason === 'stuck' ? `${STUCK_TIMEOUT_MS / 1000} saniyedir ilerlemiyor`
+                : reason === 'unresponsive' ? 'yanıt vermiyor (donmuş)'
+                : 'başlatılamadı';
             console.warn(`[${session.name}] Bot ${why} — WhatsApp görünümü arka planda tazelenip tekrar deneniyor (${session.autoRetryCount}/${MAX_AUTO_RETRIES})...`);
         }
         try {
@@ -1077,6 +1268,12 @@ async function attemptBotStart(session) {
         }
     }
     session.manualRetryFn = () => retryInBackground('manual');
+    // See setupWaView's own 'unresponsive'/'responsive' wiring — this is
+    // what it calls once a hang has been confirmed (not a brief blip).
+    // Counts against the same MAX_AUTO_RETRIES cap as the stuck-watchdog
+    // above, unlike manualRetryFn, since an automatic path needs a ceiling
+    // an impatient user clicking a button doesn't.
+    session.autoRecoverFn = () => retryInBackground('unresponsive');
 
     client.on('qr', () => {
         if (!isCurrent()) return;
@@ -1306,6 +1503,7 @@ async function closeProfile(id) {
         session.pupBrowser = null;
     }
     hideSplash(session);
+    stopHealthCheck(session);
     if (session.waView) {
         try { win.contentView.removeChildView(session.waView); } catch (_) {}
         try { session.waView.webContents.close(); } catch (_) {}
@@ -1529,6 +1727,39 @@ ipcMain.handle('app:getConfig', () => readAppConfig());
 ipcMain.handle('app:setConfig', (_e, updates) => {
     writeAppConfig({ ...readAppConfig(), ...updates });
     return readAppConfig();
+});
+
+// ============================
+// IPC — app lock (see APP_LOCK_FILE above). Only ever returns booleans to
+// the renderer — the hash/salt themselves never cross this bridge.
+// ============================
+ipcMain.handle('applock:status', () => ({ enabled: readAppLock().enabled }));
+
+ipcMain.handle('applock:verify', (_e, password) => ({ ok: verifyAppLockPassword(password) }));
+
+ipcMain.handle('applock:setPassword', (_e, password) => {
+    if (!password || String(password).length < 4) {
+        return { ok: false, error: 'Şifre en az 4 karakter olmalı.' };
+    }
+    const salt = crypto.randomBytes(16).toString('hex');
+    writeAppLock({ enabled: true, salt, hash: hashAppLockPassword(password, salt) });
+    return { ok: true };
+});
+
+ipcMain.handle('applock:changePassword', (_e, currentPassword, newPassword) => {
+    if (!verifyAppLockPassword(currentPassword)) return { ok: false, error: 'Mevcut şifre yanlış.' };
+    if (!newPassword || String(newPassword).length < 4) {
+        return { ok: false, error: 'Şifre en az 4 karakter olmalı.' };
+    }
+    const salt = crypto.randomBytes(16).toString('hex');
+    writeAppLock({ enabled: true, salt, hash: hashAppLockPassword(newPassword, salt) });
+    return { ok: true };
+});
+
+ipcMain.handle('applock:disable', (_e, currentPassword) => {
+    if (!verifyAppLockPassword(currentPassword)) return { ok: false, error: 'Şifre yanlış.' };
+    writeAppLock({ ...DEFAULT_APP_LOCK });
+    return { ok: true };
 });
 
 // ============================
@@ -2536,6 +2767,44 @@ async function removeFixTextOverlay(session) {
     });
 }
 
+// Replaces the loading spinner when the AI call itself comes back empty
+// (Ollama unreachable, no model configured, a malformed reply — see
+// requestTextCorrections/requestTranslation's own try/catch, which already
+// logs the real reason to the console/Log panel). Before this, that failure
+// path just called removeFixTextOverlay and stopped — the spinner vanished
+// with nothing left behind, which from the compose box read as "I clicked
+// the button and nothing happened" even though something (a failed request)
+// really did happen. Auto-dismisses on its own after a few seconds, unlike
+// the suggestion rows overlay, since there's no action to take on it.
+async function injectFixTextError(session, message) {
+    return session.client.pupPage.evaluate((message, selectors) => {
+        document.getElementById('nerobotFixTextOverlay')?.remove();
+        const box = selectors.map(s => document.querySelector(s)).find(Boolean);
+        if (!box) return false;
+
+        const theme = { bg: '#000000', border: '#e5484d', text: '#ff8a80', shadow: '0 4px 16px #000c' };
+
+        const rect = box.getBoundingClientRect();
+        const overlay = document.createElement('div');
+        overlay.id = 'nerobotFixTextOverlay';
+        overlay.style.cssText = `position:fixed; left:${rect.left}px; width:${rect.width}px; top:${rect.top}px; transform:translateY(-100%); background:${theme.bg}; border:1px solid ${theme.border}; border-radius:8px; padding:10px 14px; z-index:99999; font-family:sans-serif; font-size:13px; color:${theme.text}; box-shadow:${theme.shadow};`;
+        overlay.textContent = message;
+        document.body.appendChild(overlay);
+
+        const remove = () => overlay.remove();
+        setTimeout(remove, 4000);
+        const closeOnActivity = (e) => {
+            if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== 'Backspace') return;
+            remove();
+            box.removeEventListener('input', closeOnActivity);
+            box.removeEventListener('keydown', closeOnActivity);
+        };
+        box.addEventListener('input', closeOnActivity);
+        box.addEventListener('keydown', closeOnActivity);
+        return true;
+    }, message, COMPOSE_BOX_SELECTORS);
+}
+
 // Cheap heuristic, not a real language detector: if the draft itself has
 // non-ASCII letters (very common in Turkish — ç ğ ı ö ş ü İ) but every
 // variant the model wrote back is plain ASCII, that's a strong sign the
@@ -2862,13 +3131,13 @@ async function runFixTextCorrections(session) {
     if (!draft) { await removeFixTextOverlay(session); return; }
     await injectLoadingOverlay(session, 'Düzeltmeler hazırlanıyor…');
     const variants = await getTextCorrections(session, draft);
-    if (!variants) { await removeFixTextOverlay(session); return; }
+    if (!variants) { await injectFixTextError(session, 'Öneriler alınamadı — Ollama bağlantısını/modelini kontrol et (ayrıntı: Loglar paneli).'); return; }
     const currentDraft = await readComposeBoxText(session);
     if (!currentDraft) { await removeFixTextOverlay(session); return; }
     const rows = FIX_TEXT_VARIANT_LABELS
         .filter(([key]) => variants[key])
         .map(([key, label]) => ({ label, text: variants[key] }));
-    if (!rows.length) { await removeFixTextOverlay(session); return; }
+    if (!rows.length) { await injectFixTextError(session, 'Model kullanılabilir bir öneri döndürmedi.'); return; }
     await injectSuggestionRowsOverlay(session, rows);
 }
 
@@ -2894,7 +3163,7 @@ async function handleFixTextAction(session, action) {
         if (!draft) { await removeFixTextOverlay(session); return; }
         await injectLoadingOverlay(session, `${lang.label}'ye çevriliyor…`);
         const translated = await getTranslation(session, draft, lang.label);
-        if (!translated) { await removeFixTextOverlay(session); return; }
+        if (!translated) { await injectFixTextError(session, 'Çeviri alınamadı — Ollama bağlantısını/modelini kontrol et (ayrıntı: Loglar paneli).'); return; }
         const currentDraft = await readComposeBoxText(session);
         if (!currentDraft) { await removeFixTextOverlay(session); return; }
         await injectSuggestionRowsOverlay(session, [{ label: lang.label, text: translated }]);
@@ -3300,6 +3569,25 @@ ipcMain.handle('update:startDownload', async () => {
 // App lifecycle
 // ============================
 app.whenReady().then(async () => {
+    // Chromium normally only builds a full accessibility (AX) tree on demand —
+    // the first time ANY assistive-tech client on the system queries a window
+    // over UI Automation/IAccessible2 (a screen reader, but just as often some
+    // unrelated background app that happens to poll focused-control info: RGB/
+    // gaming-hub overlays, remote-desktop/streaming tools, etc.), Chromium
+    // switches that on for every renderer and never switches it back off for
+    // the rest of the process's life. For a DOM as large/deep as WhatsApp Web's,
+    // building+maintaining that tree is expensive enough to peg the renderer's
+    // main thread — and since AX updates fire on focus changes, that shows up
+    // exactly as "the app hangs the moment I click the message box" (a focus
+    // change), not as a steady slowdown. Scrolling still works because it's
+    // compositor-thread, not main-thread. setAccessibilitySupportEnabled(false)
+    // overrides the auto-detection so a client polling in the background can't
+    // silently flip this on. Must run after 'ready' — Electron throws calling
+    // this any earlier. If a user is genuinely running a screen reader FOR
+    // this app specifically, this would need revisiting — but that's not
+    // something a bot-profile-manager app's own UI has needed to support so far.
+    app.setAccessibilitySupportEnabled(false);
+
     // Headless hook for the NSIS installer's best-effort Ollama install
     // (see build/installer.nsh's customInstall macro — Exec, not ExecWait,
     // so a slow/absent network or a stuck install HERE can never stall the
