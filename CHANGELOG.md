@@ -1,3 +1,21 @@
+## v4.4.24 - 2026-07-31
+
+- Release v4.4.24 (d5a29f5, SalihYzts)
+- Release v4.4.23 (75bf638, SalihYzts)
+- Fix duplicate GitHub release bug on publish (cdb7024, SalihYzts)
+- Release v4.4.22 (4f229de, SalihYzts)
+- Release v4.4.21 (26fe00e, SalihYzts)
+- Release v4.4.20 (bb00579, SalihYzts)
+- Release v4.4.19 (97e9ae2, SalihYzts)
+- Release v4.4.18 (84fe77b, SalihYzts)
+- deneme (1bf3347, SalihYzts)
+- Release v4.4.17 (7cfade5, SalihYzts)
+- Release v4.4.16 (1c8ffa6, SalihYzts)
+- v2.1.1 (3ee24de, SalihYzts)
+- v2.1.0 (0cd3447, SalihYzts)
+- settings update (24dd90a, SalihYzts)
+- stable version 2 (2398f52, SalihYzts)
+
 ## v4.4.23 - 2026-07-24
 
 ### Hata Düzeltmeleri
