@@ -554,6 +554,25 @@ function layoutViews() {
     if (ollamaView) ollamaView.setBounds(ollamaActive && !modalOpen ? activeBounds : zero);
 }
 
+// Windows-specific GPU-compositor gap: after a WebContentsView's bounds grow
+// (window resize/maximize), the newly-exposed strip sometimes just never
+// gets painted — the page is fine underneath (scroll position, DOM state all
+// correct), it just never received a repaint for that new region. Matches
+// reports of "the grown part stays blank" and, since WhatsApp Web's chat
+// list only renders newly-scrolled-into-view rows via the same rendering
+// pipeline, also explains rows that stop appearing partway down a scroll —
+// same missing-repaint symptom, not an actual hang. invalidate() forces a
+// full repaint of whichever view is currently on-screen; called only from
+// actual bounds-changing events (not layoutViews()'s other callers, e.g.
+// setStatus, where the view's size hasn't changed and this would be a
+// no-op repaint for no reason).
+function invalidateActiveViews() {
+    const active = activeProfileId ? sessions.get(activeProfileId) : null;
+    try { if (active?.waView && !active.waView.webContents.isDestroyed()) active.waView.webContents.invalidate(); } catch (_) {}
+    try { if (active?.tgView && !active.tgView.webContents.isDestroyed()) active.tgView.webContents.invalidate(); } catch (_) {}
+    try { if (ollamaActive && ollamaView && !ollamaView.webContents.isDestroyed()) ollamaView.webContents.invalidate(); } catch (_) {}
+}
+
 // ============================
 // Loading splash — a separate view stacked ABOVE a profile's waView (added
 // to contentView after it, same bounds — see layoutViews() — so the ASCII
@@ -795,6 +814,33 @@ async function setupWaView(session) {
     // on every navigation — WhatsApp Web reloading the page would otherwise
     // wipe the patch out.
     session.waView.webContents.on('dom-ready', () => { injectMediaDevicePrefs(session); });
+    // Forces a full repaint right after this view actually navigates (the
+    // real web.whatsapp.com load, not the initial about:blank) — see
+    // invalidateActiveViews' own doc for the missing-repaint bug this works
+    // around; a freshly navigated view is exactly where it's been seen to
+    // start out blank.
+    session.waView.webContents.on('dom-ready', () => {
+        try { if (!session.waView.webContents.isDestroyed()) session.waView.webContents.invalidate(); } catch (_) {}
+    });
+
+    // A genuinely dead renderer (crashed/OOM-killed/killed by the OS) — as
+    // opposed to a merely hung-but-alive one, which is what startHealthCheck
+    // below is for. Nothing clicks, no incoming message ever shows again,
+    // because the process backing this view is simply gone; without this the
+    // only way out was startHealthCheck's own polling, up to ~HEALTH_CHECK_
+    // GRACE_MS + 2×HEALTH_CHECK_INTERVAL_MS (over a minute) of a totally dead
+    // view before recovery even started. This reacts the instant Chromium
+    // reports the process gone instead of waiting to notice by polling.
+    // 'clean-exit' is excluded — that's this same view being closed on
+    // purpose (e.g. recreateWaView's own webContents.close() during a normal
+    // recovery/profile-close), not a crash.
+    const waWebContentsAtSetup = session.waView.webContents;
+    waWebContentsAtSetup.on('render-process-gone', (_event, details) => {
+        if (details.reason === 'clean-exit') return;
+        if (session.waView?.webContents !== waWebContentsAtSetup) return; // already superseded
+        console.error(`[${session.name}] WhatsApp görünümünün süreci çöktü (${details.reason}) — hemen kurtarma tetikleniyor...`);
+        session.autoRecoverFn?.();
+    });
 
     // target=_blank links to WhatsApp's OWN domain (its "pop out chat" /
     // similar features) open as a real Electron window sharing this
@@ -933,12 +979,24 @@ async function setupTelegramView(session) {
 const HEALTH_CHECK_INTERVAL_MS = 15_000;
 const HEALTH_PING_TIMEOUT_MS = 8_000;
 const MAX_MISSED_HEALTH_PINGS = 2;
+// A freshly (re)created view is legitimately busy for a while — first paint,
+// restoring/rendering a large chat history, whatsapp-web.js's own post-ready
+// sync work. Without this grace period, a health check landing during that
+// normal busy stretch reads as "unresponsive", recovery tears the view down
+// and builds a new one, which is ALSO busy right after — a self-inflicted
+// loop that recreates the view every ~25-30s forever (confirmed live: status
+// flapping ready→starting→ready on a healthy, fully responsive page — see
+// this function's own doc for how that was diagnosed). No pings count
+// (alive or missed) until this much time has passed since startHealthCheck.
+const HEALTH_CHECK_GRACE_MS = 45_000;
 
 function startHealthCheck(session) {
     stopHealthCheck(session);
+    const startedAt = Date.now();
     let missed = 0;
     let pinging = false;
     session.healthCheckTimer = setInterval(async () => {
+        if (Date.now() - startedAt < HEALTH_CHECK_GRACE_MS) return;
         if (pinging || !session.waView || session.waView.webContents.isDestroyed()) return;
         pinging = true;
         // A real JS/navigation error out of executeJavaScript still means
@@ -1085,11 +1143,11 @@ async function createWindow() {
         },
     });
     win.setMenuBarVisibility(false);
-    win.on('resize', layoutViews);
+    win.on('resize', () => { layoutViews(); invalidateActiveViews(); });
     win.on('resize', scheduleClampWindowBounds);
     win.on('move', scheduleClampWindowBounds);
-    win.on('maximize', () => { layoutViews(); win.webContents.send('window:maximizedChanged', true); });
-    win.on('unmaximize', () => { layoutViews(); win.webContents.send('window:maximizedChanged', false); });
+    win.on('maximize', () => { layoutViews(); invalidateActiveViews(); win.webContents.send('window:maximizedChanged', true); });
+    win.on('unmaximize', () => { layoutViews(); invalidateActiveViews(); win.webContents.send('window:maximizedChanged', false); });
 
     // Passed as a query param (not fetched via IPC after load) so the lock
     // overlay's shown/hidden state is known from index.html's very first
