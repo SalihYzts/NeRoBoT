@@ -4,9 +4,13 @@
 //   3) Varsa bir önceki derlemeden kalan dist/ klasörünü tamamen siler
 //      (electron-builder kendisi temizlemiyor, üst üste biriken eski
 //      sürümlerin .exe/.blockmap/latest.yml dosyalarını önlemek için)
-//   4) İkonları yeniden oluşturur ve electron-builder ile Windows kurulum
-//      paketini (.exe) YERELDE derler — dist/ klasörüne yazar, GitHub'a
-//      hiçbir şey göndermez/yayınlamaz.
+//   4) İkonları yeniden oluşturur ve electron-builder ile ÇALIŞTIĞIN
+//      platform için (Windows'ta .exe, Linux'ta .AppImage) YERELDE derler —
+//      dist/ klasörüne yazar, GitHub'a hiçbir şey göndermez/yayınlamaz.
+//      (Diğer platform için resmi yayın .github/workflows/release.yml'deki
+//      CI tarafından, "npm run release" tag'i push'ladığında üretilir —
+//      Linux'tan Windows .exe'sini yerelde çapraz derlemek elektron-builder'ın
+//      kendi NSIS araç zincirindeki bilinen bir hataya takılıyor.)
 // Kaynak kodu commit'leyip GitHub'a göndermek ve bu sürümü bir GitHub
 // Release olarak yayınlamak için release.js'i (NeRoBoT_Yayinla.bat) kullan
 // — o, burada belirlediğin sürüm numarasını (package.json'dan) olduğu gibi
@@ -101,12 +105,15 @@ async function main() {
     run('npm', ['run', 'dist']);
 
     const distDir = path.join(ROOT, 'dist');
-    const exeFiles = fs.existsSync(distDir) ? fs.readdirSync(distDir).filter((f) => f.endsWith('.exe')) : [];
-    if (!exeFiles.length) {
-        throw new Error('dist/ klasöründe bir .exe bulunamadı — derleme sırasında bir şey ters gitmiş olabilir.');
+    const builtFiles = fs.existsSync(distDir)
+        ? fs.readdirSync(distDir).filter((f) => f.endsWith('.exe') || f.endsWith('.AppImage'))
+        : [];
+    if (!builtFiles.length) {
+        throw new Error('dist/ klasöründe bir .exe ya da .AppImage bulunamadı — derleme sırasında bir şey ters gitmiş olabilir.');
     }
-    exeFiles.sort((a, b) => fs.statSync(path.join(distDir, b)).mtimeMs - fs.statSync(path.join(distDir, a)).mtimeMs);
-    console.log(`\nDerleme tamamlandı: dist/${exeFiles[0]}`);
+    builtFiles.sort((a, b) => fs.statSync(path.join(distDir, b)).mtimeMs - fs.statSync(path.join(distDir, a)).mtimeMs);
+    console.log(`\nDerleme tamamlandı:`);
+    for (const f of builtFiles) console.log(`  dist/${f}`);
     console.log('Bunu kaynak koduyla birlikte GitHub\'a yayınlamak için: npm run release (ya da NeRoBoT_Yayinla.bat)');
 }
 

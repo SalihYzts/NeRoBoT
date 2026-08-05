@@ -11,16 +11,17 @@
 //      .claude-api-key), yoksa/başarısız olursa yerel Ollama'ya düşer, o da
 //      yoksa commit listesinden basit bir changelog'a düşer — hiçbir adımı
 //      bloklamaz (bkz. generateText).
-//   4) Yine onay alarak ikonları yeniden oluşturur, electron-builder ile
-//      Windows kurulum paketini (.exe) derler VE GitHub'da yeni bir Release
-//      olarak yayınlar — electron-builder'ın kendi GitHub publisher'ıyla
-//      (bkz. package.json'daki build.publish), elle yüklemek yerine: bu,
-//      autoUpdater'ın (app/main.js) ihtiyaç duyduğu latest.yml/blockmap
-//      dosyalarını da doğru isimlerle otomatik yükler — elle yapılan bir
-//      REST çağrısında ya da bir zip'i tek asset olarak yüklemekte bunu
-//      doğru tutmak kolayca yanlış gidebiliyordu (autoUpdater o durumda
-//      yeni sürümü hiç görmez). Release notu olarak 3. adımdaki changelog
-//      kullanılır (-c.releaseInfo.releaseNotesFile).
+//   4) Kurulum paketlerini BU betik DEĞİL, 2. adımda push'lanan tag'i
+//      tetikleyen .github/workflows/release.yml (CI) derler — bir Windows
+//      runner'da .exe'yi, bir Linux runner'da .AppImage'i, ikisini de
+//      electron-builder'ın kendi GitHub publisher'ıyla (bkz. package.json'daki
+//      build.publish) AYNI release'e yükler (autoUpdater'ın ihtiyaç duyduğu
+//      latest.yml/blockmap dosyaları dahil). Bunun sebebi: Windows .exe'sini
+//      Linux'tan yerelde çapraz derlemek electron-builder'ın kendi NSIS araç
+//      zincirindeki bilinen bir hataya takılıyor (hem eski hem "1.2.1" beta
+//      toolset). Bu betik burada sadece o release'in notlarını 3. adımdaki
+//      changelog'la dolduruyor (REST API ile) — CI zaten tag push'ı üzerine
+//      kendiliğinden çalışır, bu adımdan bağımsız.
 //   5) Changelog'u temel alarak LinkedIn'de paylaşılabilecek kısa bir
 //      duyuru metni hazırlar (yine generateText ile), istersen panodan
 //      (Win+Shift+S) 1-2 ekran görüntüsü ister, ve hepsini gömülü bir Word
@@ -146,6 +147,37 @@ async function getGithubToken() {
         console.log(`Token kaydedildi: ${TOKEN_FILE} (sadece bu bilgisayarda kalır, git'e asla gönderilmez — .gitignore'da).`);
     }
     return token;
+}
+
+// CI (.github/workflows/release.yml) bir tag push'ında release'i kendisi de
+// oluşturabilir (electron-builder --publish always, release yoksa yaratır) —
+// bu yüzden burada GET ile önce var mı bakılıp ona göre PATCH/POST yapılıyor,
+// hangisi önce çalışırsa çalışsın (bu betik mi, yoksa CI mi) notlar doğru
+// release'e yazılmış oluyor.
+async function upsertGithubRelease({ owner, repo, tag, body, token }) {
+    const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+    };
+    const getRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`, { headers });
+    if (getRes.status === 200) {
+        const existing = await getRes.json();
+        const patchRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/${existing.id}`, {
+            method: 'PATCH',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: tag, body }),
+        });
+        if (!patchRes.ok) throw new Error(`PATCH HTTP ${patchRes.status}`);
+        return;
+    }
+    if (getRes.status !== 404) throw new Error(`GET HTTP ${getRes.status}`);
+    const postRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag_name: tag, name: tag, body, draft: false, prerelease: false }),
+    });
+    if (!postRes.ok) throw new Error(`POST HTTP ${postRes.status}`);
 }
 
 // build.js'deki aynı isimli fonksiyonla aynı mantık (bkz. onun kendi
@@ -510,31 +542,32 @@ async function main() {
     console.log(`Changelog yazıldı: ${path.basename(changelogFile)} ve CHANGELOG.md güncellendi.`);
 
     // ============================
-    // 4) Derle + GitHub Release olarak yayınla
+    // 4) Release notlarını changelog'la doldur — kurulum paketlerinin
+    // kendisini CI derliyor (bkz. yukarıdaki yorum), tag zaten push'landığı
+    // için CI muhtemelen bu noktada çoktan başlamıştır; burası ona paralel,
+    // sadece release'in (CI'dan önce davranırsak oluşturarak, sonra
+    // davranırsak güncelleyerek) notlarını ayarlıyor.
     // ============================
-    if (!(await confirm(`\nŞimdi kurulum paketini derleyip "${tag}" adıyla GitHub Release olarak yayınlayayım mı? (birkaç dakika sürebilir)`))) {
-        console.log(`\nEtiket ("${tag}") GitHub'a gönderildi ama henüz hiçbir şey derlenmedi/yayınlanmadı — istediğin zaman betiği tekrar çalıştırıp bu adımı yapabilirsin.`);
-        return;
-    }
-
-    const token = await getGithubToken();
-    if (!token) {
-        console.log('Token girilmedi — derleme/yayınlama iptal edildi. Etiket zaten GitHub\'da, istediğin zaman tekrar deneyebilirsin.');
-        return;
-    }
-
-    run('npm', ['run', 'gen-icons']);
-    // GH_TOKEN: electron-builder'ın GitHub publisher'ının okuduğu ortam
-    // değişkeni — package.json'daki build.publish (provider: github) ile
-    // birlikte, derlenen .exe'yi VE autoUpdater'ın ihtiyaç duyduğu
-    // latest.yml/.blockmap dosyalarını doğru isimlerle bu release'e yükler.
-    // -c.releaseInfo.releaseNotesFile: release notu olarak yukarıda
-    // ürettiğimiz changelog dosyasını kullanmasını söyler (yoksa
-    // electron-builder'ın kendi otomatik ürettiği/boş notu kalırdı).
-    run('npx', ['electron-builder', '--win', '--publish', 'always', `-c.releaseInfo.releaseNotesFile=${changelogFile}`], { env: { ...process.env, GH_TOKEN: token } });
-
     const releaseUrl = `https://github.com/${parsedRemote.owner}/${parsedRemote.repo}/releases/tag/${tag}`;
-    console.log(`\nTamamlandı — ${tag} yayınlandı: ${releaseUrl}`);
+    const actionsUrl = `https://github.com/${parsedRemote.owner}/${parsedRemote.repo}/actions`;
+
+    if (await confirm(`\nRelease notlarını yukarıdaki changelog'la güncelleyeyim mi (CI'nın ${tag} için ürettiği release'e)?`)) {
+        const token = await getGithubToken();
+        if (!token) {
+            console.log('Token girilmedi — release notları ayarlanamadı. CI yine de derleyip yayınlayacak, notları release sayfasından elle düzenleyebilirsin.');
+        } else {
+            try {
+                await upsertGithubRelease({ owner: parsedRemote.owner, repo: parsedRemote.repo, tag, body: changelogBody, token });
+                console.log('Release notları güncellendi.');
+            } catch (err) {
+                console.log(`[uyarı] Release notları ayarlanamadı (${err.message}) — CI yine de derleyip yayınlayacak.`);
+            }
+        }
+    }
+
+    console.log(`\n"${tag}" için CI şimdi Windows (.exe) ve Linux (.AppImage) paketlerini derleyip bu release'e yüklüyor (birkaç dakika sürebilir).`);
+    console.log(`Derleme durumu: ${actionsUrl}`);
+    console.log(`Release: ${releaseUrl}`);
 
     // ============================
     // 5) LinkedIn duyuru metni — Claude API (varsa), yoksa Ollama; sonra
@@ -562,36 +595,46 @@ async function main() {
         linkedinPost = `NeRoBoT ${tag} yayında! 🚀\n\nBu sürümde neler değişti:\n${commitLog}\n\n#yazılım #gelistirme #nerobot`;
     }
 
-    const screenshots = await captureScreenshotsInteractive(2);
-    const images = screenshots.map((p, i) => {
-        const buf = fs.readFileSync(p);
-        const dim = pngDimensions(buf);
-        const maxCx = 5486400; // ~6 inç genişlik sınırı (EMU cinsinden)
-        let cx = dim.width * 9525; // px → EMU (96 DPI varsayımıyla)
-        let cy = dim.height * 9525;
-        if (cx > maxCx) {
-            const scale = maxCx / cx;
-            cx = Math.round(cx * scale);
-            cy = Math.round(cy * scale);
-        }
-        return { path: p, mediaName: `image${i + 1}.png`, cx, cy };
-    });
-
-    const docxPath = path.join(ROOT, `linkedin_post_${tag}.docx`);
-    const built = buildDocx(docxPath, {
-        title: `NeRoBoT ${tag} - LinkedIn Duyurusu`,
-        bodyLines: linkedinPost.split('\n'),
-        images,
-    });
-
+    // Ekran görüntüsü yakalama (pano) ve .docx paketleme PowerShell'e
+    // (System.Windows.Forms.Clipboard, Compress-Archive) dayanıyor — sadece
+    // Windows'ta var. Linux/mac'te bu adım atlanır, duyuru metni düz .txt
+    // olarak kaydedilir (metnin kendisi zaten platformdan bağımsız üretildi).
     let linkedinFile;
-    if (built) {
-        linkedinFile = docxPath;
-        console.log(`LinkedIn Word dosyası hazır: ${path.basename(docxPath)}`);
+    if (IS_WIN) {
+        const screenshots = await captureScreenshotsInteractive(2);
+        const images = screenshots.map((p, i) => {
+            const buf = fs.readFileSync(p);
+            const dim = pngDimensions(buf);
+            const maxCx = 5486400; // ~6 inç genişlik sınırı (EMU cinsinden)
+            let cx = dim.width * 9525; // px → EMU (96 DPI varsayımıyla)
+            let cy = dim.height * 9525;
+            if (cx > maxCx) {
+                const scale = maxCx / cx;
+                cx = Math.round(cx * scale);
+                cy = Math.round(cy * scale);
+            }
+            return { path: p, mediaName: `image${i + 1}.png`, cx, cy };
+        });
+
+        const docxPath = path.join(ROOT, `linkedin_post_${tag}.docx`);
+        const built = buildDocx(docxPath, {
+            title: `NeRoBoT ${tag} - LinkedIn Duyurusu`,
+            bodyLines: linkedinPost.split('\n'),
+            images,
+        });
+
+        if (built) {
+            linkedinFile = docxPath;
+            console.log(`LinkedIn Word dosyası hazır: ${path.basename(docxPath)}`);
+        } else {
+            linkedinFile = path.join(ROOT, `linkedin_post_${tag}.txt`);
+            fs.writeFileSync(linkedinFile, linkedinPost + '\n', 'utf8');
+            console.log('[uyarı] Word dosyası oluşturulamadı, metin .txt olarak kaydedildi.');
+        }
     } else {
         linkedinFile = path.join(ROOT, `linkedin_post_${tag}.txt`);
         fs.writeFileSync(linkedinFile, linkedinPost + '\n', 'utf8');
-        console.log('[uyarı] Word dosyası oluşturulamadı, metin .txt olarak kaydedildi.');
+        console.log('[bilgi] Ekran görüntülü Word dosyası yalnızca Windows\'ta destekleniyor (PowerShell gerekiyor) — metin .txt olarak kaydedildi.');
     }
 
     // ============================

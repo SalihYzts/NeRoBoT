@@ -1,13 +1,13 @@
 {
   "name": "nerobot",
-  "version": "4.4.25",
-  "description": "",
+  "version": "4.4.26",
+  "description": "NeRoBoT masaüstü uygulaması",
   "main": "app/main.js",
   "scripts": {
     "start": "electron .",
     "gen-icons": "node scripts/gen-icons.js",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder --win",
+    "dist": "electron-builder",
     "build": "node scripts/build.js",
     "release": "node scripts/release.js"
   },
@@ -47,6 +47,14 @@
     "win": {
       "target": "nsis",
       "icon": "app/ui/icon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "app/ui/icon.png",
+      "category": "Network",
+      "executableName": "nerobot",
+      "synopsis": "NeRoBoT masaüstü uygulaması",
+      "syncDesktopName": true
     },
     "nsis": {
       "oneClick": false,

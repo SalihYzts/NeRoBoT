@@ -1,0 +1,47 @@
+name: Release build
+
+# scripts/release.js (npm run release / NeRoBoT_Yayinla.bat|sh) pushes a
+# "vX.Y.Z" tag once it has committed the source and written the changelog —
+# that push is what triggers this workflow. It builds each platform's
+# installer on its own native runner (windows-latest for the NSIS .exe,
+# ubuntu-latest for the AppImage) and uploads both to the SAME GitHub Release
+# via electron-builder's own GitHub publisher (package.json's build.publish).
+# This exists because cross-building the Windows .exe FROM Linux hits a real
+# bug in electron-builder's bundled NSIS toolchain (both the legacy and the
+# "1.2.1" beta toolset fail on its own template's NSIS scripts) — building on
+# an actual Windows runner sidesteps that entirely instead of fighting wine/
+# nsis locally.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - run: npm run gen-icons
+
+      - run: npx electron-builder ${{ matrix.target }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
