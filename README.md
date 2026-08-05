@@ -99,10 +99,15 @@ Developer: **Salih Yazıtaş**
 ```
 nerobot/
 ├── package.json
-├── NeRoBoT_App.bat                 # Launches the desktop app (Windows)
-├── NeRoBoT_Kurulum.bat             # First-time setup for a source checkout (npm install + icons)
-├── NeRoBoT_Derle.bat               # Builds a versioned installer locally (no publishing)
-├── NeRoBoT_Yayinla.bat             # Pushes source + publishes a GitHub Release (see below)
+├── NeRoBoT_App.bat / .sh           # Launches the desktop app (Windows / Linux)
+├── NeRoBoT_Kurulum.bat / .sh       # First-time setup for a source checkout (npm install + icons)
+├── NeRoBoT_Derle.bat / .sh         # Builds a versioned installer locally (no publishing)
+├── NeRoBoT_Yayinla.bat / .sh       # Pushes source + pushes a version tag (see below)
+├── .github/workflows/release.yml   # CI that builds Windows .exe + Linux .AppImage on tag push and publishes them
+├── packaging/arch/                 # Arch Linux pacman package — see Installation
+│   ├── PKGBUILD
+│   ├── nerobot.desktop
+│   └── nerobot.png
 ├── app/
 │   ├── main.js                     # Electron main — windows, embedded WhatsApp/Telegram views,
 │   │                                #   profile/session management, auto-update, all IPC
@@ -139,6 +144,31 @@ All profile data (WhatsApp/Telegram sessions, per-profile settings, NeRoChAt con
 
 Download `NeRoBoT Setup x.y.z.exe` from the [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) page and run it. It installs NeRoBoT as a normal Windows app (Start Menu shortcut, findable from the Windows search box, with its own uninstaller listed in "Add or Remove Programs") — no `git clone`/`npm install` needed. If [Ollama](https://ollama.com/) isn't already installed, the installer attempts to fetch and install it silently in the background (this never blocks or delays the install itself); if that's skipped or fails (e.g. no internet at install time), NeRoBoT will offer to install it the first time you turn on the AI Bot. From then on, the app checks for updates on every launch and updates itself automatically.
 
+### Linux: pacman package (Arch-based distros, recommended)
+
+Fully from the terminal, no `git clone` needed:
+
+```bash
+mkdir -p ~/nerobot-pkg && cd ~/nerobot-pkg
+curl -LO https://raw.githubusercontent.com/SalihYzts/NeRoBoT/main/packaging/arch/PKGBUILD
+curl -LO https://raw.githubusercontent.com/SalihYzts/NeRoBoT/main/packaging/arch/nerobot.desktop
+curl -LO https://raw.githubusercontent.com/SalihYzts/NeRoBoT/main/packaging/arch/nerobot.png
+makepkg -si
+```
+
+`makepkg -si` downloads the `.AppImage` from [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases), turns it into a real pacman package, auto-installs missing dependencies (e.g. `fuse2`), and finishes the install with `sudo pacman -U` (it'll ask for your password there). Afterward NeRoBoT shows up in your app menu and can be launched from the terminal with `nerobot`. When a new version ships, bump `pkgver` in `packaging/arch/PKGBUILD` and repeat the same steps.
+
+### Linux: AppImage (other distros)
+
+Download `NeRoBoT-x.y.z.AppImage` from the [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) page, make it executable, and run it:
+
+```bash
+chmod +x NeRoBoT-*.AppImage
+./NeRoBoT-*.AppImage
+```
+
+AppImages need `libfuse2` — most distros already have it, otherwise install it (e.g. `sudo apt install libfuse2`, `sudo pacman -S fuse2`). To add it to your app menu, use [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher).
+
 ### Running from source (development)
 
 ### 1. Clone the Repository
@@ -150,7 +180,7 @@ cd nerobot
 
 ### 2. Set Up
 
-Double-click `NeRoBoT_Kurulum.bat`, or run manually:
+Double-click `NeRoBoT_Kurulum.bat` on Windows, `NeRoBoT_Kurulum.sh` on Linux (you may need `chmod +x NeRoBoT_Kurulum.sh` first), or run manually:
 
 ```bash
 npm install
@@ -174,7 +204,7 @@ ollama pull llava
 npm start
 ```
 
-On Windows you can also double-click `NeRoBoT_App.bat`. The Home screen lets you create your first WhatsApp or Telegram profile.
+On Windows you can also double-click `NeRoBoT_App.bat`, on Linux `NeRoBoT_App.sh`. The Home screen lets you create your first WhatsApp or Telegram profile.
 
 ### 5. Connect a Profile
 
@@ -191,14 +221,14 @@ You only need to do this once per profile — the session is stored and restored
 Two separate steps, so you can build and test a version before deciding to publish it:
 
 ```bash
-npm run build     # or double-click NeRoBoT_Derle.bat
+npm run build     # or double-click NeRoBoT_Derle.bat / NeRoBoT_Derle.sh
 ```
-Asks for a version number, writes it to `package.json`, and builds `dist/NeRoBoT Setup x.y.z.exe` locally — nothing leaves your machine.
+Asks for a version number, writes it to `package.json`, and builds locally **for whichever platform you're running on** (`.exe` on Windows, `.AppImage` on Linux) into `dist/` — nothing leaves your machine. Just a quick local sanity build.
 
 ```bash
-npm run release   # or double-click NeRoBoT_Yayinla.bat
+npm run release   # or double-click NeRoBoT_Yayinla.bat / NeRoBoT_Yayinla.sh
 ```
-Uses whichever version `npm run build` just set. Shows you the pending source changes and asks for confirmation before pushing to GitHub, then asks again before building and publishing that version as a GitHub Release (which is also what feeds the app's auto-update check). Needs a GitHub [Personal Access Token](https://github.com/settings/tokens/new) with `repo` scope the first time — it's cached locally afterward (`.release-token`, gitignored, never committed).
+Uses whichever version `npm run build` just set. Shows you the pending source changes and asks for confirmation before pushing to GitHub, commits, and pushes a `vX.Y.Z` tag. The installers themselves are built NOT by this script but by [.github/workflows/release.yml](.github/workflows/release.yml) (GitHub Actions), which that tag push triggers: a Windows runner builds the `.exe`, a Linux runner builds the `.AppImage`, and both get uploaded to the **same** GitHub Release (including the `latest.yml`/`latest-linux.yml` the auto-updater needs). This split exists because cross-building the Windows `.exe` from Linux locally hits a known bug in electron-builder's own NSIS toolchain. The script can optionally fill in that release's notes with the changelog generated above — that needs a GitHub [Personal Access Token](https://github.com/settings/tokens/new) with `repo` scope (optional; if you skip it, CI still builds and publishes, you can just edit the release notes by hand afterward) — it's cached locally afterward (`.release-token`, gitignored, never committed).
 
 ---
 

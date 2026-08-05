@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=NeRoBoT
+Comment=NeRoBoT masaüstü uygulaması
+Exec=nerobot %U
+Icon=nerobot
+Terminal=false
+Categories=Network;
+StartupWMClass=nerobot

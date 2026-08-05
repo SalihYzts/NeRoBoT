@@ -99,10 +99,15 @@ Geliştirici: **Salih Yazıtaş**
 ```
 nerobot/
 ├── package.json
-├── NeRoBoT_App.bat                 # Masaüstü uygulamasını başlatır (Windows)
-├── NeRoBoT_Kurulum.bat             # Kaynak koddan ilk kurulum (npm install + ikonlar)
-├── NeRoBoT_Derle.bat               # Sürüm numaralı bir installer'ı yerelde derler (yayınlamaz)
-├── NeRoBoT_Yayinla.bat             # Kaynağı gönderir + GitHub Release olarak yayınlar (aşağıya bakın)
+├── NeRoBoT_App.bat / .sh           # Masaüstü uygulamasını başlatır (Windows / Linux)
+├── NeRoBoT_Kurulum.bat / .sh       # Kaynak koddan ilk kurulum (npm install + ikonlar)
+├── NeRoBoT_Derle.bat / .sh         # Sürüm numaralı bir installer'ı yerelde derler (yayınlamaz)
+├── NeRoBoT_Yayinla.bat / .sh       # Kaynağı gönderir + bir sürüm etiketi push'lar (aşağıya bakın)
+├── .github/workflows/release.yml   # Etiket push'landığında Windows .exe + Linux .AppImage'i derleyip yayınlayan CI
+├── packaging/arch/                 # Linux (Arch) için pacman paketi — bkz. Kurulum bölümü
+│   ├── PKGBUILD
+│   ├── nerobot.desktop
+│   └── nerobot.png
 ├── app/
 │   ├── main.js                     # Electron ana süreç — pencereler, gömülü WhatsApp/Telegram
 │   │                                #   görünümleri, profil/oturum yönetimi, otomatik güncelleme, tüm IPC
@@ -139,6 +144,31 @@ Tüm profil verisi (WhatsApp/Telegram oturumları, profil bazlı ayarlar, NeRoCh
 
 [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) sayfasından `NeRoBoT Setup x.y.z.exe` dosyasını indirip çalıştırın. NeRoBoT normal bir Windows uygulaması olarak kurulur (Start Menu kısayolu, Windows arama kutusundan bulunabilir, "Program Ekle/Kaldır"da kendi uninstaller'ıyla listelenir) — `git clone`/`npm install` gerekmez. [Ollama](https://ollama.com/) kurulu değilse installer onu arka planda sessizce indirip kurmayı dener (bu, kurulumun kendisini asla beklemez/geciktirmez); bu adım atlanır veya başarısız olursa (örn. kurulum sırasında internet yoksa) NeRoBoT, AI Bot'u ilk açtığınızda kurulumu tekrar teklif eder. Bundan sonra uygulama her açılışta güncelleme kontrolü yapıp kendini otomatik günceller.
 
+### Linux: pacman paketi (Arch tabanlı dağıtımlar, önerilen)
+
+Tamamen terminalden, `git clone` bile gerekmeden:
+
+```bash
+mkdir -p ~/nerobot-pkg && cd ~/nerobot-pkg
+curl -LO https://raw.githubusercontent.com/SalihYzts/NeRoBoT/main/packaging/arch/PKGBUILD
+curl -LO https://raw.githubusercontent.com/SalihYzts/NeRoBoT/main/packaging/arch/nerobot.desktop
+curl -LO https://raw.githubusercontent.com/SalihYzts/NeRoBoT/main/packaging/arch/nerobot.png
+makepkg -si
+```
+
+`makepkg -si`, [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases)'deki `.AppImage`'i indirip gerçek bir pacman paketine çevirir, eksik bağımlılıkları (ör. `fuse2`) otomatik kurar ve kurulumu `sudo pacman -U` ile tamamlar (bu adımda parolanızı isteyecektir). Kurulumdan sonra NeRoBoT uygulama menüsünde çıkar, `nerobot` komutuyla da terminalden açılabilir. Yeni bir sürüm çıktığında `packaging/arch/PKGBUILD`'deki `pkgver`i güncelleyip aynı adımları tekrarlamanız yeterli.
+
+### Linux: AppImage (diğer dağıtımlar)
+
+[GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) sayfasından `NeRoBoT-x.y.z.AppImage` dosyasını indirin, çalıştırılabilir yapın ve çalıştırın:
+
+```bash
+chmod +x NeRoBoT-*.AppImage
+./NeRoBoT-*.AppImage
+```
+
+AppImage'ler `libfuse2` gerektirir — çoğu dağıtımda hazır gelir, yoksa (ör. `sudo apt install libfuse2`, `sudo pacman -S fuse2`) kurmanız gerekebilir. Uygulama menüsüne eklemek istiyorsanız [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) kullanabilirsiniz.
+
 ### Kaynak koddan çalıştırma (geliştirme)
 
 ### 1. Depoyu Klonlayın
@@ -150,7 +180,7 @@ cd nerobot
 
 ### 2. Kurulum
 
-`NeRoBoT_Kurulum.bat`'a çift tıklayın, ya da elle çalıştırın:
+Windows'ta `NeRoBoT_Kurulum.bat`'a, Linux'ta `NeRoBoT_Kurulum.sh`'e çift tıklayın (Linux'ta önce `chmod +x NeRoBoT_Kurulum.sh` gerekebilir), ya da elle çalıştırın:
 
 ```bash
 npm install
@@ -174,7 +204,7 @@ ollama pull llava
 npm start
 ```
 
-Windows'ta `NeRoBoT_App.bat` dosyasına çift tıklayarak da açabilirsiniz. Home ekranından ilk WhatsApp ya da Telegram profilinizi oluşturabilirsiniz.
+Windows'ta `NeRoBoT_App.bat`, Linux'ta `NeRoBoT_App.sh` dosyasına çift tıklayarak da açabilirsiniz. Home ekranından ilk WhatsApp ya da Telegram profilinizi oluşturabilirsiniz.
 
 ### 5. Bir Profili Bağlayın
 
@@ -191,14 +221,14 @@ Bunu her profil için sadece bir kez yapmanız gerekir — oturum kaydedilir ve 
 İki ayrı adım — böylece yayınlamaya karar vermeden önce bir sürümü derleyip test edebilirsiniz:
 
 ```bash
-npm run build     # ya da NeRoBoT_Derle.bat'a çift tıklayın
+npm run build     # ya da NeRoBoT_Derle.bat / NeRoBoT_Derle.sh
 ```
-Bir sürüm numarası sorar, `package.json`'a yazar ve `dist/NeRoBoT Setup x.y.z.exe`'yi yerelde derler — bilgisayarınızdan hiçbir şey çıkmaz.
+Bir sürüm numarası sorar, `package.json`'a yazar ve **çalıştığınız platform için** (Windows'ta `.exe`, Linux'ta `.AppImage`) `dist/` altına yerelde derler — bilgisayarınızdan hiçbir şey çıkmaz. Sadece hızlı bir yerel test/sağlık kontrolü içindir.
 
 ```bash
-npm run release   # ya da NeRoBoT_Yayinla.bat'a çift tıklayın
+npm run release   # ya da NeRoBoT_Yayinla.bat / NeRoBoT_Yayinla.sh
 ```
-`npm run build`'ın az önce belirlediği sürümü kullanır. Bekleyen kaynak kod değişikliklerini gösterip GitHub'a göndermeden önce onay ister, ardından o sürümü derleyip GitHub Release olarak yayınlamadan önce tekrar onay ister (bu, uygulamanın otomatik güncelleme kontrolünü de besler). İlk seferinde `repo` yetkisine sahip bir GitHub [Personal Access Token](https://github.com/settings/tokens/new) gerektirir — sonrasında yerelde saklanır (`.release-token`, gitignore'da, asla commit'lenmez).
+`npm run build`'ın az önce belirlediği sürümü kullanır. Bekleyen kaynak kod değişikliklerini gösterip GitHub'a göndermeden önce onay ister, kaynağı commit'leyip bir `vX.Y.Z` etiketi push'lar. Kurulum paketlerinin kendisini bu betik DEĞİL, o etiket push'ını tetikleyen [.github/workflows/release.yml](.github/workflows/release.yml) (GitHub Actions) derler: bir Windows runner'da `.exe`'yi, bir Linux runner'da `.AppImage`'i, ikisini de **aynı** GitHub Release'e yükler (autoUpdater'ın ihtiyaç duyduğu `latest.yml`/`latest-linux.yml` dahil). Bunun sebebi, Windows `.exe`'sini Linux'tan yerelde çapraz derlemenin electron-builder'ın kendi NSIS araç zincirindeki bilinen bir hataya takılması. Betik isterseniz o release'in notlarını yukarıda üretilen changelog'la doldurur — bunun için `repo` yetkisine sahip bir GitHub [Personal Access Token](https://github.com/settings/tokens/new) ister (opsiyonel; girilmezse CI yine de derleyip yayınlar, release notlarını sonradan elle düzenleyebilirsiniz) — sonrasında yerelde saklanır (`.release-token`, gitignore'da, asla commit'lenmez).
 
 ---
 
