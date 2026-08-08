@@ -5,7 +5,7 @@
 # yeterli (bkz. NeRoBoT_Yayinla.sh/scripts/release.js — o yeni sürümü
 # GitHub Release olarak yayınlıyor, bu PKGBUILD ondan indiriyor).
 pkgname=nerobot
-pkgver=4.4.26
+pkgver=4.4.28
 pkgrel=1
 pkgdesc="NeRoBoT masaüstü uygulaması"
 arch=('x86_64')
@@ -16,7 +16,7 @@ options=('!strip')
 source=("https://github.com/SalihYzts/NeRoBoT/releases/download/v${pkgver}/NeRoBoT-${pkgver}.AppImage"
         "nerobot.desktop"
         "nerobot.png")
-sha256sums=('150c3cfaee9aff97b0cf5b191bbe359e7bd26501c3f4ace429136a48aa2ce492'
+sha256sums=('b7f85fae550e0593edf5d7a6af58c3c3e232102b5626099bf7bb07ded1df5bd4'
             '7208ea73d3b304af1f301ec8138e30734dcdc0efff48c33b9e71e884cc58eb7c'
             'afc914406a601cba70724975eef5fcd8b9efb7f6e2f885b677f69fc64a5baadb')
 noextract=("NeRoBoT-${pkgver}.AppImage")
