@@ -351,7 +351,16 @@ app.commandLine.appendSwitch('remote-debugging-port', '0');
 // (RGB/capture/overlay tools, hybrid-GPU laptops). Nothing here depends on
 // occlusion-based throttling, so disabling it outright is a safe, well-worn
 // troubleshooting step for exactly this hang shape.
-app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+// BackForwardCache keeps a full frozen renderer (DOM + JS heap) alive per
+// navigated-away-from page so back/forward is instant — pure memory cost
+// with zero payoff here, since nothing in the app (WhatsApp/Telegram Web,
+// NeRoChAt) is navigated via browser back/forward. MediaRouter is Chromium's
+// Cast/DIAL device discovery (background mDNS + its own process/socket
+// overhead) — nothing here ever casts. Both are safe, functionality-free
+// memory/CPU savings, not a general perf flag grab; each profile's WebView
+// still stays fully live in the background on purpose (see setupWaView's
+// backgroundThrottling: false) since that's what keeps bots responsive.
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion,BackForwardCache,MediaRouter');
 
 if (TEST_MODE) {
     app.setPath('userData', path.join(app.getPath('temp'), 'nerobot-test-profile'));
@@ -1236,7 +1245,10 @@ async function startBotForSession(session) {
         session.flushIntervalStarted = true;
         // Periodic flush so a crash/force-kill can cost at most a few minutes
         // of freshly written session data instead of the whole login.
-        setInterval(() => {
+        // Handle is stashed on the session so closeProfile can clear it —
+        // otherwise every open/close cycle of the same profile leaks another
+        // interval (and, via its closure, the whole old session object).
+        session.flushInterval = setInterval(() => {
             try { session.waView?.webContents.session.flushStorageData(); } catch (_) {}
         }, 5 * 60 * 1000);
     }
@@ -1244,6 +1256,13 @@ async function startBotForSession(session) {
 }
 
 async function attemptBotStart(session) {
+    // Each attempt starts a fresh client, so this must not carry over from a
+    // prior 'ready' — otherwise the new client's 'loading_screen' guard below
+    // (meant only to ignore WhatsApp's own post-ready internal resyncs on the
+    // SAME client) mistakes this fresh restore for one and skips both status
+    // updates and watchdog re-arming, letting a legitimately slow restore
+    // hit the stuck-timeout and loop into another unwanted recovery.
+    session.botReady = false;
     // Dynamic import: bot.js (transitively commands.js) reads package.json/
     // help.txt with cwd-relative paths, so it must load after process.chdir
     // above — a static import would run before it.
@@ -1555,6 +1574,11 @@ async function closeProfile(id) {
     const session = sessions.get(id);
     if (!session) return;
     session.botGeneration++; // invalidate any in-flight attempt/watchdog for this session
+
+    if (session.flushInterval) {
+        clearInterval(session.flushInterval);
+        session.flushInterval = null;
+    }
 
     if (session.pupBrowser) {
         try { session.pupBrowser.disconnect(); } catch (_) {}
@@ -3036,7 +3060,10 @@ async function injectSuggestionRowsOverlay(session, rows) {
         for (const { label, text } of rows) {
             const row = document.createElement('div');
             row.style.cssText = 'padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:2px;';
-            row.innerHTML = `<b>${label}:</b> ${text}`;
+            const labelEl = document.createElement('b');
+            labelEl.textContent = `${label}:`;
+            row.appendChild(labelEl);
+            row.appendChild(document.createTextNode(` ${text}`));
             row.onmouseenter = () => row.style.background = theme.hoverBg;
             row.onmouseleave = () => row.style.background = 'transparent';
             row.onclick = () => {

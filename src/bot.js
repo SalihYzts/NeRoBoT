@@ -382,7 +382,11 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
 
             const text = msg.body.trim().toLowerCase();
 
-            if (text.startsWith(state.debugPrefix)) {
+            // Prefixes are stored/edited verbatim (any case) but compared here
+            // against an already-lower-cased text, so the comparison side must
+            // be lower-cased too — otherwise a prefix with any uppercase letter
+            // (e.g. set via "!prefix debug CMD") could never match again.
+            if (text.startsWith(state.debugPrefix.toLowerCase())) {
                 const senderId = msg.author || msg.from;
                 const senderIds = await idVariants(senderId);
 
@@ -406,14 +410,14 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                 const userId = msg.author || msg.from;
                 const isNoPrefixChat = state.noPrefixAll || chatIds.some(id => noPrefixChats.has(id));
                 const chatPrefix = chatIds.map(id => chatPrefixes[id]).find(p => p) || state.prefix;
-                const hasPrefix = text.startsWith(chatPrefix);
+                const hasPrefix = text.startsWith(chatPrefix.toLowerCase());
 
                 // Skip if neither no-prefix mode nor prefix match
                 if (!isNoPrefixChat && !hasPrefix) return;
 
                 // In no-prefix chats, let people "speak" without triggering the AI
                 // by starting their message with the ignore prefix.
-                if (isNoPrefixChat && state.ignorePrefix && text.startsWith(state.ignorePrefix)) return;
+                if (isNoPrefixChat && state.ignorePrefix && text.startsWith(state.ignorePrefix.toLowerCase())) return;
 
                 if (state.fixedMode) {
                     if (chatIds.includes(state.activeChatId)) {
@@ -446,7 +450,7 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
 
             const text = msg.body.trim().toLowerCase();
 
-            if (text.startsWith(state.debugPrefix)) {
+            if (text.startsWith(state.debugPrefix.toLowerCase())) {
                 const command = text.slice(state.debugPrefix.length).split(" ")[0];
                 if (commands[command]) {
                     const targetId = msg.to;
@@ -463,11 +467,11 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                 const chatIds = await idVariants(msg.to);
                 const isNoPrefixChat = state.noPrefixAll || chatIds.some(id => noPrefixChats.has(id));
                 const chatPrefix = chatIds.map(id => chatPrefixes[id]).find(p => p) || state.prefix;
-                const hasPrefix = text.startsWith(chatPrefix);
+                const hasPrefix = text.startsWith(chatPrefix.toLowerCase());
 
                 // In no-prefix chats, let people "speak" without triggering the AI
                 // by starting their message with the ignore prefix.
-                if (isNoPrefixChat && state.ignorePrefix && text.startsWith(state.ignorePrefix)) {
+                if (isNoPrefixChat && state.ignorePrefix && text.startsWith(state.ignorePrefix.toLowerCase())) {
                     return;
                 }
 

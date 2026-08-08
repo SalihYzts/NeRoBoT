@@ -1,3 +1,10 @@
+// Idle buckets are swept out after this long so a long-running bot talking
+// to many distinct users doesn't accumulate one entry per userId forever.
+const IDLE_BUCKET_TTL_MS = 24 * 60 * 60 * 1000;
+// Sweep is O(n) over all buckets, so it only runs every Nth call rather than
+// on every message.
+const SWEEP_INTERVAL_CALLS = 500;
+
 // Per-profile rate limiter. Wrapped in a factory so each profile has its
 // own buckets — otherwise the same raw userId string messaging two of
 // your bot numbers would share (and drain) one throttle across both.
@@ -10,6 +17,16 @@ export function createRateLimiter(store) {
     // Tracks when the last rate-limit warning was sent per user
     // so we don't spam them with warnings every single dropped message
     const lastWarnedAt = {};
+
+    let callsSinceSweep = 0;
+    function sweepIdleBuckets(now) {
+        for (const userId in buckets) {
+            if (now - buckets[userId].lastRefill >= IDLE_BUCKET_TTL_MS) {
+                delete buckets[userId];
+                delete lastWarnedAt[userId];
+            }
+        }
+    }
 
     /**
      * Check if a user is allowed to send a message.
@@ -27,6 +44,11 @@ export function createRateLimiter(store) {
 
         const now = Date.now();
         const { rateLimitMaxTokens, rateLimitRefillMs, rateLimitWarnCooldown } = state;
+
+        if (++callsSinceSweep >= SWEEP_INTERVAL_CALLS) {
+            callsSinceSweep = 0;
+            sweepIdleBuckets(now);
+        }
 
         // Init bucket for new user
         if (!buckets[userId]) {

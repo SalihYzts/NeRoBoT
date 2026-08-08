@@ -91,15 +91,29 @@
         gap: 12px;
         padding: 0 16px;
         overflow: hidden; /* never let a crowded tab strip spill into a second row */
-        -webkit-app-region: drag;
+        /* No -webkit-app-region here anymore — see #brandLogo/#brand/#spacer.
+           This used to be `drag`, with #tabStrip carving out a `no-drag`
+           hole for the tabs. That carve-out is exactly what broke: Chromium
+           tracks draggable regions per-element, and elements created by JS
+           AFTER first paint (every tab — renderTabs() rebuilds them from
+           scratch on every profile/notification update) never reliably got
+           registered as their own no-drag region despite the CSS saying so,
+           so real OS-level clicks on them got swallowed as window-drag
+           attempts instead of reaching the page — only a tab's own <img>
+           logo (native image-drag takes a different path) ever got through.
+           Moving `drag` onto only the handful of elements that are static
+           from first paint and simply never need a dynamic carve-out removes
+           the whole failure class instead of chasing it. */
     }
     #brandLogo {
+        -webkit-app-region: drag;
         width: auto;
         height: 22px;
         flex: 0 0 auto;
         margin-right: -4px; /* logo and brand text read as one unit */
     }
     #brand {
+        -webkit-app-region: drag;
         flex: 0 0 auto;
         font-weight: 700;
         letter-spacing: 1px;
@@ -107,7 +121,7 @@
         font-size: 14px;
     }
 
-    #spacer { flex: 1; }
+    #spacer { -webkit-app-region: drag; flex: 1; }
 
     /* ===== Bottom status bar — active profile's connection status, kept
        out of the (already crowded) tab strip row ===== */
@@ -221,6 +235,7 @@
         min-width: 0;
     }
     #homeTabBtn {
+        -webkit-app-region: no-drag;
         flex: 0 0 auto;
         display: inline-flex;
         align-items: center;
@@ -236,6 +251,16 @@
     #homeTabBtn:hover { color: var(--text); border-color: var(--muted); }
     #homeTabBtn.active { color: var(--accent); border-color: var(--accent); }
     .profileTab {
+        /* Explicit, not just inherited from #tabStrip's no-drag — tabs are
+           torn down and rebuilt from scratch on every renderTabs() call
+           (container.innerHTML = '' + recreate), and on Linux/Wayland
+           Chromium's drag-region hit-test map has been observed to lag
+           behind newly-inserted elements until the next full reflow, which
+           reads as "only part of a freshly (re)rendered tab is clickable,
+           the rest tries to drag the window instead of firing its click
+           handler". Declaring no-drag directly on the element itself avoids
+           depending on that inheritance/hit-test timing at all. */
+        -webkit-app-region: no-drag;
         flex: 0 0 auto;
         display: flex;
         align-items: center;
@@ -279,7 +304,7 @@
         cursor: pointer;
     }
     .profileTab .tabClose:hover { opacity: 1; color: var(--red); }
-    /* Drag-to-reorder (see wireTabDrag in the script) */
+    /* Drag-to-reorder (see the #tabStrip pointerdown/move/up handlers) */
     .profileTab.dragging { opacity: .35; }
     .profileTab.dragOverBefore { box-shadow: -2px 0 0 0 var(--accent); }
     .profileTab.dragOverAfter { box-shadow: 2px 0 0 0 var(--accent); }
@@ -5748,61 +5773,123 @@
         return ordered;
     }
 
-    // Drag-to-reorder for the WA/Telegram profile tabs (the NeRoChAt tab
-    // stays put at the front — it isn't part of allProfiles/tabOrder at
-    // all). HTML5 drag-and-drop: dragstart marks the source, dragover on
-    // another tab previews which side it'd land on (dragOverBefore/After,
-    // split at that tab's own horizontal midpoint), drop commits the new
-    // tabOrder and re-renders.
-    let dragTabId = null;
+    // Tab strip activation (NeRoChAt / Oyunlar / profile tabs) + drag-to-
+    // reorder (profile tabs only) — event DELEGATION on #tabStrip itself,
+    // not per-tab listeners. Two real bugs with the old per-tab approach,
+    // both worse on Linux but not exclusive to it:
+    //
+    //   1) A native 'click' only fires if the SAME DOM node received both
+    //      mousedown and mouseup. renderTabs() tears every tab down and
+    //      rebuilds it from scratch (container.innerHTML = '' + recreate)
+    //      on any profile status/notification change, which arrives via
+    //      IPC push at essentially any moment — including squarely between
+    //      a user's mousedown and mouseup on a tab. When that lands, the
+    //      node that took the mousedown is already gone by mouseup, so no
+    //      'click' fires at all and the press is silently swallowed. That
+    //      reads exactly like "some tabs just don't respond, seemingly at
+    //      random" — because it IS at-random, gated on IPC timing neither
+    //      the user nor a fixed click target has any control over.
+    //   2) `draggable = true` (native HTML5 drag-and-drop) on the profile
+    //      tabs runs its own separate gesture-recognizer: any amount of
+    //      mouse movement between mousedown and mouseup — which a real
+    //      mouse/trackpad click essentially always has a little of, unlike
+    //      a scripted one — can make the browser commit to a "drag"
+    //      instead of firing 'click'. That made profile tabs unreliable
+    //      independent of bug (1) above.
+    //
+    // #tabStrip itself is never recreated (only its #profileTabs child's
+    // innerHTML is) — that's what makes it safe to delegate to. 'pointerup'
+    // re-resolves which tab is under the pointer FRESH, against whatever's
+    // actually in the DOM at that moment, rather than trusting a reference
+    // captured back at pointerdown — so a renderTabs() mid-press no longer
+    // drops the activation, it just means pointerup resolves against the
+    // newly-rendered (but visually/positionally identical) replacement tab
+    // instead. Reordering is a from-scratch pointer-based drag (own
+    // movement-threshold check) so it can't fight a native DnD gesture for
+    // the same mousedown the way the old draggable=true version could.
+    const TAB_DRAG_THRESHOLD = 6; // px of movement before a press counts as a reorder-drag instead of a click
+    let tabPress = null; // { kind: 'profile'|'ollama'|'games', id?, downX, downY, dragging }
+
     function clearDragOverMarkers() {
         document.querySelectorAll('.profileTab.dragOverBefore, .profileTab.dragOverAfter')
             .forEach(el => el.classList.remove('dragOverBefore', 'dragOverAfter'));
     }
-    function wireTabDrag(tab, profileId) {
-        tab.draggable = true;
-        tab.addEventListener('dragstart', (e) => {
-            dragTabId = profileId;
-            tab.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', profileId);
-        });
-        tab.addEventListener('dragend', () => {
-            tab.classList.remove('dragging');
-            clearDragOverMarkers();
-            dragTabId = null;
-        });
-        tab.addEventListener('dragover', (e) => {
-            if (!dragTabId || dragTabId === profileId) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            const rect = tab.getBoundingClientRect();
-            const before = (e.clientX - rect.left) < rect.width / 2;
-            tab.classList.toggle('dragOverBefore', before);
-            tab.classList.toggle('dragOverAfter', !before);
-        });
-        tab.addEventListener('dragleave', () => {
-            tab.classList.remove('dragOverBefore', 'dragOverAfter');
-        });
-        tab.addEventListener('drop', (e) => {
-            e.preventDefault();
-            const before = tab.classList.contains('dragOverBefore');
-            clearDragOverMarkers();
-            const draggedId = dragTabId;
-            dragTabId = null;
-            if (!draggedId || draggedId === profileId) return;
-            const ids = orderedOpenProfiles().map(p => p.id);
-            const from = ids.indexOf(draggedId);
-            let to = ids.indexOf(profileId);
-            if (from === -1 || to === -1) return;
-            ids.splice(from, 1);
-            to = ids.indexOf(profileId);
-            ids.splice(before ? to : to + 1, 0, draggedId);
-            tabOrder = ids;
-            saveTabOrder();
-            renderTabs();
-        });
+    function tabPressInfoFromEl(el) {
+        const tab = el?.closest('.profileTab');
+        if (!tab) return null;
+        if (tab.dataset.tabKind === 'ollama') return { kind: 'ollama', tab };
+        if (tab.dataset.tabKind === 'games') return { kind: 'games', tab };
+        if (tab.dataset.id) return { kind: 'profile', id: tab.dataset.id, tab };
+        return null;
     }
+    function commitTabReorder(draggedId, targetTab, before) {
+        const ids = orderedOpenProfiles().map(p => p.id);
+        const from = ids.indexOf(draggedId);
+        let to = ids.indexOf(targetTab.dataset.id);
+        if (from === -1 || to === -1) return;
+        ids.splice(from, 1);
+        to = ids.indexOf(targetTab.dataset.id);
+        ids.splice(before ? to : to + 1, 0, draggedId);
+        tabOrder = ids;
+        saveTabOrder();
+    }
+
+    const tabStripEl = document.getElementById('tabStrip');
+    tabStripEl.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || e.target.closest('.tabClose')) return;
+        const info = tabPressInfoFromEl(e.target);
+        if (!info) return;
+        tabPress = { kind: info.kind, id: info.id, downX: e.clientX, downY: e.clientY, dragging: false };
+    });
+    tabStripEl.addEventListener('pointermove', (e) => {
+        if (!tabPress || tabPress.kind !== 'profile') return;
+        if (!tabPress.dragging) {
+            if (Math.hypot(e.clientX - tabPress.downX, e.clientY - tabPress.downY) <= TAB_DRAG_THRESHOLD) return;
+            tabPress.dragging = true;
+            document.querySelector(`.profileTab[data-id="${CSS.escape(tabPress.id)}"]`)?.classList.add('dragging');
+        }
+        clearDragOverMarkers();
+        const overInfo = tabPressInfoFromEl(e.target);
+        if (overInfo?.kind === 'profile' && overInfo.id !== tabPress.id) {
+            const rect = overInfo.tab.getBoundingClientRect();
+            const before = (e.clientX - rect.left) < rect.width / 2;
+            overInfo.tab.classList.toggle('dragOverBefore', before);
+            overInfo.tab.classList.toggle('dragOverAfter', !before);
+        }
+    });
+    // Bound on document, not tabStripEl — a drag released with the pointer
+    // having drifted outside the strip must still end the gesture instead
+    // of leaving tabPress stuck (which would otherwise silently eat the
+    // NEXT unrelated press too, since it'd still see tabPress as active).
+    document.addEventListener('pointerup', (e) => {
+        if (!tabPress) return;
+        const press = tabPress;
+        tabPress = null;
+        if (press.dragging) {
+            document.querySelector(`.profileTab[data-id="${CSS.escape(press.id)}"]`)?.classList.remove('dragging');
+            const target = document.querySelector('.profileTab.dragOverBefore, .profileTab.dragOverAfter');
+            const before = target?.classList.contains('dragOverBefore');
+            clearDragOverMarkers();
+            if (target) {
+                commitTabReorder(press.id, target, before);
+                renderTabs();
+            }
+            return;
+        }
+        if (Math.hypot(e.clientX - press.downX, e.clientY - press.downY) > TAB_DRAG_THRESHOLD) return;
+        const info = tabPressInfoFromEl(e.target);
+        if (!info || info.kind !== press.kind) return;
+        if (info.kind === 'ollama') openOllamaTab();
+        else if (info.kind === 'games') openGamesTab();
+        else if (info.id === press.id) activateTab(info.id);
+    });
+    document.addEventListener('pointercancel', () => {
+        if (tabPress?.dragging) {
+            document.querySelector(`.profileTab[data-id="${CSS.escape(tabPress.id)}"]`)?.classList.remove('dragging');
+            clearDragOverMarkers();
+        }
+        tabPress = null;
+    });
 
     function renderTabs() {
         document.getElementById('homeTabBtn').classList.toggle('active', !activeProfileId && !ollamaTabActive && !gamesTabActive);
@@ -5814,10 +5901,12 @@
         if (ollamaTabOpen) {
             const tab = document.createElement('div');
             tab.className = 'profileTab' + (ollamaTabActive ? ' active' : '');
+            tab.dataset.tabKind = 'ollama';
 
             const iconEl = document.createElement('img');
             iconEl.src = 'logo.svg';
             iconEl.alt = '';
+            iconEl.draggable = false;
             iconEl.style.cssText = 'height:12px; width:auto; flex:0 0 auto;';
 
             const nameEl = document.createElement('span');
@@ -5832,7 +5921,6 @@
             tab.appendChild(iconEl);
             tab.appendChild(nameEl);
             tab.appendChild(closeEl);
-            tab.addEventListener('click', () => openOllamaTab());
             container.appendChild(tab);
         }
 
@@ -5841,6 +5929,7 @@
         if (gamesTabOpen) {
             const tab = document.createElement('div');
             tab.className = 'profileTab' + (gamesTabActive ? ' active' : '');
+            tab.dataset.tabKind = 'games';
 
             const iconEl = document.createElement('span');
             iconEl.innerHTML = GAMEPAD_ICON_SVG;
@@ -5859,7 +5948,6 @@
             tab.appendChild(iconEl);
             tab.appendChild(nameEl);
             tab.appendChild(closeEl);
-            tab.addEventListener('click', () => openGamesTab());
             container.appendChild(tab);
         }
 
@@ -5883,8 +5971,6 @@
             tab.appendChild(dotEl);
             tab.appendChild(nameEl);
             tab.appendChild(closeEl);
-            tab.addEventListener('click', () => activateTab(p.id));
-            wireTabDrag(tab, p.id);
             container.appendChild(tab);
         }
 

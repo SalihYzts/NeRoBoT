@@ -157,8 +157,8 @@ export function createProfileStore(profileDir) {
 
     // ============================
     // State — loaded from settings.json, falls back to DEFAULTS.
-    // Non-persistent runtime fields (activeChatId, debugChatId) are
-    // intentionally excluded from the saved snapshot.
+    // activeChatId is a non-persistent runtime field, intentionally excluded
+    // from the saved snapshot (debugChatId IS persisted — see PERSISTENT_KEYS).
     // ============================
     const savedSettings = loadJson(PATHS.settings, {});
     const state = Object.assign({}, DEFAULTS, savedSettings);
@@ -171,8 +171,8 @@ export function createProfileStore(profileDir) {
 
     // Resets every persistent setting back to its DEFAULTS value (in place,
     // so other modules' references to `state` stay valid) and saves.
-    // Runtime-only fields (activeChatId, debugChatId, fixedMode) are also
-    // reset here since "reset all" should fully restore a fresh-install state.
+    // Runtime-only fields (activeChatId, fixedMode) are also reset here
+    // since "reset all" should fully restore a fresh-install state.
     function resetStateToDefaults() {
         for (const key of Object.keys(DEFAULTS)) {
             state[key] = DEFAULTS[key];

@@ -30,13 +30,11 @@ const { NewMessage } = events;
 // login (no saved session yet).
 // `onPasswordRequired(hint)` — called if the account has Telegram's cloud
 // password (2FA) enabled; must resolve with the password.
-// `onStatus(key, extra)` — mirrors bot.js's status events ('starting' |
-// 'qr' | 'ready' | 'auth_failure' | 'disconnected').
 // `getOllamaClient` — same as bot.js's createBot() (see its own doc): app/
 // main.js passes in a closure over readOllamaStatus() so a local/API mode
 // switch takes effect immediately, stashed onto `utils` for createAi/
 // createCommands to use as-is.
-export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessionString, onQr, onPasswordRequired, onStatus, onIncomingMessage, abortSignal, getOllamaClient }) {
+export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessionString, onQr, onPasswordRequired, onIncomingMessage, abortSignal, getOllamaClient }) {
     const store = createProfileStore(profileDir);
     const { state, whitelist, blacklist, admins, noPrefixChats, groupChats, chatPrefixes } = store;
 
@@ -303,7 +301,11 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
                 } catch (_) {}
             }
 
-            if (lower.startsWith(state.debugPrefix)) {
+            // Prefixes are stored/edited verbatim (any case) but compared here
+            // against an already-lower-cased `lower`, so the comparison side
+            // must be lower-cased too — otherwise a prefix with any uppercase
+            // letter could never match again.
+            if (lower.startsWith(state.debugPrefix.toLowerCase())) {
                 if (admins.has(senderId)) {
                     const command = lower.slice(state.debugPrefix.length).split(' ')[0];
                     if (commands[command]) await dispatchCommand(command, msg, chatId, `command:${command}`);
@@ -316,10 +318,10 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             const chatIds = await idVariants(chatId);
             const isNoPrefixChat = state.noPrefixAll || chatIds.some(id => noPrefixChats.has(id));
             const chatPrefix = chatIds.map(id => chatPrefixes[id]).find(p => p) || state.prefix;
-            const hasPrefix = lower.startsWith(chatPrefix);
+            const hasPrefix = lower.startsWith(chatPrefix.toLowerCase());
 
             if (!isNoPrefixChat && !hasPrefix) return;
-            if (isNoPrefixChat && state.ignorePrefix && lower.startsWith(state.ignorePrefix)) return;
+            if (isNoPrefixChat && state.ignorePrefix && lower.startsWith(state.ignorePrefix.toLowerCase())) return;
 
             if (state.fixedMode) {
                 if (chatIds.includes(state.activeChatId)) {
@@ -356,7 +358,7 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             const lower = text.toLowerCase();
             const msg = buildMsgShim(message, chatId);
 
-            if (lower.startsWith(state.debugPrefix)) {
+            if (lower.startsWith(state.debugPrefix.toLowerCase())) {
                 const command = lower.slice(state.debugPrefix.length).split(' ')[0];
                 if (commands[command]) await dispatchCommand(command, msg, chatId, `command_create:${command}`);
                 return;
@@ -367,9 +369,9 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             const chatIds = await idVariants(chatId);
             const isNoPrefixChat = state.noPrefixAll || chatIds.some(id => noPrefixChats.has(id));
             const chatPrefix = chatIds.map(id => chatPrefixes[id]).find(p => p) || state.prefix;
-            const hasPrefix = lower.startsWith(chatPrefix);
+            const hasPrefix = lower.startsWith(chatPrefix.toLowerCase());
 
-            if (isNoPrefixChat && state.ignorePrefix && lower.startsWith(state.ignorePrefix)) return;
+            if (isNoPrefixChat && state.ignorePrefix && lower.startsWith(state.ignorePrefix.toLowerCase())) return;
             if (isNoPrefixChat || hasPrefix) {
                 await handleAiMessage(msg, chatId, chatId, text, isNoPrefixChat, chatPrefix);
             }
@@ -383,12 +385,10 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
     // fully connected and ready; `sessionString` for future runs is
     // returned so the caller (main.js) can persist it and skip QR next time.
     async function connectAndLogin() {
-        onStatus?.('starting');
         await client.connect();
 
         const alreadyAuthorized = await client.checkAuthorization().catch(() => false);
         if (!alreadyAuthorized) {
-            onStatus?.('qr');
             await client.signInUserWithQrCode(
                 { apiId, apiHash },
                 {
@@ -406,7 +406,6 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
         client.addEventHandler(handleIncoming, new NewMessage({ incoming: true }));
         client.addEventHandler(handleOutgoing, new NewMessage({ outgoing: true }));
 
-        onStatus?.('ready');
         return client.session.save();
     }
 

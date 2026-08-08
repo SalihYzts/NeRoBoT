@@ -435,7 +435,7 @@ async function Prefix(msg, targetId) {
                 `${state.debugPrefix}prefix chat reset [ID]   — remove override, fall back to global`
             );
         }
-        if (p === state.debugPrefix || p === state.ignorePrefix) {
+        if (p.toLowerCase() === state.debugPrefix.toLowerCase() || p.toLowerCase() === state.ignorePrefix.toLowerCase()) {
             return sendText(targetId, `Chat prefix must differ from the debug and ignore prefixes.`);
         }
 
@@ -448,7 +448,7 @@ async function Prefix(msg, targetId) {
     if (sub === 'main') {
         const p = parts[2];
         if (!p) return sendText(targetId, `Usage: ${state.debugPrefix}prefix main <p>`);
-        if (p === state.debugPrefix || p === state.ignorePrefix) return sendText(targetId, `Main prefix must differ from debug and ignore prefixes.`);
+        if (p.toLowerCase() === state.debugPrefix.toLowerCase() || p.toLowerCase() === state.ignorePrefix.toLowerCase()) return sendText(targetId, `Main prefix must differ from debug and ignore prefixes.`);
         state.prefix = p;
         saveSettings();
         return sendText(targetId, `Main prefix → ${state.prefix}`);
@@ -457,7 +457,7 @@ async function Prefix(msg, targetId) {
     if (sub === 'debug') {
         const p = parts[2];
         if (!p) return sendText(targetId, `Usage: ${state.debugPrefix}prefix debug <p>`);
-        if (p === state.prefix || p === state.ignorePrefix) return sendText(targetId, `Debug prefix must differ from main and ignore prefixes.`);
+        if (p.toLowerCase() === state.prefix.toLowerCase() || p.toLowerCase() === state.ignorePrefix.toLowerCase()) return sendText(targetId, `Debug prefix must differ from main and ignore prefixes.`);
         state.debugPrefix = p;
         saveSettings();
         return sendText(targetId, `Debug prefix → ${state.debugPrefix}`);
@@ -466,7 +466,7 @@ async function Prefix(msg, targetId) {
     if (sub === 'ignore') {
         const p = parts[2];
         if (!p) return sendText(targetId, `Usage: ${state.debugPrefix}prefix ignore <p>`);
-        if (p === state.prefix || p === state.debugPrefix) return sendText(targetId, `Ignore prefix must differ from main and debug prefixes.`);
+        if (p.toLowerCase() === state.prefix.toLowerCase() || p.toLowerCase() === state.debugPrefix.toLowerCase()) return sendText(targetId, `Ignore prefix must differ from main and debug prefixes.`);
         state.ignorePrefix = p;
         saveSettings();
         return sendText(targetId, `Ignore prefix → ${state.ignorePrefix}\n(In no-prefix chats, messages starting with this won't be sent to the AI.)`);

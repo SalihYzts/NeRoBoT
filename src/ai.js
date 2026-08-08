@@ -20,6 +20,13 @@ const RECENT_KEEP = 6;
 const RELEVANT_TOPK = 6;
 const MAX_PLAIN_HISTORY = 30;
 
+// Hard cap on how much of a chat's history is kept in memory at all (well
+// above what selectContext ever actually sends — see above). Without this,
+// chatHistories[userId] — including each message's cached _embedding vector
+// — grows for as long as the process runs, unbounded, for every distinct
+// user/chat ever seen.
+const MAX_STORED_HISTORY = 200;
+
 // Classifies a single message as an image-generation request or not, using
 // the profile's own chat model — no extra service/cost, since it's the same
 // local Ollama call the profile already has. See classifyImageIntent() below.
@@ -312,6 +319,14 @@ export function createAi({ store, utils }) {
             const replyEmbedding = await embed(response.message.content);
             if (replyEmbedding) assistantMessage._embedding = replyEmbedding;
             chatHistories[userId].push(assistantMessage);
+
+            // Trim oldest non-system messages once the stored history grows
+            // past the cap — index 0 is always the system prompt, so drop
+            // starting at index 1.
+            const hist = chatHistories[userId];
+            if (hist.length > MAX_STORED_HISTORY) {
+                hist.splice(1, hist.length - MAX_STORED_HISTORY);
+            }
 
             return response.message.content;
 
