@@ -3633,10 +3633,40 @@ async function notifyIfUpdateAvailable() {
     if (win && !win.isDestroyed()) win.webContents.send('update:available', { version: result.version });
 }
 
+// electron-updater's Linux AppImageUpdater replaces the running app IN
+// PLACE — it unlinks process.env.APPIMAGE and moves the freshly downloaded
+// file over it (see node_modules/electron-updater/out/AppImageUpdater.js).
+// That works for a self-managed AppImage sitting in the user's own home
+// dir, but this project also ships a pacman package (packaging/arch/
+// PKGBUILD) that installs the AppImage to /opt/nerobot/nerobot.AppImage,
+// owned by root — unlink() needs write+execute on the CONTAINING
+// directory, which a regular user never has there. Without this check,
+// clicking "Şimdi Güncelle" downloads the whole update just to fail at
+// the very last step with a raw "EACCES: permission denied, unlink
+// '/opt/nerobot/nerobot.AppImage'" — accurate, but meaningless to a user
+// who has no idea electron-updater tried to overwrite its own binary.
+// Caught up front instead: no wasted download, and a message that
+// actually tells them what to do (their package manager owns this
+// install, not the app).
+function unwritableAppImageReason() {
+    if (process.platform !== 'linux' || !process.env.APPIMAGE) return null;
+    try {
+        fs.accessSync(path.dirname(process.env.APPIMAGE), fs.constants.W_OK);
+        return null;
+    } catch (_) {
+        return 'Bu NeRoBoT kurulumu bir paket yöneticisiyle (ör. pacman) kurulmuş ve bulunduğu konum salt-okunur — uygulama kendi kendini güncelleyemez. Güncellemek için paket yöneticinizi kullanın (ör. "sudo pacman -Syu nerobot") ya da GitHub Releases sayfasından yeni sürümü indirin.';
+    }
+}
+
 // Triggered by the renderer's "Şimdi Güncelle" button. 5-minute cap same as
 // before — if a download genuinely stalls that long, give up and let the
 // user keep using the current version rather than hanging indefinitely.
 ipcMain.handle('update:startDownload', async () => {
+    const blockedReason = unwritableAppImageReason();
+    if (blockedReason) {
+        if (win && !win.isDestroyed()) win.webContents.send('update:downloadError', { error: blockedReason });
+        return { ok: false, error: blockedReason };
+    }
     try {
         await Promise.race([
             downloadAndInstallUpdate(),
