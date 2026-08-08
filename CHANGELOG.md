@@ -1,3 +1,20 @@
+## v4.4.27 - 2026-08-08
+
+### İyileştirmeler
+- Sekme şeridi (WA/Telegram profil sekmeleri, NeRoChAt, Oyunlar) artık tek bir pointer-event delegasyonu üzerinden çalışıyor. Eskiden her sekmeye ayrı ayrı bağlanan tıklama/sürükleme dinleyicileri, Linux/Wayland'de rastgele "bu sekme tıklamaya cevap vermiyor" davranışına ve native sürükle-bırak (drag) ile pencere taşımanın çakışmasına yol açıyordu; bu artık giderildi.
+- Pencerenin sürüklenebilir (drag) bölgesi, dinamik olarak yeniden oluşturulan sekmeler yerine sadece ilk boyamadan itibaren sabit kalan logo/başlık öğeleriyle sınırlandırıldı.
+- Logo ve uygulama ikonları güncellendi.
+
+### Hata Düzeltmeleri
+- AI "metni düzelt/çevir" önerileri artık WhatsApp Web sayfasına `innerHTML` yerine güvenli DOM ile yazılıyor — modelin döndürdüğü metnin sayfa üzerinde HTML/script olarak çalışabilme ihtimali kapatıldı.
+- Bot yeniden bağlanma denemelerinde `botReady` durumu sıfırlanmadığı için ilerleme göstergesinin ve "takıldı" izleyicisinin (watchdog) sessizce devre dışı kalabildiği, gereksiz kurtarma döngülerine yol açabilen bir hata düzeltildi.
+- Debug/ana/sohbet prefix karşılaştırmaları artık büyük/küçük harfe duyarsız — büyük harf içeren bir prefix belirlendiğinde bir daha hiç eşleşmemesi (ve debug prefix için kullanıcıyı kilitleyebilmesi) önlendi.
+- Profil kapatıldığında periyodik `flushStorageData` interval'ının temizlenmemesinden kaynaklanan, her profil aç/kapat döngüsünde biraz daha bellek sızdıran hata giderildi.
+
+### Diğer Değişiklikler
+- Rate-limit bucket'larına boşta kalma süpürmesi, AI sohbet geçmişlerine ise üst sınır eklenerek uzun süre çalışan profillerde sınırsız bellek büyümesi önlendi.
+- Hiçbir yerden çağrılmayan Telegram `onStatus` callback'i ve güncel olmayan bir kod yorumu temizlendi.
+
 ## v4.4.25 - 2026-07-31
 
 - Release v4.4.25 (1215195, SalihYzts)
@@ -124,4 +141,3 @@
 - Sürüm öncesinde test ve deneme çalışmaları gerçekleştirildi.
 - Proje belgeleri (README) son haline getirildi.
 - v4.4.17 ve v4.4.16 ara sürümleri yayınlandı.
-
