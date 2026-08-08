@@ -1,3 +1,8 @@
+## v4.4.28 - 2026-08-08
+
+### Hata Düzeltmeleri
+- Pacman paketiyle `/opt/nerobot` altına (root sahipli, salt-okunur bir konum) kurulan AppImage'de "Şimdi Güncelle"ye tıklandığında electron-updater kendi dosyasını yerinde değiştirmeye çalışıp `EACCES: permission denied, unlink '/opt/nerobot/nerobot.AppImage'` hatasıyla başarısız oluyordu. İndirmeye başlamadan önce hedef dizine yazma izni kontrol ediliyor; izin yoksa boşuna indirme yapılmadan kullanıcıya paket yöneticisiyle (`sudo pacman -Syu nerobot`) ya da GitHub Releases'ten elle güncellemesi gerektiğini söyleyen anlaşılır bir mesaj gösteriliyor.
+
 ## v4.4.27 - 2026-08-08
 
 ### İyileştirmeler
