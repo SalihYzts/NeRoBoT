@@ -59,6 +59,18 @@ export function createUtils(store) {
     // the message handlers and the settings UI.
     // ============================
     const aliasCache = new Map(); // id → counterpart id ('' = confirmed none)
+    // Bounded like sentMessageIds below — a long-running profile that talks
+    // to thousands of distinct contacts over weeks shouldn't grow this
+    // forever. Map preserves insertion order, so oldest-first eviction is a
+    // cheap FIFO once the cap is hit.
+    const MAX_ALIAS_CACHE_SIZE = 2000;
+
+    function cacheAlias(id, alt) {
+        aliasCache.set(id, alt);
+        while (aliasCache.size > MAX_ALIAS_CACHE_SIZE) {
+            aliasCache.delete(aliasCache.keys().next().value);
+        }
+    }
 
     async function resolveAltId(id) {
         if (typeof id !== 'string' || !(id.endsWith('@c.us') || id.endsWith('@lid'))) {
@@ -70,11 +82,11 @@ export function createUtils(store) {
             const [pair] = await client.getContactLidAndPhone([id]);
             const alt = (id.endsWith('@lid') ? pair?.pn : pair?.lid) || null;
             if (alt && alt !== id) {
-                aliasCache.set(id, alt);
-                aliasCache.set(alt, id); // both directions from one round-trip
+                cacheAlias(id, alt);
+                cacheAlias(alt, id); // both directions from one round-trip
                 return alt;
             }
-            aliasCache.set(id, '');
+            cacheAlias(id, '');
             return null;
         } catch (_) {
             // Not cached — the page may simply not be ready yet; retry later.

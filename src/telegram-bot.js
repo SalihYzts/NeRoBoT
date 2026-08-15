@@ -20,6 +20,15 @@ const { PDFParse } = require('pdf-parse');
 const { StringSession } = sessions;
 const { NewMessage } = events;
 
+// Caps how much extracted file text (PDF/Word/plain-text attachments) gets
+// folded into a prompt — see bot.js's identical helper on the WhatsApp side.
+const FILE_TEXT_MAX_CHARS = 30_000;
+function truncateFileText(text) {
+    return text.length > FILE_TEXT_MAX_CHARS
+        ? text.slice(0, FILE_TEXT_MAX_CHARS) + `\n\n[... ${text.length - FILE_TEXT_MAX_CHARS} characters truncated]`
+        : text;
+}
+
 // Creates one Telegram profile's whole stack — own store, utils, rate
 // limiter, AI memory and debug commands, and the teleproto TelegramClient
 // wired to all of them. Mirrors bot.js's createBot() shape/return value as
@@ -42,7 +51,7 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
     utils.getOllamaClient = getOllamaClient;
     const { setClient, sendText, replyText, sendImage, isBotSentMessage, trackSentMessage, idVariants, setHasAny } = utils;
 
-    const ratelimit = createRateLimiter(store);
+    const ratelimit = createRateLimiter(store, idVariants);
     const { checkRateLimit } = ratelimit;
 
     const { askModel, classifyImageIntent, describeImageForGeneration, describeGeneratedImage } = createAi({ store, utils });
@@ -90,7 +99,7 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
         const memoryKey = (await setHasAny(groupChats, chatId)) ? String(chatId) : String(userId);
 
         try {
-            const { allowed, shouldWarn } = checkRateLimit(String(userId));
+            const { allowed, shouldWarn } = await checkRateLimit(String(userId));
             if (!allowed) {
                 if (shouldWarn) await sendText(chatId, state.rateLimitWarnMessage);
                 return;
@@ -102,9 +111,20 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             let fileContext = '';
 
             if (msg.hasMedia) {
+                // Only the actual download is attributed to 'downloadMedia' below —
+                // see bot.js's identical comment on the WhatsApp side.
+                let media;
                 try {
-                    const media = await msg.downloadMedia();
+                    media = await msg.downloadMedia();
                     if (!media) throw new Error('Failed to download media.');
+                } catch (err) {
+                    await reportError('downloadMedia', err);
+                    await sendText(chatId, state.aiErrorMessage);
+                    if (!rawPrompt) return;
+                    media = null;
+                }
+
+                if (media) {
                     const { mimetype, buffer, filename } = media;
                     const lowerName = (filename || '').toLowerCase();
 
@@ -128,7 +148,7 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
                                 const parser = new PDFParse({ data: buffer });
                                 try {
                                     const result = await parser.getText();
-                                    fileContext = `[PDF content]\n${result.text.trim()}`;
+                                    fileContext = truncateFileText(`[PDF content]\n${result.text.trim()}`);
                                 } finally {
                                     await parser.destroy();
                                 }
@@ -145,7 +165,7 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
                         } else {
                             try {
                                 const result = await mammoth.extractRawText({ buffer });
-                                fileContext = `[Word document content]\n${result.value.trim()}`;
+                                fileContext = truncateFileText(`[Word document content]\n${result.value.trim()}`);
                             } catch (e) {
                                 await sendText(chatId, '⚠️ Could not read the Word document.');
                                 if (!rawPrompt) return;
@@ -160,20 +180,12 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
                             if (!rawPrompt) return;
                         } else {
                             const text = buffer.toString('utf8');
-                            const MAX_CHARS = 30_000;
-                            const trimmed = text.length > MAX_CHARS
-                                ? text.slice(0, MAX_CHARS) + `\n\n[... ${text.length - MAX_CHARS} characters truncated]`
-                                : text;
-                            fileContext = `[File content (${mimetype})]\n${trimmed}`;
+                            fileContext = truncateFileText(`[File content (${mimetype})]\n${text}`);
                         }
                     } else {
                         await sendText(chatId, `⚠️ This file type is not supported (${mimetype || 'unknown'}).`);
                         if (!rawPrompt) return;
                     }
-                } catch (err) {
-                    await reportError('downloadMedia', err);
-                    await sendText(chatId, state.aiErrorMessage);
-                    if (!rawPrompt) return;
                 }
             }
 
@@ -226,10 +238,16 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
     // Builds the same normalized `msg` shape utils.js's WhatsApp Message
     // gave handleAiMessage/replyText — lets both platforms' bots share that
     // logic's call sites almost verbatim.
-    function buildMsgShim(tgMessage, chatId) {
+    function buildMsgShim(tgMessage, chatId, senderId) {
         return {
             body: tgMessage.text || '',
             chatId: String(chatId),
+            // Mirrors whatsapp-web.js's Message.author/.from that commands.js's
+            // Admin()/Blacklist() read as `msg.author || msg.from` to find "the
+            // person who sent this" when no explicit ID argument was given.
+            // Without this, those commands silently added/removed the literal
+            // string "undefined" on Telegram.
+            author: senderId != null ? String(senderId) : undefined,
             id: tgMessage.id,
             hasMedia: !!(tgMessage.photo || tgMessage.document),
             isPhoto: !!tgMessage.photo,
@@ -256,12 +274,20 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
     // profile-pic URL to just hand the renderer (unlike WhatsApp's CDN), so
     // this stores a data: URI instead — fine at avatar size.
     const avatarCache = new Map();
+    // Capped FIFO — see bot.js's identical comment on the WhatsApp side.
+    const MAX_AVATAR_CACHE_SIZE = 1000;
+    function cacheAvatar(chatId, value) {
+        avatarCache.set(chatId, value);
+        while (avatarCache.size > MAX_AVATAR_CACHE_SIZE) {
+            avatarCache.delete(avatarCache.keys().next().value);
+        }
+    }
     function scheduleAvatarFetch(chatId) {
         if (avatarCache.has(chatId)) return;
-        avatarCache.set(chatId, null);
+        cacheAvatar(chatId, null);
         client.downloadProfilePhoto(chatId, {})
             .then(buf => {
-                if (buf && Buffer.isBuffer(buf)) avatarCache.set(chatId, `data:image/jpeg;base64,${buf.toString('base64')}`);
+                if (buf && Buffer.isBuffer(buf)) cacheAvatar(chatId, `data:image/jpeg;base64,${buf.toString('base64')}`);
             })
             .catch(() => {});
     }
@@ -279,7 +305,7 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
 
             const text = (message.text || '').trim();
             const lower = text.toLowerCase();
-            const msg = buildMsgShim(message, chatId);
+            const msg = buildMsgShim(message, chatId, senderId);
 
             // The app's notification panel (app/main.js's pushNotification)
             // — same "notify regardless of whether AI/commands act on it" as
@@ -356,7 +382,8 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             if (!chatId) return;
             const text = (message.text || '').trim();
             const lower = text.toLowerCase();
-            const msg = buildMsgShim(message, chatId);
+            // Self-typed (fromMe) message — the account owner is both sender and chat.
+            const msg = buildMsgShim(message, chatId, chatId);
 
             if (lower.startsWith(state.debugPrefix.toLowerCase())) {
                 const command = lower.slice(state.debugPrefix.length).split(' ')[0];

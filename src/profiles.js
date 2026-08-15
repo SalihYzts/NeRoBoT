@@ -34,12 +34,60 @@ function profileDir(dbDir, id) {
     return path.join(dbDir, PROFILES_SUBDIR, id);
 }
 
+// Distinguishes "no registry file yet" (status 'missing' — a fresh or
+// pre-migration install, safe to run migrateLegacyProfile) from "registry
+// file exists but is corrupt" (status 'corrupt' — must NOT be treated the
+// same way, see loadProfiles below: migrateLegacyProfile would see no
+// legacy flat files left (they were already moved into profiles/<id>/ long
+// ago) and happily write out an EMPTY registry, silently orphaning every
+// existing profile directory with no way back).
 function readRegistry(dbDir) {
+    const filePath = registryPath(dbDir);
+    if (!fs.existsSync(filePath)) return { status: 'missing' };
     try {
-        return JSON.parse(fs.readFileSync(registryPath(dbDir), 'utf8'));
-    } catch {
-        return null;
+        return { status: 'ok', profiles: JSON.parse(fs.readFileSync(filePath, 'utf8')) };
+    } catch (err) {
+        return { status: 'corrupt', error: err };
     }
+}
+
+// Best-effort recovery for a corrupt profiles.json: back up the broken file
+// (never delete it outright — it might be salvageable by hand) and rebuild
+// a minimal registry by scanning profiles/<id>/ directories that are still
+// on disk. Loses each profile's display name (not stored anywhere else),
+// but keeps every profile's actual data — whitelist/blacklist/settings/
+// chat history/login session — reachable again instead of orphaned.
+function recoverRegistryFromDisk(dbDir, err) {
+    const filePath = registryPath(dbDir);
+    const backupPath = `${filePath}.corrupt-${Date.now()}`;
+    try {
+        fs.renameSync(filePath, backupPath);
+    } catch (_) {}
+    console.error(
+        `[profiles] ${filePath} was corrupted (${err?.message || err}) — backed up to ${backupPath} ` +
+        `and rebuilding the registry from profile directories found on disk.`
+    );
+
+    const profilesRoot = path.join(dbDir, PROFILES_SUBDIR);
+    let recovered = [];
+    try {
+        recovered = fs.readdirSync(profilesRoot, { withFileTypes: true })
+            .filter(d => d.isDirectory())
+            .map(d => {
+                const id = d.name;
+                const isTelegram = fs.existsSync(path.join(profilesRoot, id, TELEGRAM_SESSION_FILE));
+                return {
+                    id,
+                    name: id,
+                    createdAt: Date.now(),
+                    platform: isTelegram ? 'telegram' : 'whatsapp',
+                    sessionPartition: isTelegram ? `persist:nerobot-tg-${id}` : `persist:nerobot-wa-${id}`,
+                };
+            });
+    } catch (_) {}
+
+    writeRegistry(dbDir, recovered);
+    return recovered;
 }
 
 function writeRegistry(dbDir, profiles) {
@@ -101,8 +149,10 @@ function migrateLegacyProfile(dbDir) {
 // view existed yet), so it backfills to 'bot' — both preserve exactly what
 // that profile already did before this field existed.
 export function loadProfiles(dbDir) {
-    const existing = readRegistry(dbDir);
-    const profiles = existing || migrateLegacyProfile(dbDir);
+    const result = readRegistry(dbDir);
+    const profiles = result.status === 'ok' ? result.profiles
+        : result.status === 'missing' ? migrateLegacyProfile(dbDir)
+        : recoverRegistryFromDisk(dbDir, result.error);
     for (const p of profiles) {
         if (!p.platform) p.platform = 'whatsapp';
         if (!p.connectionMode) p.connectionMode = p.platform === 'telegram' ? 'bot' : 'both';

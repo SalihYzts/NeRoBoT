@@ -30,7 +30,13 @@ export async function isOllamaInstalled() {
     }
 }
 
-function downloadTo(url, destPath, onProgress) {
+// Caps how many redirect hops downloadTo will follow — without this, a
+// misbehaving or malicious server returning a redirect loop would recurse
+// forever (each hop re-enters the Promise executor, so it never resolves,
+// rejects, or times out on its own).
+const MAX_REDIRECTS = 5;
+
+function downloadTo(url, destPath, onProgress, redirectsLeft = MAX_REDIRECTS) {
     return new Promise((resolve, reject) => {
         const file = fs.createWriteStream(destPath);
         // No network activity (not even a connection) for 30s → treat as
@@ -48,7 +54,11 @@ function downloadTo(url, destPath, onProgress) {
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                 file.close();
                 fs.unlink(destPath, () => {});
-                downloadTo(res.headers.location, destPath, onProgress).then(resolve, reject);
+                if (redirectsLeft <= 0) {
+                    reject(new Error('İndirme başarısız: çok fazla yönlendirme (redirect loop).'));
+                    return;
+                }
+                downloadTo(res.headers.location, destPath, onProgress, redirectsLeft - 1).then(resolve, reject);
                 return;
             }
             if (res.statusCode !== 200) {

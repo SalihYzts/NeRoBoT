@@ -1,9 +1,17 @@
 @echo off
-rem Sadece kaynak dosyalarini indirmis (repo'yu klonlamis ya da zip'ini acmis)
-rem biri icin ilk adim: Node.js'i kontrol eder, npm bagimliliklarini kurar ve
-rem uygulama ikonlarini olusturur. Bundan sonra NeRoBoT_App.bat ile uygulamayi
-rem acabilir, NeRoBoT_Derle.bat ile bir kurulum paketi (.exe) derleyebilir,
-rem ya da NeRoBoT_Yayinla.bat ile derlenmis bir surumu GitHub'a yayinlayabilirsin.
+rem TEK giris noktasi: kurulum + yerel derleme + GitHub'a yayin, hepsi
+rem scripts\release.js icinde (bkz. onun kendi basindaki yorum). Node.js
+rem kontrolu burada yapiliyor cunku o script'i calistirmak icin bile once
+rem Node gerekiyor.
+rem
+rem Sadece kaynak dosyalarini indirmis biri icin bu, dogru ilk adim: script
+rem once npm bagimliliklarini kurup ikonlari olusturur, sonra "devam edip
+rem yeni bir surum mu yayinlayacaksin?" diye sorar - hayir cevabi burada
+rem temiz bir sekilde biter, boylece sadece gelistirmeye baslamak isteyen
+rem biri (NeRoBoT_App.bat ile acacak) hicbir commit/push adimina bulasmaz.
+rem "Evet" cevabi verirsen surum numarasi, yerel derleme, commit/push/tag,
+rem changelog, GitHub Release ve Arch PKGBUILD guncellemesi de ayni
+rem calistirmada devam eder.
 setlocal
 cd /d "%~dp0"
 
@@ -15,27 +23,5 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo NPM bagimliliklari kuruluyor, bu biraz surebilir...
-call npm install
-if errorlevel 1 (
-    echo [HATA] "npm install" basarisiz oldu - yukaridaki hataya bak.
-    pause
-    exit /b 1
-)
-
-echo.
-echo Uygulama ikonlari olusturuluyor...
-call npm run gen-icons
-if errorlevel 1 (
-    echo [UYARI] Ikon olusturma basarisiz oldu - uygulama yine de calisir,
-    echo sadece pencere/kurulum ikonu varsayilan kalabilir.
-)
-
-echo.
-echo ================================================
-echo Hazir! Simdi ne yapabilirsin:
-echo   - Uygulamayi acmak icin: NeRoBoT_App.bat
-echo   - Yeni bir surum derlemek icin: NeRoBoT_Derle.bat
-echo   - Derlenmis bir surumu GitHub'a yayinlamak icin: NeRoBoT_Yayinla.bat
-echo ================================================
+node "%~dp0scripts\release.js"
 pause

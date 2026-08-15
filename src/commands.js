@@ -41,14 +41,19 @@ export function createCommands({ store, utils, ratelimit }) {
 // Project version — read from package.json (project root, one level up
 // from this file's src/ folder). Falls back gracefully if
 // the file is missing or malformed, so this never crashes Info/Help.
+// Cached after the first read: package.json doesn't change over the life of
+// a running process, and getVersion() is called on every !info/!help.
 // ============================
+let cachedVersion = null;
 function getVersion() {
+    if (cachedVersion !== null) return cachedVersion;
     try {
         const pkg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
-        return pkg.version || 'unknown';
+        cachedVersion = pkg.version || 'unknown';
     } catch (_) {
-        return 'unknown';
+        cachedVersion = 'unknown';
     }
+    return cachedVersion;
 }
 
 // ============================
@@ -497,7 +502,7 @@ async function Clear(msg, targetId) {
             return sendText(targetId, id === targetId ? `No memory for this chat.` : `No memory for: ${id}`);
         }
         delete chatHistories[id];
-        resetRateLimitBucket(id);
+        await resetRateLimitBucket(id);
         return sendText(targetId, id === targetId ? `Memory cleared for this chat.` : `Memory cleared for: ${id}`);
     }
 
@@ -545,6 +550,13 @@ async function Upload(msg, targetId) {
     }
 
     const limit = Math.min(300, Math.floor(n));
+
+    // Reads WhatsApp Web's in-page chat model directly (see the comment
+    // above) — there's no Telegram equivalent, so this command simply isn't
+    // available on that platform yet.
+    if (!msg.client?.pupPage) {
+        return sendText(targetId, `${state.debugPrefix}upload isn't available on this platform yet.`);
+    }
 
     let messages;
     try {
@@ -1022,7 +1034,10 @@ async function Info(msg, targetId) {
     // model, whose last-message serialization crashes on current WhatsApp
     // Web builds (DataError from Msg.getMessagesById).
     const chatId  = targetId;
-    const isGroup = targetId.endsWith('@g.us');
+    // WhatsApp groups end in "@g.us"; Telegram groups/supergroups use a
+    // negative numeric chat ID (DMs/users are always positive) — check both
+    // so this reads correctly on either platform.
+    const isGroup = targetId.endsWith('@g.us') || /^-\d+$/.test(targetId);
 
     if (!sub) {
         return sendText(targetId,
@@ -1142,6 +1157,19 @@ async function AiError(msg, targetId) {
 //   (no args)  → full help menu (TR or EN, based on helpLanguage)
 //   github     → sends the project's GitHub link
 // ============================
+let cachedHelpSections = null; // { tr, en } — help.txt doesn't change at runtime
+function getHelpSections() {
+    if (cachedHelpSections) return cachedHelpSections;
+    const helpText  = fs.readFileSync(path.join(PROJECT_ROOT, 'help.txt'), 'utf8');
+    const trMatch   = helpText.match(/===TR===\s*([\s\S]*?)(?====EN===|$)/);
+    const enMatch   = helpText.match(/===EN===\s*([\s\S]*?)$/);
+    cachedHelpSections = {
+        tr: trMatch ? trMatch[1].trim() : 'TR bölümü bulunamadı.',
+        en: enMatch ? enMatch[1].trim() : 'EN section not found.',
+    };
+    return cachedHelpSections;
+}
+
 async function Help(msg, targetId) {
     const sub = msg.body.trim().split(/\s+/)[1]?.toLowerCase();
 
@@ -1149,12 +1177,8 @@ async function Help(msg, targetId) {
         return sendText(targetId, `NeRoBoT v${getVersion()} — GitHub:\nhttps://github.com/SalihYzts/NeRoBoT`);
     }
 
-    const helpText  = fs.readFileSync(path.join(PROJECT_ROOT, 'help.txt'), 'utf8');
-    const trMatch   = helpText.match(/===TR===\s*([\s\S]*?)(?====EN===|$)/);
-    const enMatch   = helpText.match(/===EN===\s*([\s\S]*?)$/);
-    const trSection = trMatch ? trMatch[1].trim() : 'TR bölümü bulunamadı.';
-    const enSection = enMatch ? enMatch[1].trim() : 'EN section not found.';
-    await sendText(targetId, state.helpLanguage === 'en' ? enSection : trSection);
+    const { tr, en } = getHelpSections();
+    await sendText(targetId, state.helpLanguage === 'en' ? en : tr);
 }
 
 // ============================

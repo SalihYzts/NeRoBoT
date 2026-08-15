@@ -91,29 +91,37 @@
         gap: 12px;
         padding: 0 16px;
         overflow: hidden; /* never let a crowded tab strip spill into a second row */
-        /* No -webkit-app-region here anymore — see #brandLogo/#brand/#spacer.
-           This used to be `drag`, with #tabStrip carving out a `no-drag`
-           hole for the tabs. That carve-out is exactly what broke: Chromium
-           tracks draggable regions per-element, and elements created by JS
-           AFTER first paint (every tab — renderTabs() rebuilds them from
-           scratch on every profile/notification update) never reliably got
-           registered as their own no-drag region despite the CSS saying so,
-           so real OS-level clicks on them got swallowed as window-drag
-           attempts instead of reaching the page — only a tab's own <img>
-           logo (native image-drag takes a different path) ever got through.
-           Moving `drag` onto only the handful of elements that are static
-           from first paint and simply never need a dynamic carve-out removes
-           the whole failure class instead of chasing it. */
+        /* No -webkit-app-region ANYWHERE in this bar, deliberately — not
+           even on the static logo/brand/#spacer corner that used to carry
+           it. Tried native drag on #topbar itself (twice) and confirmed by
+           testing that clicking inside #tabStrip (switching tabs, closing
+           them) still breaks intermittently even with every clickable
+           element declaring its own explicit no-drag: Chromium's
+           drag-region hit-test map is keyed off actual on-screen
+           rectangles, and #spacer sits flex-adjacent to #tabStrip, which
+           gets torn down and rebuilt from scratch (renderTabs():
+           container.innerHTML = '' + recreate) on every profile/
+           notification push — every such rebuild can shift the tabStrip/
+           spacer boundary, and there's a real window where the OS-level
+           region map still reflects the PREVIOUS boundary, so a click that
+           now lands on a freshly-appeared tab gets misread as landing in
+           the (stale) drag area next to it and swallowed as a window-move
+           instead of reaching the tab. That race exists independent of
+           which elements are marked drag vs no-drag, as long as ANY drag
+           region sits adjacent to the tab strip's ever-changing bounds.
+           Window movement is instead handled entirely in JS — see the
+           pointerdown/pointermove drag-to-move handlers further down,
+           which drive BrowserWindow.setPosition() over IPC instead of
+           asking the compositor to do it — so no native drag region has to
+           exist near #tabStrip at all. */
     }
     #brandLogo {
-        -webkit-app-region: drag;
         width: auto;
         height: 22px;
         flex: 0 0 auto;
         margin-right: -4px; /* logo and brand text read as one unit */
     }
     #brand {
-        -webkit-app-region: drag;
         flex: 0 0 auto;
         font-weight: 700;
         letter-spacing: 1px;
@@ -121,7 +129,7 @@
         font-size: 14px;
     }
 
-    #spacer { -webkit-app-region: drag; flex: 1; }
+    #spacer { flex: 1; }
 
     /* ===== Bottom status bar — active profile's connection status, kept
        out of the (already crowded) tab strip row ===== */
@@ -3786,10 +3794,47 @@
     document.getElementById('winCloseBtn').addEventListener('click', () => window.nerobot.closeWindow());
     window.nerobot.onWindowMaximizedChanged(setMaximizeIcon);
     window.nerobot.isWindowMaximized().then(setMaximizeIcon);
-    document.getElementById('topbar').addEventListener('dblclick', (e) => {
-        if (e.target.closest('button')) return;
+
+    // Shared by the dblclick-to-maximize handler right below and the
+    // drag-to-move handlers further down — anything inside #tabStrip
+    // (tabs, their close buttons, the home button) or any other button in
+    // the bar is a click target, not a window-drag/maximize-toggle target.
+    const topbarEl = document.getElementById('topbar');
+    function isTopbarDragTarget(el) {
+        return !!topbarEl.contains(el) && !el.closest('#tabStrip, button');
+    }
+
+    topbarEl.addEventListener('dblclick', (e) => {
+        if (!isTopbarDragTarget(e.target)) return;
         window.nerobot.maximizeToggleWindow().then(setMaximizeIcon);
     });
+
+    // Drag-to-move — see main.js's window:dragStart/dragMove/dragEnd IPC
+    // handlers for why this exists instead of the usual -webkit-app-region:
+    // drag CSS. In short: any native drag region placed anywhere near
+    // #tabStrip (even just adjacent to it, like the old #spacer) has proven
+    // to intermittently swallow real clicks inside the tab strip on this
+    // Chromium/Wayland/KWin combination, because #tabStrip's contents are
+    // rebuilt from scratch on every profile/notification push and
+    // Chromium's OS-level draggable-region map doesn't always keep up with
+    // the resulting boundary shifts. Doing this in JS instead means no
+    // native drag region ever has to exist near the tab strip at all.
+    let winDragging = false;
+    topbarEl.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || winDragging || !isTopbarDragTarget(e.target)) return;
+        winDragging = true;
+        window.nerobot.startWindowDrag();
+    });
+    document.addEventListener('pointermove', () => {
+        if (winDragging) window.nerobot.dragWindowMove();
+    });
+    function endWinDrag() {
+        if (!winDragging) return;
+        winDragging = false;
+        window.nerobot.endWindowDrag();
+    }
+    document.addEventListener('pointerup', endWinDrag);
+    document.addEventListener('pointercancel', endWinDrag);
 
     // ============================
     // Notification panel — every open profile's incoming messages (WhatsApp
@@ -5836,7 +5881,17 @@
 
     const tabStripEl = document.getElementById('tabStrip');
     tabStripEl.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0 || e.target.closest('.tabClose')) return;
+        if (e.button !== 0) return;
+        // Close (✕) buttons get the same DOM-node-may-not-survive-to-pointerup
+        // treatment as the rest of the tab below — they're rebuilt by
+        // renderTabs() same as everything else, so a plain 'click' listener
+        // on the button itself was exactly as unreliable as the old per-tab
+        // click listeners this delegation replaced.
+        if (e.target.closest('.tabClose')) {
+            const info = tabPressInfoFromEl(e.target);
+            if (info) tabPress = { kind: 'close', closeKind: info.kind, id: info.id, downX: e.clientX, downY: e.clientY };
+            return;
+        }
         const info = tabPressInfoFromEl(e.target);
         if (!info) return;
         tabPress = { kind: info.kind, id: info.id, downX: e.clientX, downY: e.clientY, dragging: false };
@@ -5865,6 +5920,19 @@
         if (!tabPress) return;
         const press = tabPress;
         tabPress = null;
+        if (press.kind === 'close') {
+            // Re-resolve fresh at the pointer's actual release position,
+            // same as tab activation below — not the node captured at
+            // pointerdown, which renderTabs() may have already replaced.
+            const overEl = document.elementFromPoint(e.clientX, e.clientY);
+            const info = overEl?.closest('.tabClose') ? tabPressInfoFromEl(overEl) : null;
+            if (!info || info.kind !== press.closeKind) return;
+            if (info.kind === 'profile' && info.id !== press.id) return;
+            if (info.kind === 'ollama') closeOllamaTab();
+            else if (info.kind === 'games') closeGamesTab();
+            else closeTab(info.id);
+            return;
+        }
         if (press.dragging) {
             document.querySelector(`.profileTab[data-id="${CSS.escape(press.id)}"]`)?.classList.remove('dragging');
             const target = document.querySelector('.profileTab.dragOverBefore, .profileTab.dragOverAfter');
@@ -5916,7 +5984,6 @@
             const closeEl = document.createElement('button');
             closeEl.className = 'tabClose';
             closeEl.textContent = '✕';
-            closeEl.addEventListener('click', (e) => { e.stopPropagation(); closeOllamaTab(); });
 
             tab.appendChild(iconEl);
             tab.appendChild(nameEl);
@@ -5943,7 +6010,6 @@
             const closeEl = document.createElement('button');
             closeEl.className = 'tabClose';
             closeEl.textContent = '✕';
-            closeEl.addEventListener('click', (e) => { e.stopPropagation(); closeGamesTab(); });
 
             tab.appendChild(iconEl);
             tab.appendChild(nameEl);
@@ -5966,7 +6032,6 @@
             const closeEl = document.createElement('button');
             closeEl.className = 'tabClose';
             closeEl.textContent = '✕';
-            closeEl.addEventListener('click', (e) => { e.stopPropagation(); closeTab(p.id); });
 
             tab.appendChild(dotEl);
             tab.appendChild(nameEl);

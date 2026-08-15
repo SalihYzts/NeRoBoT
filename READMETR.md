@@ -100,9 +100,7 @@ Geliştirici: **Salih Yazıtaş**
 nerobot/
 ├── package.json
 ├── NeRoBoT_App.bat / .sh           # Masaüstü uygulamasını başlatır (Windows / Linux)
-├── NeRoBoT_Kurulum.bat / .sh       # Kaynak koddan ilk kurulum (npm install + ikonlar)
-├── NeRoBoT_Derle.bat / .sh         # Sürüm numaralı bir installer'ı yerelde derler (yayınlamaz)
-├── NeRoBoT_Yayinla.bat / .sh       # Kaynağı gönderir + bir sürüm etiketi push'lar (aşağıya bakın)
+├── NeRoBoT_Kurulum.bat / .sh       # TEK betik: kurulum + opsiyonel yerel derleme + yayın (aşağıya bakın)
 ├── .github/workflows/release.yml   # Etiket push'landığında Windows .exe + Linux .AppImage'i derleyip yayınlayan CI
 ├── packaging/arch/                 # Linux (Arch) için pacman paketi — bkz. Kurulum bölümü
 │   ├── PKGBUILD
@@ -128,8 +126,7 @@ nerobot/
 │   ├── file-extract.js             # AI'ın okuyabilmesi için PDF/Word/metin çıkarımı
 │   └── ollama-installer.js         # Windows'ta Ollama'yı algılar/sessizce kurar
 ├── scripts/                        # Sadece geliştirme sırasında kullanılan araçlar, pakete dahil edilmez
-│   ├── build.js                    # NeRoBoT_Derle.bat / npm run build'in arkasındaki betik
-│   ├── release.js                  # NeRoBoT_Yayinla.bat / npm run release'in arkasındaki betik
+│   ├── release.js                  # NeRoBoT_Kurulum.bat / npm run release'in arkasındaki betik — kurulum + derleme + yayın, hepsi bir arada
 │   └── gen-icons.js                # logo.svg'den app/ui/icon.ico + icon.png'yi yeniden üretir
 └── build/installer.nsh             # Özel NSIS kurulum-zamanı kancası (en iyi çaba Ollama kurulumu)
 ```
@@ -218,17 +215,23 @@ Bunu her profil için sadece bir kez yapmanız gerekir — oturum kaydedilir ve 
 
 ## Derleme ve Yayınlama
 
-İki ayrı adım — böylece yayınlamaya karar vermeden önce bir sürümü derleyip test edebilirsiniz:
+Tek betik, tek komut — ayrı ayrı adımlar hatırlamaya gerek yok:
 
 ```bash
-npm run build     # ya da NeRoBoT_Derle.bat / NeRoBoT_Derle.sh
+npm run release   # ya da NeRoBoT_Kurulum.bat / NeRoBoT_Kurulum.sh
 ```
-Bir sürüm numarası sorar, `package.json`'a yazar ve **çalıştığınız platform için** (Windows'ta `.exe`, Linux'ta `.AppImage`) `dist/` altına yerelde derler — bilgisayarınızdan hiçbir şey çıkmaz. Sadece hızlı bir yerel test/sağlık kontrolü içindir.
 
-```bash
-npm run release   # ya da NeRoBoT_Yayinla.bat / NeRoBoT_Yayinla.sh
-```
-`npm run build`'ın az önce belirlediği sürümü kullanır. Bekleyen kaynak kod değişikliklerini gösterip GitHub'a göndermeden önce onay ister, kaynağı commit'leyip bir `vX.Y.Z` etiketi push'lar. Kurulum paketlerinin kendisini bu betik DEĞİL, o etiket push'ını tetikleyen [.github/workflows/release.yml](.github/workflows/release.yml) (GitHub Actions) derler: bir Windows runner'da `.exe`'yi, bir Linux runner'da `.AppImage`'i, ikisini de **aynı** GitHub Release'e yükler (autoUpdater'ın ihtiyaç duyduğu `latest.yml`/`latest-linux.yml` dahil). Bunun sebebi, Windows `.exe`'sini Linux'tan yerelde çapraz derlemenin electron-builder'ın kendi NSIS araç zincirindeki bilinen bir hataya takılması. Betik isterseniz o release'in notlarını yukarıda üretilen changelog'la doldurur — bunun için `repo` yetkisine sahip bir GitHub [Personal Access Token](https://github.com/settings/tokens/new) ister (opsiyonel; girilmezse CI yine de derleyip yayınlar, release notlarını sonradan elle düzenleyebilirsiniz) — sonrasında yerelde saklanır (`.release-token`, gitignore'da, asla commit'lenmez).
+1. Gerekirse npm bağımlılıklarını kurar/günceller ve uygulama ikonlarını yeniden üretir.
+2. Burada durmak mı istediğinizi (sadece geliştirmeye başlamak — bundan sonra tek ihtiyacınız `npm start`) yoksa devam edip yeni bir sürüm derleyip yayınlamak mı istediğinizi sorar.
+3. Devam ederseniz: bir sürüm numarası sorar (varsayılan olarak bir sonraki patch sürümünü önerir) ve `package.json`'a yazar.
+4. İsterseniz (sorar) **çalıştığınız platform için** (Windows'ta `.exe`, Linux'ta `.AppImage`) `dist/` altına yerelde bir kurulum paketi derler — sadece hızlı bir yerel sağlık kontrolü, bu adımda bilgisayarınızdan hiçbir şey çıkmaz.
+5. Bekleyen kaynak kod değişikliklerini gösterip GitHub'a göndermeden önce onay ister — commit'leyip push eder, bir `vX.Y.Z` etiketi push'lar.
+6. Bir önceki etiketten bu yana olan commit'lerden bir changelog üretir (varsa Claude API, yoksa yerel bir Ollama modeli, o da yoksa düz bir commit listesi) ve `CHANGELOG.md`'nin başına ekler.
+7. **Resmî** kurulum paketlerini bu betik DEĞİL, etiket push'ını tetikleyen [.github/workflows/release.yml](.github/workflows/release.yml) (GitHub Actions) derler: bir Windows runner'da `.exe`'yi, bir Linux runner'da `.AppImage`'i, ikisini de **aynı** GitHub Release'e yükler (autoUpdater'ın ihtiyaç duyduğu `latest.yml`/`latest-linux.yml` dahil) — bunun sebebi, Windows `.exe`'sini Linux'tan yerelde çapraz derlemenin electron-builder'ın kendi NSIS araç zincirindeki bilinen bir hataya takılması. Betik isterseniz o release'in notlarını yukarıdaki changelog'la doldurur — bunun için `repo` yetkisine sahip bir GitHub [Personal Access Token](https://github.com/settings/tokens/new) ister (opsiyonel; girilmezse CI yine de derleyip yayınlar, release notlarını sonradan elle düzenleyebilirsiniz) — sonrasında yerelde saklanır (`.release-token`, gitignore'da, asla commit'lenmez).
+8. İsterseniz changelog'a dayanarak bir LinkedIn duyuru metni hazırlar (aynı Claude/Ollama düşüşüyle), Windows'ta panodan ekran görüntüleriyle birlikte bir `.docx` dosyasına da paketleyebilir.
+9. CI'nın Linux `.AppImage`'ini yeni release'e yüklemesini bekler, sonra `packaging/arch/PKGBUILD`'in `pkgver`'ini ve sha256'sını buna göre günceller, isterseniz commit'leyip push eder — Arch paketi artık her sürümde elle `updpkgsums` gerektirmez.
+
+GitHub'a gönderen ya da bilgisayarınızdan başka bir yere çıkan her adım, önce açık bir e/h onayı ister — bu yüzden betiği güvenle tekrar çalıştırıp istediğiniz noktada durabilirsiniz.
 
 ---
 

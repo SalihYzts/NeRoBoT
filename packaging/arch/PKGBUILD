@@ -1,9 +1,12 @@
 # Maintainer: Salih Yazıtaş
 # GitHub Release'deki .AppImage'i indirip gerçek bir pacman paketine
 # (menü girişi + ikon + fuse2 bağımlılığı dahil) çeviren "-bin" tarzı paket.
-# Yeni bir sürüm çıktığında pkgver'i güncelleyip "updpkgsums" çalıştırman
-# yeterli (bkz. NeRoBoT_Yayinla.sh/scripts/release.js — o yeni sürümü
-# GitHub Release olarak yayınlıyor, bu PKGBUILD ondan indiriyor).
+# pkgver ve sha256sums'ı ELLE GÜNCELLEMENE GEREK YOK — scripts/release.js
+# (NeRoBoT_Kurulum.sh/.bat) her yeni sürümde CI'nın AppImage'i GitHub
+# Release'e yüklemesini bekleyip bu dosyayı kendisi güncelliyor (bkz. o
+# betikteki updateArchPkgbuild). Sadece elle bir updpkgsums/pkgver
+# değişikliği gerekiyorsa (ör. o adım zaman aşımına uğradıysa) diye:
+# pkgver'i güncelleyip "updpkgsums" çalıştırman yeterli.
 pkgname=nerobot
 pkgver=4.4.28
 pkgrel=1

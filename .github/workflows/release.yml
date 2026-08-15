@@ -1,6 +1,6 @@
 name: Release build
 
-# scripts/release.js (npm run release / NeRoBoT_Yayinla.bat|sh) pushes a
+# scripts/release.js (npm run release / NeRoBoT_Kurulum.bat|sh) pushes a
 # "vX.Y.Z" tag once it has committed the source and written the changelog —
 # that push is what triggers this workflow. It builds each platform's
 # installer on its own native runner (windows-latest for the NSIS .exe,

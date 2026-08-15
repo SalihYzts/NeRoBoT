@@ -100,9 +100,7 @@ Developer: **Salih Yazıtaş**
 nerobot/
 ├── package.json
 ├── NeRoBoT_App.bat / .sh           # Launches the desktop app (Windows / Linux)
-├── NeRoBoT_Kurulum.bat / .sh       # First-time setup for a source checkout (npm install + icons)
-├── NeRoBoT_Derle.bat / .sh         # Builds a versioned installer locally (no publishing)
-├── NeRoBoT_Yayinla.bat / .sh       # Pushes source + pushes a version tag (see below)
+├── NeRoBoT_Kurulum.bat / .sh       # ONE script: setup + optional local build + publish (see below)
 ├── .github/workflows/release.yml   # CI that builds Windows .exe + Linux .AppImage on tag push and publishes them
 ├── packaging/arch/                 # Arch Linux pacman package — see Installation
 │   ├── PKGBUILD
@@ -128,8 +126,7 @@ nerobot/
 │   ├── file-extract.js             # PDF/Word/text extraction for the AI to read
 │   └── ollama-installer.js         # Detects/silently installs Ollama on Windows
 ├── scripts/                        # Dev-only tooling, not shipped in the packaged app
-│   ├── build.js                    # Behind NeRoBoT_Derle.bat / npm run build
-│   ├── release.js                  # Behind NeRoBoT_Yayinla.bat / npm run release
+│   ├── release.js                  # Behind NeRoBoT_Kurulum.bat / npm run release — setup + build + publish, all in one
 │   └── gen-icons.js                # Regenerates app/ui/icon.ico + icon.png from logo.svg
 └── build/installer.nsh             # Custom NSIS install-time hook (best-effort Ollama install)
 ```
@@ -218,17 +215,23 @@ You only need to do this once per profile — the session is stored and restored
 
 ## Building & Releasing
 
-Two separate steps, so you can build and test a version before deciding to publish it:
+One script, one command, walks through the whole thing — no need to remember a sequence of separate steps:
 
 ```bash
-npm run build     # or double-click NeRoBoT_Derle.bat / NeRoBoT_Derle.sh
+npm run release   # or double-click NeRoBoT_Kurulum.bat / NeRoBoT_Kurulum.sh
 ```
-Asks for a version number, writes it to `package.json`, and builds locally **for whichever platform you're running on** (`.exe` on Windows, `.AppImage` on Linux) into `dist/` — nothing leaves your machine. Just a quick local sanity build.
 
-```bash
-npm run release   # or double-click NeRoBoT_Yayinla.bat / NeRoBoT_Yayinla.sh
-```
-Uses whichever version `npm run build` just set. Shows you the pending source changes and asks for confirmation before pushing to GitHub, commits, and pushes a `vX.Y.Z` tag. The installers themselves are built NOT by this script but by [.github/workflows/release.yml](.github/workflows/release.yml) (GitHub Actions), which that tag push triggers: a Windows runner builds the `.exe`, a Linux runner builds the `.AppImage`, and both get uploaded to the **same** GitHub Release (including the `latest.yml`/`latest-linux.yml` the auto-updater needs). This split exists because cross-building the Windows `.exe` from Linux locally hits a known bug in electron-builder's own NSIS toolchain. The script can optionally fill in that release's notes with the changelog generated above — that needs a GitHub [Personal Access Token](https://github.com/settings/tokens/new) with `repo` scope (optional; if you skip it, CI still builds and publishes, you can just edit the release notes by hand afterward) — it's cached locally afterward (`.release-token`, gitignored, never committed).
+1. Installs/updates npm dependencies and regenerates the app icons if needed.
+2. Asks whether you want to stop here (just set up for development — `npm start` is all you need after this) or continue on to build and publish a new version.
+3. If you continue: asks for a version number (suggests the next patch bump by default) and writes it to `package.json`.
+4. Optionally builds a local installer **for whichever platform you're running on** (`.exe` on Windows, `.AppImage` on Linux) into `dist/`, purely for a quick local sanity check — nothing leaves your machine at this step.
+5. Shows the pending source changes and asks for confirmation before pushing to GitHub — commits, pushes, and pushes a `vX.Y.Z` tag.
+6. Generates a changelog from the commits since the last tag (Claude API if you've set a key, otherwise a local Ollama model, otherwise a plain commit list) and prepends it to `CHANGELOG.md`.
+7. The **official** installers are built NOT by this script but by [.github/workflows/release.yml](.github/workflows/release.yml) (GitHub Actions), which the tag push triggers: a Windows runner builds the `.exe`, a Linux runner builds the `.AppImage`, and both get uploaded to the **same** GitHub Release (including the `latest.yml`/`latest-linux.yml` the auto-updater needs) — this split exists because cross-building the Windows `.exe` from Linux locally hits a known bug in electron-builder's own NSIS toolchain. The script can optionally fill in that release's notes with the changelog — needs a GitHub [Personal Access Token](https://github.com/settings/tokens/new) with `repo` scope (optional; skip it and CI still builds/publishes, you can edit the notes by hand afterward) — cached locally afterward (`.release-token`, gitignored, never committed).
+8. Optionally drafts a LinkedIn announcement post from the changelog (same Claude/Ollama fallback), and on Windows can bundle it with clipboard screenshots into a `.docx`.
+9. Waits for CI to upload the Linux `.AppImage` to the new release, then updates `packaging/arch/PKGBUILD`'s `pkgver` and checksum to match and offers to commit/push that too — the Arch package never needs a manual `updpkgsums` after a release.
+
+Every step that pushes to GitHub or otherwise leaves your machine asks for an explicit y/n confirmation first, so you can safely re-run the script and back out at any point.
 
 ---
 

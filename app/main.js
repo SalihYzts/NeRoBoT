@@ -49,9 +49,10 @@ const { autoUpdater } = electronUpdaterPkg;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // PROJECT_ROOT is the app's OWN install location (where package.json/
-// help.txt actually ship — see APP_VERSION/app:helpText below and the
-// process.chdir() a bit further down, both of which need to keep pointing
-// there). User data goes somewhere else entirely — see DB_DIR.
+// help.txt actually ship — see APP_VERSION/app:helpText below, and
+// commands.js's own PROJECT_ROOT which anchors the same files off its file
+// location rather than depending on the process's cwd). User data goes
+// somewhere else entirely — see DB_DIR.
 const PROJECT_ROOT = path.join(__dirname, '..');
 // Every profile's data (sessions, settings, chat lists, Ollama
 // conversations, app config — everything under NeRoBoT_db/) used to live
@@ -125,17 +126,31 @@ function writeTelegramAppConfig(config) {
 const APP_CONFIG_FILE = path.join(DB_DIR, 'app-config.json');
 const DEFAULT_APP_CONFIG = { neroPopupShortcut: 'Ctrl+Shift+K', fixTextShortcut: 'Ctrl+Shift+J', fixTextAutoMode: false, fixTextUseLocalModel: true, gamesPopupShortcut: 'Ctrl+Shift+O', gamesShortcutCreated: false };
 
+// Cached after the first read and kept in sync by writeAppConfig below —
+// this file only ever changes through that one function (the app:setConfig
+// IPC handler), so nothing outside this process can invalidate the cache
+// out from under it. Matters because matchesNeroShortcut/matchesGamesShortcut/
+// matchesFixTextShortcut (below) each call readAppConfig() on EVERY keystroke
+// typed into an embedded WhatsApp/Telegram view (see wireGlobalShortcuts) —
+// without this cache, that was up to 3 synchronous readFileSync+JSON.parse
+// disk hits per keystroke, on the Electron main process (blocking every
+// window/IPC), just to check if a key combo matched.
+let appConfigCache = null;
+
 function readAppConfig() {
+    if (appConfigCache) return appConfigCache;
     try {
-        return { ...DEFAULT_APP_CONFIG, ...JSON.parse(fs.readFileSync(APP_CONFIG_FILE, 'utf8')) };
+        appConfigCache = { ...DEFAULT_APP_CONFIG, ...JSON.parse(fs.readFileSync(APP_CONFIG_FILE, 'utf8')) };
     } catch (_) {
-        return { ...DEFAULT_APP_CONFIG };
+        appConfigCache = { ...DEFAULT_APP_CONFIG };
     }
+    return appConfigCache;
 }
 
 function writeAppConfig(config) {
     fs.mkdirSync(DB_DIR, { recursive: true });
     fs.writeFileSync(APP_CONFIG_FILE, JSON.stringify(config, null, 2));
+    appConfigCache = { ...DEFAULT_APP_CONFIG, ...config };
 }
 
 // App-lock — an optional password gate shown before the Home screen (see
@@ -182,9 +197,11 @@ function verifyAppLockPassword(password) {
 // check into its webContents' 'before-input-event' (see setupWaView/
 // setupTelegramView/setupOllamaView below) and pings the host window over
 // 'nero:openPopup' instead of trying to open anything itself.
-function matchesNeroShortcut(input) {
+// Shared by matchesNeroShortcut/matchesFixTextShortcut/matchesGamesShortcut
+// below — all three used to carry an identical copy of this comparison,
+// each just reading a different config key.
+function matchesShortcutCombo(input, combo) {
     if (input.type !== 'keyDown' || input.isAutoRepeat) return false;
-    const combo = readAppConfig().neroPopupShortcut;
     if (!combo) return false;
     const parts = combo.split('+');
     const wantKey = parts[parts.length - 1];
@@ -192,35 +209,23 @@ function matchesNeroShortcut(input) {
     if (!!input.alt !== parts.includes('Alt')) return false;
     if (!!input.shift !== parts.includes('Shift')) return false;
     return String(input.key).toUpperCase() === wantKey.toUpperCase();
+}
+
+function matchesNeroShortcut(input) {
+    return matchesShortcutCombo(input, readAppConfig().neroPopupShortcut);
 }
 
 // Same shape as matchesNeroShortcut above, just its own configurable combo
 // (see handleFixTextShortcut below) — the "fix this draft" shortcut, only
 // meaningful while a WhatsApp view has focus (see wireGlobalShortcuts).
 function matchesFixTextShortcut(input) {
-    if (input.type !== 'keyDown' || input.isAutoRepeat) return false;
-    const combo = readAppConfig().fixTextShortcut;
-    if (!combo) return false;
-    const parts = combo.split('+');
-    const wantKey = parts[parts.length - 1];
-    if (!!input.control !== parts.includes('Ctrl')) return false;
-    if (!!input.alt !== parts.includes('Alt')) return false;
-    if (!!input.shift !== parts.includes('Shift')) return false;
-    return String(input.key).toUpperCase() === wantKey.toUpperCase();
+    return matchesShortcutCombo(input, readAppConfig().fixTextShortcut);
 }
 
 // Same shape as matchesNeroShortcut above — the Oyunlar (Games) tab's own
 // quick-popup combo (see openGamesPopup in index.html).
 function matchesGamesShortcut(input) {
-    if (input.type !== 'keyDown' || input.isAutoRepeat) return false;
-    const combo = readAppConfig().gamesPopupShortcut;
-    if (!combo) return false;
-    const parts = combo.split('+');
-    const wantKey = parts[parts.length - 1];
-    if (!!input.control !== parts.includes('Ctrl')) return false;
-    if (!!input.alt !== parts.includes('Alt')) return false;
-    if (!!input.shift !== parts.includes('Shift')) return false;
-    return String(input.key).toUpperCase() === wantKey.toUpperCase();
+    return matchesShortcutCombo(input, readAppConfig().gamesPopupShortcut);
 }
 
 // Ctrl+Tab / Ctrl+Shift+Tab tab switcher — same "has to work no matter which
@@ -476,6 +481,14 @@ process.on('uncaughtException', (err) => {
 // line — the topbar's own status text is translated in the renderer from
 // `key` (+ `extra` for the one status that carries a dynamic value).
 function setStatus(session, key, text, extra) {
+    // A setup/retry attempt that's still in flight when closeProfile() runs
+    // can throw afterward (e.g. session.waView is now null) and land in a
+    // catch block that reports status on this same `session` object — but
+    // closeProfile already removed it from `sessions` (and a fresh reopen
+    // would register a DIFFERENT session object under the same id), so this
+    // is a stale attempt reporting on a chat the renderer no longer has
+    // open. Guard here once rather than at every such catch block.
+    if (sessions.get(session.id) !== session) return;
     session.currentStatus = { key, text, extra };
     console.log(`[${session.name}] ${text}`);
     if (win && !win.isDestroyed()) {
@@ -735,6 +748,13 @@ function showScreenPicker(sources) {
             if (picker.isDestroyed()) return;
             const payload = sources.map(s => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() }));
             picker.webContents.send('screenpicker:sources', payload);
+        }).catch((err) => {
+            // Without this, a failed load left the picker window sitting there
+            // blank forever AND the caller's `await showScreenPicker(...)`
+            // hanging indefinitely (finish() was never reached) — the only way
+            // out used to be the user manually closing the window themselves.
+            console.error('[showScreenPicker] Ekran seçici yüklenemedi:', err.message || err);
+            finish(null);
         });
     });
 }
@@ -1185,14 +1205,39 @@ async function createWindow() {
 // ============================
 // Puppeteer → Electron bridge
 // ============================
+// `browser.pages()` returns EVERY inspectable target on the app's single
+// shared CDP connection — every open profile's WA/Telegram view, the Ollama
+// tab, the main UI window, not just this profileId's own page. A genuinely
+// hung page (main thread pegged — see startHealthCheck's own doc for that
+// failure class) never answers a CDP Runtime.evaluate at all: the call just
+// never settles, neither resolving nor rejecting, so the bare `await
+// page.evaluate(...)` below used to hang there forever. That doesn't just
+// fail to find THIS page — it blocks the entire outer 40-attempt loop from
+// ever advancing, so `client.initialize()` (and therefore every future
+// start/recovery attempt for EVERY profile, since they all funnel through
+// this same function) hangs indefinitely too. Including, worst of all, the
+// recovery attempt for the very profile that's hung — the self-healing in
+// startHealthCheck/attemptBotStart's watchdog can only retry by calling
+// back into initialize(), which gets stuck right back here. Racing each
+// page's evaluate against its own short timeout (instead of one bare await)
+// means one stuck OTHER page can only cost this loop iteration a few
+// seconds, never the whole thing.
+const FIND_PAGE_EVAL_TIMEOUT_MS = 3000;
+
 async function findWaPage(browser, profileId) {
     const marker = markerName(profileId);
     for (let attempt = 0; attempt < 40; attempt++) {
         for (const page of await browser.pages()) {
             try {
-                if (await page.evaluate(`window['${marker}'] === true`)) return page;
+                const isMatch = await Promise.race([
+                    page.evaluate(`window['${marker}'] === true`),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('evaluate timed out')), FIND_PAGE_EVAL_TIMEOUT_MS)),
+                ]);
+                if (isMatch) return page;
             } catch (_) {
-                // Page may be mid-navigation or not evaluable — skip it.
+                // Page may be mid-navigation, not evaluable, or genuinely
+                // hung — skip it either way (see doc above for why the
+                // timeout matters as much as the try/catch here).
             }
         }
         await new Promise(r => setTimeout(r, 250));
@@ -1263,9 +1308,6 @@ async function attemptBotStart(session) {
     // updates and watchdog re-arming, letting a legitimately slow restore
     // hit the stuck-timeout and loop into another unwanted recovery.
     session.botReady = false;
-    // Dynamic import: bot.js (transitively commands.js) reads package.json/
-    // help.txt with cwd-relative paths, so it must load after process.chdir
-    // above — a static import would run before it.
     const { createBot } = await import('../src/bot.js');
 
     const built = createBot({
@@ -1860,6 +1902,37 @@ ipcMain.handle('window:maximizeToggle', () => {
 ipcMain.handle('window:isMaximized', () => win?.isMaximized() ?? false);
 ipcMain.handle('window:close', () => win?.close());
 
+// Manual drag-to-move for #topbar (see its pointerdown/pointermove handlers
+// in index.html for why -webkit-app-region: drag isn't used there at all
+// anymore — placing a native drag region anywhere adjacent to #tabStrip
+// proved to intermittently swallow real clicks inside the tab strip on this
+// Chromium/Wayland/KWin combination). dragStart snapshots the cursor
+// position and the window's current position; every subsequent dragMove
+// re-reads the LIVE cursor position (screen.getCursorScreenPoint() — not
+// anything reported by the renderer, since renderer-relative coordinates
+// are meaningless mid-drag while the window they're relative to is the
+// thing moving) and applies the same delta to the snapshotted window
+// position. Confirmed working via a standalone setPosition() smoke test on
+// this exact machine, both under native Wayland and forced XWayland — no
+// platform-hint switch needed.
+let windowDragOrigin = null; // { cursorX, cursorY, winX, winY }
+ipcMain.handle('window:dragStart', () => {
+    if (!win) return;
+    if (win.isMaximized()) win.unmaximize();
+    const cursor = screen.getCursorScreenPoint();
+    const [winX, winY] = win.getPosition();
+    windowDragOrigin = { cursorX: cursor.x, cursorY: cursor.y, winX, winY };
+});
+ipcMain.on('window:dragMove', () => {
+    if (!win || !windowDragOrigin) return;
+    const cursor = screen.getCursorScreenPoint();
+    win.setPosition(
+        windowDragOrigin.winX + (cursor.x - windowDragOrigin.cursorX),
+        windowDragOrigin.winY + (cursor.y - windowDragOrigin.cursorY),
+    );
+});
+ipcMain.on('window:dragEnd', () => { windowDragOrigin = null; });
+
 ipcMain.handle('telegram:createProfile', async (_e, name, mode) => {
     // The app-wide api_id/api_hash is only needed for the bot's own MTProto
     // connection (connectionMode 'bot'/'both') — a 'web'-only profile never
@@ -2041,7 +2114,11 @@ ipcMain.handle('settings:save', (_e, profileId, updates) => {
             const n = Number(next);
             if (Number.isFinite(n)) state[key] = n;
         } else {
-            state[key] = String(next);
+            // next == null covers both null and undefined — a renderer
+            // clearing a text field sends one of those, and String(null)/
+            // String(undefined) would otherwise persist the literal string
+            // "null"/"undefined" into settings.json instead of clearing it.
+            state[key] = next == null ? '' : String(next);
         }
     }
 
@@ -2796,11 +2873,24 @@ function buildTranslatePrompt(targetLabel) {
     return `You are a translation assistant. The user will give you a draft WhatsApp message. Translate it into ${targetLabel}, preserving tone, meaning, and punctuation as closely as natural phrasing allows. Return ONLY a JSON object with one key, "translated", containing the translation as a string, written in ${targetLabel}. Do not add commentary, quotes around it, or any explanation — just the translation itself. Example: {"translated":"..."}`;
 }
 
+// Bounded like findWaPage's own page.evaluate race (see its doc for why an
+// unbounded evaluate against a hung page is dangerous) — this one matters
+// even more here: it's the body of a global setInterval (FIX_TEXT_AUTO_POLL_MS
+// below) that runs across EVERY open session regardless of user action.
+// Without a timeout, one hung profile's page would wedge that shared
+// interval's callback forever on THIS await — and since setInterval doesn't
+// wait for a slow callback before firing the next one, every 1.5s adds
+// another overlapping invocation stuck on the exact same hung evaluate,
+// piling up indefinitely instead of failing fast and moving on to check
+// every other (healthy) session.
 async function readComposeBoxText(session) {
-    return session.client.pupPage.evaluate((selectors) => {
-        const box = selectors.map(s => document.querySelector(s)).find(Boolean);
-        return box ? box.innerText.trim() : '';
-    }, COMPOSE_BOX_SELECTORS);
+    return Promise.race([
+        session.client.pupPage.evaluate((selectors) => {
+            const box = selectors.map(s => document.querySelector(s)).find(Boolean);
+            return box ? box.innerText.trim() : '';
+        }, COMPOSE_BOX_SELECTORS),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('readComposeBoxText timed out')), 3000)),
+    ]);
 }
 
 // Shown the instant the user picks "Düzeltme Önerileri" or a language, well
@@ -3286,7 +3376,12 @@ const FIX_TEXT_AUTO_POLL_MS = 1500;
 setInterval(async () => {
     if (!readAppConfig().fixTextAutoMode) return;
     for (const session of sessions.values()) {
-        if (session.platform === 'telegram' || !session.client || !session.botReady) continue;
+        // connectionMode 'bot' keeps the WhatsApp page running headless/
+        // hidden (see layoutViews' hideForBotMode) — there's no human
+        // looking at or typing into that compose box, so polling it for a
+        // "typing pause" and injecting a choice overlay nobody can see is
+        // just a wasted pupPage.evaluate() call every tick.
+        if (session.platform === 'telegram' || session.mode === 'bot' || !session.client || !session.botReady) continue;
         try {
             const draft = await readComposeBoxText(session);
             const auto = session._fixTextAuto || (session._fixTextAuto = { lastSeen: '', lastSuggested: '' });
@@ -3415,19 +3510,22 @@ ipcMain.handle('chat:set', async (_e, profileId, chatId, updates) => {
         store.saveBlacklist();
     }
     if ('model' in updates) {
-        const model = String(updates.model).trim();
+        // updates.model == null means "clear the override" (String(null)
+        // would otherwise trim() down to the truthy literal "null" and get
+        // stored as if it were a real model name).
+        const model = updates.model == null ? '' : String(updates.model).trim();
         ids.forEach(id => delete store.chatModels[id]);
         if (model) store.chatModels[chatId] = model;
         store.saveChatModels();
     }
     if ('prefix' in updates) {
-        const prefix = String(updates.prefix).trim();
+        const prefix = updates.prefix == null ? '' : String(updates.prefix).trim();
         ids.forEach(id => delete store.chatPrefixes[id]);
         if (prefix) store.chatPrefixes[chatId] = prefix;
         store.saveChatPrefixes();
     }
     if ('personality' in updates) {
-        const text = String(updates.personality).trim();
+        const text = updates.personality == null ? '' : String(updates.personality).trim();
         const existingId = ids.find(id => store.chatHistories[id]);
         if (!text) {
             // Empty → drop the custom personality, fall back to global

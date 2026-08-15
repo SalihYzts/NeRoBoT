@@ -11,11 +11,16 @@
 // key-less.
 const POLLINATIONS_BASE = 'https://image.pollinations.ai/prompt/';
 
+// Image generation can legitimately take a while, but none of these three
+// providers had any timeout at all — a stalled upstream connection used to
+// hang the whole request (and the "thinking..." reply) indefinitely.
+const REQUEST_TIMEOUT_MS = 120_000;
+
 async function generateWithPollinations(prompt, { model = 'flux', width = 1024, height = 1024 } = {}) {
     const url = `${POLLINATIONS_BASE}${encodeURIComponent(prompt)}` +
         `?model=${encodeURIComponent(model)}&width=${width}&height=${height}&nologo=true`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     if (!res.ok) {
         throw new Error(`Pollinations request failed (HTTP ${res.status})`);
     }
@@ -39,6 +44,7 @@ async function generateWithOpenAI(prompt, apiKey) {
             size: '1024x1024',
             response_format: 'b64_json',
         }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const json = await res.json().catch(() => null);
     if (!res.ok) {
@@ -61,6 +67,7 @@ async function generateWithStability(prompt, apiKey) {
             'Accept': 'image/*',
         },
         body: form,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!res.ok) {
         const text = await res.text().catch(() => '');

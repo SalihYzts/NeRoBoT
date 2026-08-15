@@ -1,32 +1,53 @@
-// Sürüm yayınlama betiği — sürüm numarasını SORMAZ, package.json'da zaten
-// yazan sürümü kullanır (onu belirleyen adım build.js/NeRoBoT_Derle.bat —
-// "npm run build" ile bir sürüm derledikten sonra bunu çalıştır). Sırayla:
-//   1) Gerekirse (node_modules yok/eski) "npm install" çalıştırır
-//   2) Değişiklikleri gösterip onay alarak kaynak kodu commit'leyip
-//      GitHub'a gönderir, bir sürüm etiketi (tag) oluşturur
-//   3) Bir önceki tag'den bu yana olan commit'leri ve dosya değişiklik
+// TEK betik: kurulum + yerel derleme + GitHub'a yayın. Eskiden bunlar üç
+// ayrı betikti (Kurulum.sh → sadece npm install/ikonlar, build.js → sürüm
+// numarası sorup yerelde derleme, release.js → commit/push/tag/yayın) —
+// şimdi hepsi burada, tek bir akışta ("kur, derle, yayınla" ayrı script
+// olmasın diye birleştirildi). Sırayla:
+//   0) Gerekirse (node_modules yok/eski) "npm install" çalıştırır, ikonları
+//      üretir. Sadece geliştirmeye başlamak isteyen biri (repo'yu yeni
+//      klonlamış, "npm start" ile açacak) burada DURABİLİR — devam edip
+//      yeni bir sürüm derleyip yayınlamak isteyip istemediği sorulur, "h"
+//      cevabı betiği burada temiz bir şekilde bitirir. Hiçbir push/commit
+//      bu noktadan önce olmaz.
+//   1) Devam edilirse: yeni sürüm numarasını sorar (mevcut sürümün patch'i
+//      +1'lenmiş hâlini varsayılan olarak önerir, Enter'la kabul edilebilir)
+//      ve package.json'a yazar.
+//   2) İstersen (sorulur) bu platform için YERELDE bir kurulum paketi
+//      derler (electron-builder ile dist/'e — GitHub'a hiçbir şey
+//      göndermez), sadece göndermeden önce yerel test için.
+//   3) Değişiklikleri gösterip onay alarak kaynak kodu commit'leyip
+//      GitHub'a gönderir, bir sürüm etiketi (tag) oluşturur.
+//   4) Bir önceki tag'den bu yana olan commit'leri ve dosya değişiklik
 //      özetini bir AI'ya gönderip TÜRKÇE, kategorilere ayrılmış bir
 //      CHANGELOG bölümü yazdırır (changelog_vX.Y.Z.md + kök CHANGELOG.md'ye
 //      eklenir) — önce Claude API'yi dener (varsa ANTHROPIC_API_KEY/
 //      .claude-api-key), yoksa/başarısız olursa yerel Ollama'ya düşer, o da
 //      yoksa commit listesinden basit bir changelog'a düşer — hiçbir adımı
 //      bloklamaz (bkz. generateText).
-//   4) Kurulum paketlerini BU betik DEĞİL, 2. adımda push'lanan tag'i
-//      tetikleyen .github/workflows/release.yml (CI) derler — bir Windows
-//      runner'da .exe'yi, bir Linux runner'da .AppImage'i, ikisini de
-//      electron-builder'ın kendi GitHub publisher'ıyla (bkz. package.json'daki
-//      build.publish) AYNI release'e yükler (autoUpdater'ın ihtiyaç duyduğu
-//      latest.yml/blockmap dosyaları dahil). Bunun sebebi: Windows .exe'sini
-//      Linux'tan yerelde çapraz derlemek electron-builder'ın kendi NSIS araç
-//      zincirindeki bilinen bir hataya takılıyor (hem eski hem "1.2.1" beta
-//      toolset). Bu betik burada sadece o release'in notlarını 3. adımdaki
-//      changelog'la dolduruyor (REST API ile) — CI zaten tag push'ı üzerine
-//      kendiliğinden çalışır, bu adımdan bağımsız.
-//   5) Changelog'u temel alarak LinkedIn'de paylaşılabilecek kısa bir
+//   5) Kurulum paketlerinin RESMİ hâlini BU betik DEĞİL, 3. adımda
+//      push'lanan tag'i tetikleyen .github/workflows/release.yml (CI)
+//      derler — bir Windows runner'da .exe'yi, bir Linux runner'da
+//      .AppImage'i, ikisini de electron-builder'ın kendi GitHub
+//      publisher'ıyla (bkz. package.json'daki build.publish) AYNI release'e
+//      yükler (autoUpdater'ın ihtiyaç duyduğu latest.yml/blockmap dosyaları
+//      dahil). Bunun sebebi: Windows .exe'sini Linux'tan yerelde çapraz
+//      derlemek electron-builder'ın kendi NSIS araç zincirindeki bilinen
+//      bir hataya takılıyor (hem eski hem "1.2.1" beta toolset). Bu betik
+//      burada sadece o release'in notlarını 4. adımdaki changelog'la
+//      dolduruyor (REST API ile) — CI zaten tag push'ı üzerine kendiliğinden
+//      çalışır, bu adımdan bağımsız.
+//   6) Changelog'u temel alarak LinkedIn'de paylaşılabilecek kısa bir
 //      duyuru metni hazırlar (yine generateText ile), istersen panodan
 //      (Win+Shift+S) 1-2 ekran görüntüsü ister, ve hepsini gömülü bir Word
 //      (.docx) dosyasına paketler — Word oluşturulamazsa düz .txt'ye düşer.
-// Çalıştırma: npm run release  (ya da NeRoBoT_Yayinla.bat'a çift tıkla)
+//   7) CI'nın Linux .AppImage'i release'e yüklemesini bekleyip (bkz.
+//      updateArchPkgbuild) packaging/arch/PKGBUILD'i bu sürüme göre
+//      günceller (pkgver + sha256) ve istersen commit'leyip push eder —
+//      Arch paketi artık her sürümde elle "updpkgsums" gerektirmiyor. Bu,
+//      LinkedIn adımından SONRA çalışır (CI'nın derlemesini beklediğinden,
+//      birkaç dakika sürebilir) — böylece hızlı adımlar önce biter.
+// Çalıştırma: npm run release  (ya da NeRoBoT_Kurulum.bat/.sh'e çift tıkla —
+// aynı betik, "kurulum" adı ilk kez çalıştıran biri için daha tanıdık)
 //
 // git push / GitHub Release oluşturma gibi geri alınması zor, herkese görünür
 // adımlardan hemen önce her seferinde ayrı ayrı e/h onayı ister — bu betiği
@@ -35,6 +56,7 @@
 // kullanılmıyorsa) salt-yerel olduğundan bu onaylardan muaf — en kötü
 // ihtimalle basit bir fallback metne düşer.
 import { spawnSync, execSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -45,6 +67,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..'); // this file lives in scripts/, one level under the project root
 const PKG_PATH = path.join(ROOT, 'package.json');
 const CHANGELOG_PATH = path.join(ROOT, 'CHANGELOG.md');
+// packaging/arch/PKGBUILD embeds a specific pkgver + the release AppImage's
+// sha256 (see its own header comment) — updateArchPkgbuild() below keeps
+// that in sync with every release instead of it being a manual step.
+const PKGBUILD_PATH = path.join(ROOT, 'packaging', 'arch', 'PKGBUILD');
 // Bir kere sorulur, sonra buraya kaydedilir (.gitignore'da — asla
 // commit'lenmez) — sonraki her "npm run release" tekrar sormaz.
 const TOKEN_FILE = path.join(ROOT, '.release-token');
@@ -180,6 +206,79 @@ async function upsertGithubRelease({ owner, repo, tag, body, token }) {
     if (!postRes.ok) throw new Error(`POST HTTP ${postRes.status}`);
 }
 
+// electron-builder'ın CI'da yüklediği asset'in (bkz. "4) CI derlemesi"
+// yorumu) release'de görünmesini bekler — sabit bir gecikme yerine
+// polluyor, çünkü CI'nın derleme süresi değişken (Windows/Linux matrix,
+// runner müsaitliği vb.). Zaman aşımında null döner, hata fırlatmaz —
+// PKGBUILD güncellemesi bu durumda atlanır, releasein kendisi etkilenmez.
+async function waitForReleaseAsset(owner, repo, tag, assetName, timeoutMs, intervalMs) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+        try {
+            const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`, {
+                headers: { Accept: 'application/vnd.github+json' },
+            });
+            if (res.status === 200) {
+                const release = await res.json();
+                const asset = (release.assets || []).find((a) => a.name === assetName);
+                if (asset) return asset;
+            }
+        } catch (_) { /* geçici ağ hatası — pollamaya devam */ }
+        if (Date.now() >= deadline) return null;
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+}
+
+// packaging/arch/PKGBUILD'i bu sürüme göre günceller: pkgver, pkgrel=1 ve
+// AppImage'in sha256'sı (nerobot.desktop/nerobot.png sabit kaldığı için o
+// iki sha256sums girdisine dokunulmuyor). PKGBUILD yoksa (bu proje için
+// olağan durum değil, ama genel bir savunma) sessizce atlanır.
+async function updateArchPkgbuild({ owner, repo, tag, version, branch }) {
+    if (!fs.existsSync(PKGBUILD_PATH)) return;
+
+    const assetName = `NeRoBoT-${version}.AppImage`;
+    console.log(`\nArch PKGBUILD için "${assetName}" dosyasının CI tarafından release'e yüklenmesi bekleniyor (birkaç dakika sürebilir)...`);
+    const asset = await waitForReleaseAsset(owner, repo, tag, assetName, 8 * 60 * 1000, 15000);
+    if (!asset) {
+        console.log(`[uyarı] "${assetName}" 8 dakika içinde release'de görünmedi — PKGBUILD güncellenmedi, "packaging/arch/PKGBUILD"i elle güncellemen gerekecek (pkgver + sha256sums).`);
+        return;
+    }
+
+    let buf;
+    try {
+        const res = await fetch(asset.browser_download_url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        buf = Buffer.from(await res.arrayBuffer());
+    } catch (err) {
+        console.log(`[uyarı] "${assetName}" indirilemedi (${err.message}) — PKGBUILD güncellenmedi.`);
+        return;
+    }
+    const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
+
+    let pkgbuild = fs.readFileSync(PKGBUILD_PATH, 'utf8');
+    pkgbuild = pkgbuild.replace(/^pkgver=.*$/m, `pkgver=${version}`);
+    pkgbuild = pkgbuild.replace(/^pkgrel=.*$/m, 'pkgrel=1');
+    // Sadece source=()'daki İLK girdi (AppImage) — desktop/png dosyaları bu
+    // sürümle değişmediği için o iki sha256sums satırı olduğu gibi kalır.
+    // Regex global değil, bu yüzden sadece ilk 64-hex eşleşmeyi değiştirir.
+    pkgbuild = pkgbuild.replace(/(sha256sums=\(')[0-9a-f]{64}(')/, `$1${sha256}$2`);
+    fs.writeFileSync(PKGBUILD_PATH, pkgbuild, 'utf8');
+    console.log(`PKGBUILD güncellendi: pkgver=${version}, AppImage sha256=${sha256}`);
+
+    if (await confirm('\nArch PKGBUILD güncellemesini commit edip push edeyim mi?')) {
+        run('git', ['add', PKGBUILD_PATH]);
+        const staged = runCapture('git', ['diff', '--cached', '--name-only']);
+        if (staged) {
+            run('git', ['commit', '-m', `Arch PKGBUILD: v${version}'e güncelle`]);
+            run('git', ['push', 'origin', branch]);
+        } else {
+            console.log('PKGBUILD zaten güncel, commit edilecek bir şey yok.');
+        }
+    } else {
+        console.log('PKGBUILD değişikliği yerelde bırakıldı (commit/push edilmedi).');
+    }
+}
+
 // build.js'deki aynı isimli fonksiyonla aynı mantık (bkz. onun kendi
 // yorumu) — node_modules'ın kendi mtime'ı package.json'dan eskiyse (hiç
 // yoksa, ya da package.json'a sonradan bir bağımlılık eklenmişse) "npm
@@ -194,6 +293,29 @@ function ensureDependenciesInstalled() {
         ? '\npackage.json, node_modules\'tan daha yeni görünüyor — bağımlılıklar güncelleniyor...'
         : '\nnode_modules bulunamadı — bağımlılıklar kuruluyor...');
     run('npm', ['install']);
+}
+
+// electron-builder kendi çıktı klasörünü (dist/) derlemeler arasında
+// temizlemiyor — her yerel derleme bir öncekinin .exe/.AppImage/.blockmap/
+// latest.yml'sinin ÜSTÜNE bir yenisini ekliyor, ta ki dist/ eski sürüm
+// numaralarından kalma bir yığın kurulum dosyasına dönüşene kadar. Yeni
+// derlemeye başlamadan hemen önce tamamen siliyoruz ki dist/ her zaman
+// sadece BU çalıştırmanın çıktısını tutsun.
+function cleanDistDir() {
+    const distDir = path.join(ROOT, 'dist');
+    if (!fs.existsSync(distDir)) return;
+    console.log('\nÖnceki derlemeden kalan dist/ klasörü temizleniyor...');
+    fs.rmSync(distDir, { recursive: true, force: true });
+}
+
+// "x.y.z" formatını doğrulayıp bir sonraki patch sürümünü önerir (sadece
+// varsayılan değer olarak — kullanıcı isterse minor/major da girebilir).
+// Format tanınmazsa (elle uğraşılmış tuhaf bir sürüm numarası vb.) null
+// döner, çağıran taraf varsayılansız sorar.
+function suggestNextVersion(current) {
+    const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(current || '');
+    if (!m) return null;
+    return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
 }
 
 // Ollama'ya (yerel, localhost) bir prompt gönderip düz metin yanıt alır.
@@ -454,25 +576,82 @@ async function main() {
         process.exit(1);
     }
 
+    console.log('NPM bağımlılıkları kontrol ediliyor...');
     ensureDependenciesInstalled();
 
-    // ============================
-    // 1) Sürüm — build.js zaten belirleyip package.json'a yazmış olmalı;
-    // burada sadece okunur ve o sürüm için bir GitHub Release zaten var mı
-    // diye bakılır (varsa, muhtemelen "npm run build" ile yeni bir sürüm
-    // numarası belirlemeyi unutmuşsundur).
-    // ============================
-    const version = pkg.version;
-    const tag = `v${version}`;
-    console.log(`Yayınlanacak sürüm: ${version} (package.json'dan)`);
-    if (runCapture('git', ['tag', '-l', tag])) {
-        console.error(`[HATA] "${tag}" etiketi zaten var — bu sürüm daha önce yayınlanmış görünüyor.`);
-        console.error('Önce "npm run build" (ya da NeRoBoT_Derle.bat) ile yeni bir sürüm numarası belirle, sonra tekrar dene.');
-        process.exit(1);
+    console.log('\nUygulama ikonları oluşturuluyor...');
+    try {
+        run('npm', ['run', 'gen-icons']);
+    } catch (err) {
+        console.log(`[uyarı] İkon oluşturma başarısız oldu (${err.message}) — uygulama yine de çalışır, sadece pencere/kurulum ikonu varsayılan kalabilir.`);
     }
 
     // ============================
-    // 2) Kaynak kodu GitHub'a gönder
+    // Sadece kurulum mu, yoksa devam edip bir sürüm mü yayınlanacak? — bu
+    // betik artık eski NeRoBoT_Kurulum.sh'in yerine de geçtiği için, repo'yu
+    // yeni klonlayıp sadece "npm start" ile geliştirmeye başlamak isteyen
+    // biri burada temiz bir şekilde durabilmeli; version/commit/push
+    // adımlarından hiçbiri onu ilgilendirmiyor.
+    // ============================
+    console.log('\nKurulum tamam — "npm start" ile uygulamayı açabilirsin.');
+    if (!(await confirm('\nDevam edip yeni bir sürüm derleyip GitHub\'a yayınlamak ister misin?'))) {
+        console.log('Tamam, burada duruyorum. İstediğin zaman bu betiği (npm run release / NeRoBoT_Kurulum) tekrar çalıştırabilirsin.');
+        return;
+    }
+
+    // ============================
+    // 1) Sürüm — mevcut sürümün patch'i +1'lenmiş hâli varsayılan olarak
+    // önerilir (Enter'la kabul edilir), ama minor/major da elle girilebilir.
+    // Aynı sürüm için bir GitHub Release/tag zaten varsa (unutup aynı
+    // numarayı tekrar girmek gibi) hata verip çıkmak yerine tekrar sorar.
+    // ============================
+    let version;
+    let tag;
+    for (;;) {
+        const suggested = suggestNextVersion(pkg.version);
+        const promptText = suggested
+            ? `Yeni sürüm numarası [${suggested}]: `
+            : `Yeni sürüm numarası (mevcut: ${pkg.version}, örn: 2.2.0): `;
+        const answer = await ask(promptText);
+        const candidate = answer || suggested;
+        if (!candidate || !/^\d+\.\d+\.\d+$/.test(candidate)) {
+            console.log('Geçersiz biçim — "x.y.z" şeklinde olmalı (örn: 2.2.0). Tekrar dene.');
+            continue;
+        }
+        if (runCapture('git', ['tag', '-l', `v${candidate}`])) {
+            console.log(`"v${candidate}" etiketi zaten var — bu sürüm daha önce yayınlanmış. Farklı bir numara gir.`);
+            continue;
+        }
+        version = candidate;
+        tag = `v${version}`;
+        break;
+    }
+    pkg.version = version;
+    fs.writeFileSync(PKG_PATH, JSON.stringify(pkg, null, 2) + '\n');
+    console.log(`package.json sürümü ${version} olarak güncellendi.`);
+
+    // ============================
+    // 2) Yerel derleme (opsiyonel) — sadece bu platform için, sadece yerel
+    // test amaçlı; GitHub'a hiçbir şey göndermez/yayınlamaz. Resmî Windows
+    // .exe + Linux .AppImage ikilisini her zaman CI derler (bkz. 5. adım).
+    // ============================
+    if (await confirm(`\nBu platform için yerel bir kurulum paketi de derleyeyim mi (${process.platform === 'win32' ? '.exe' : process.platform === 'linux' ? '.AppImage' : 'yerel paket'}, sadece test amaçlı)?`)) {
+        cleanDistDir();
+        run('npm', ['run', 'dist']);
+        const distDir = path.join(ROOT, 'dist');
+        const builtFiles = fs.existsSync(distDir)
+            ? fs.readdirSync(distDir).filter((f) => f.endsWith('.exe') || f.endsWith('.AppImage'))
+            : [];
+        if (builtFiles.length) {
+            console.log('\nYerel derleme tamamlandı:');
+            for (const f of builtFiles) console.log(`  dist/${f}`);
+        } else {
+            console.log('[uyarı] dist/ klasöründe bir .exe ya da .AppImage bulunamadı — derleme sırasında bir şey ters gitmiş olabilir, ama yayına devam ediyorum (CI kendi derlemesini bağımsız yapacak).');
+        }
+    }
+
+    // ============================
+    // 3) Kaynak kodu GitHub'a gönder
     // ============================
     console.log('\nKaynak kodda şu değişiklikler var:');
     run('git', ['status', '--short']);
@@ -496,7 +675,7 @@ async function main() {
     }
 
     // ============================
-    // 3) Changelog — Claude API (varsa), yoksa Ollama
+    // 4) Changelog — Claude API (varsa), yoksa Ollama
     // ============================
     console.log('\nChangelog hazırlanıyor...');
     // Bu proje her sürümü bu betiğin kendisiyle etiketlediği için (bkz.
@@ -542,7 +721,7 @@ async function main() {
     console.log(`Changelog yazıldı: ${path.basename(changelogFile)} ve CHANGELOG.md güncellendi.`);
 
     // ============================
-    // 4) Release notlarını changelog'la doldur — kurulum paketlerinin
+    // 5) Release notlarını changelog'la doldur — kurulum paketlerinin
     // kendisini CI derliyor (bkz. yukarıdaki yorum), tag zaten push'landığı
     // için CI muhtemelen bu noktada çoktan başlamıştır; burası ona paralel,
     // sadece release'in (CI'dan önce davranırsak oluşturarak, sonra
@@ -570,7 +749,7 @@ async function main() {
     console.log(`Release: ${releaseUrl}`);
 
     // ============================
-    // 5) LinkedIn duyuru metni — Claude API (varsa), yoksa Ollama; sonra
+    // 6) LinkedIn duyuru metni — Claude API (varsa), yoksa Ollama; sonra
     // istersen panodan 1-2 ekran görüntüsü alıp hepsini bir Word (.docx)
     // dosyasına gömer. Word oluşturulamazsa (ör. PowerShell/Compress-Archive
     // bir sorun çıkarırsa) düz .txt'ye düşer — bu adım hiçbir zaman
@@ -636,6 +815,14 @@ async function main() {
         fs.writeFileSync(linkedinFile, linkedinPost + '\n', 'utf8');
         console.log('[bilgi] Ekran görüntülü Word dosyası yalnızca Windows\'ta destekleniyor (PowerShell gerekiyor) — metin .txt olarak kaydedildi.');
     }
+
+    // ============================
+    // 7) Arch PKGBUILD — CI'nın AppImage'i release'e yüklemesini bekleyip
+    // packaging/arch/PKGBUILD'i bu sürüme göre günceller (bkz. fonksiyonun
+    // kendi yorumu). LinkedIn adımından SONRA çalışıyor çünkü bu adım CI'yı
+    // bekleyeceğinden (birkaç dakika) o adımı geciktirmemiş oluyor.
+    // ============================
+    await updateArchPkgbuild({ owner: parsedRemote.owner, repo: parsedRemote.repo, tag, version, branch });
 
     // ============================
     // Özet

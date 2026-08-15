@@ -71,6 +71,11 @@ contextBridge.exposeInMainWorld('nerobot', {
     isWindowMaximized: () => ipcRenderer.invoke('window:isMaximized'),
     closeWindow: () => ipcRenderer.invoke('window:close'),
     onWindowMaximizedChanged: (cb) => ipcRenderer.on('window:maximizedChanged', (_e, maximized) => cb(maximized)),
+    // Manual drag-to-move (see main.js's window:dragStart/dragMove handlers
+    // for why -webkit-app-region: drag alone isn't used for this bar).
+    startWindowDrag: () => ipcRenderer.invoke('window:dragStart'),
+    dragWindowMove: () => ipcRenderer.send('window:dragMove'),
+    endWindowDrag: () => ipcRenderer.send('window:dragEnd'),
 
     // Global settings (Genel tab) — scoped to the given profile
     getSettings: (profileId) => ipcRenderer.invoke('settings:get', profileId),

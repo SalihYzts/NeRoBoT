@@ -107,18 +107,31 @@ const DEFAULTS = {
 // ============================
 function loadJson(filePath, fallback) {
     if (!fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2));
+        saveJson(filePath, fallback);
         return fallback;
     }
     try {
         return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    } catch {
+    } catch (err) {
+        // Silently falling back here used to mean a corrupted settings/list
+        // file quietly resets to defaults with no trace of why — log it so
+        // it's at least visible in the console/debug log instead of looking
+        // like the user's settings just vanished on their own.
+        console.warn(`[config] Failed to parse ${filePath}, falling back to defaults: ${err.message || err}`);
         return fallback;
     }
 }
 
+// Writes via a temp file + rename instead of straight to `filePath` — a
+// straight fs.writeFileSync that gets interrupted (crash, power loss) mid-
+// write leaves a truncated/corrupt JSON file behind, which loadJson above
+// would then silently treat as "reset to defaults" on next launch. rename()
+// on the same filesystem is atomic, so readers only ever see either the old
+// complete file or the new complete one, never a partial write.
 function saveJson(filePath, data) {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
+    fs.renameSync(tmpPath, filePath);
 }
 
 export const PERSISTENT_KEYS = [

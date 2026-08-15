@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
+# TEK giris noktasi: kurulum + yerel derleme + GitHub'a yayin, hepsi
+# scripts/release.js icinde (bkz. onun kendi basindaki yorum). Node.js
+# kontrolu burada yapiliyor cunku o script'i calistirmak icin bile once
+# Node gerekiyor - yoksa dagitimina uygun kurulum komutunu gosterir.
+#
 # Sadece kaynak dosyalarini indirmis (repo'yu klonlamis ya da zip'ini acmis)
-# biri icin ilk adim: Node.js'i kontrol eder (yoksa dagitimina uygun kurulum
-# komutunu gosterir), npm bagimliliklarini kurar ve uygulama ikonlarini
-# olusturur. Bundan sonra "npm start" (ya da ileride eklenecek
-# NeRoBoT_App.sh) ile uygulamayi acabilirsin.
+# biri icin bu, dogru ilk adim: script once npm bagimliliklarini kurup
+# ikonlari olusturur, sonra "devam edip yeni bir surum mu yayinlayacaksin?"
+# diye sorar - "h" cevabi burada temiz bir sekilde biter, boylece sadece
+# gelistirmeye baslamak isteyen biri (npm start ile acacak) hicbir
+# commit/push adimina bulasmaz. "Evet" cevabi verirsen surum numarasi,
+# yerel derleme, commit/push/tag, changelog, GitHub Release ve Arch
+# PKGBUILD guncellemesi de ayni calistirmada devam eder.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
@@ -23,21 +31,4 @@ if ! command -v node >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "NPM bagimliliklari kuruluyor, bu biraz surebilir..."
-if ! npm install; then
-    echo "[HATA] \"npm install\" basarisiz oldu - yukaridaki hataya bak."
-    exit 1
-fi
-
-echo
-echo "Uygulama ikonlari olusturuluyor..."
-if ! npm run gen-icons; then
-    echo "[UYARI] Ikon olusturma basarisiz oldu - uygulama yine de calisir,"
-    echo "sadece pencere/kurulum ikonu varsayilan kalabilir."
-fi
-
-echo
-echo "================================================"
-echo "Hazir! Simdi ne yapabilirsin:"
-echo "  - Uygulamayi acmak icin: npm start"
-echo "================================================"
+node scripts/release.js

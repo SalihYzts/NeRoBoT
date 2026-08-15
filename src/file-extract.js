@@ -17,6 +17,16 @@ export function isImageExt(ext) {
     return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'].includes(ext.toLowerCase());
 }
 
+// Applied to every extracted format, not just plain text — a large PDF/Word
+// file's extracted text was previously sent to the model uncapped, unlike
+// the plain-text branch below, which could blow past the model's context
+// window (or a metered cloud model's token quota) on a big enough document.
+function truncate(text) {
+    return text.length > MAX_CHARS
+        ? text.slice(0, MAX_CHARS) + `\n\n[... ${text.length - MAX_CHARS} karakter kırpıldı]`
+        : text;
+}
+
 // Returns { ok, text } or { ok: false, error }. `ext` includes the leading
 // dot (path.extname's format); `mime` may be empty (extension is the
 // primary signal here, unlike bot.js which mostly has to trust WhatsApp's
@@ -28,21 +38,18 @@ export async function extractFileText(buffer, ext, filename) {
             const parser = new PDFParse({ data: buffer });
             try {
                 const result = await parser.getText();
-                return { ok: true, text: `[PDF içeriği: ${filename}]\n${result.text.trim()}` };
+                return { ok: true, text: truncate(`[PDF içeriği: ${filename}]\n${result.text.trim()}`) };
             } finally {
                 await parser.destroy();
             }
         }
         if (lower === '.docx' || lower === '.doc') {
             const result = await mammoth.extractRawText({ buffer });
-            return { ok: true, text: `[Word belgesi içeriği: ${filename}]\n${result.value.trim()}` };
+            return { ok: true, text: truncate(`[Word belgesi içeriği: ${filename}]\n${result.value.trim()}`) };
         }
         // Plain text-ish files (txt, json, js, ts, csv, xml, yaml, md, log…)
         const text = buffer.toString('utf8');
-        const trimmed = text.length > MAX_CHARS
-            ? text.slice(0, MAX_CHARS) + `\n\n[... ${text.length - MAX_CHARS} karakter kırpıldı]`
-            : text;
-        return { ok: true, text: `[Dosya içeriği: ${filename}]\n${trimmed}` };
+        return { ok: true, text: truncate(`[Dosya içeriği: ${filename}]\n${text}`) };
     } catch (err) {
         return { ok: false, error: err.message || String(err) };
     }

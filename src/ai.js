@@ -199,6 +199,27 @@ export function createAi({ store, utils }) {
     // otherwise log the same warning on every single message.
     let embedUnavailableWarned = false;
 
+    // Serializes askModel() calls per userId/memoryKey. Without this, two
+    // messages from the same user (or two group members sharing one
+    // memoryKey — see bot.js's handleAiMessage) arriving close together
+    // would both read chatHistories[userId], then both push/await/push
+    // concurrently — interleaved writes can reorder history, and an error
+    // in one call would pop() the OTHER call's message off the end. Chains
+    // each new call onto the previous one for the same key so only one
+    // runs against that chat's history at a time; unrelated keys never wait
+    // on each other.
+    const memoryLocks = new Map(); // userId → tail promise of the lock chain
+    function withMemoryLock(userId, fn) {
+        const prev = memoryLocks.get(userId) || Promise.resolve();
+        const run = prev.then(fn, fn);
+        const tracked = run.catch(() => {});
+        memoryLocks.set(userId, tracked);
+        tracked.finally(() => {
+            if (memoryLocks.get(userId) === tracked) memoryLocks.delete(userId);
+        });
+        return run;
+    }
+
     async function embed(text) {
         if (!state.vectorMemoryEnabled) return null;
         try {
@@ -261,7 +282,11 @@ export function createAi({ store, utils }) {
         return response.message.content.trim();
     }
 
-    async function askModel(userId, prompt, images = [], extraInstruction = null) {
+    function askModel(userId, prompt, images = [], extraInstruction = null) {
+        return withMemoryLock(userId, () => askModelLocked(userId, prompt, images, extraInstruction));
+    }
+
+    async function askModelLocked(userId, prompt, images = [], extraInstruction = null) {
         if (!chatHistories[userId]) {
             chatHistories[userId] = [
                 { role: 'system', content: state.systemPrompt }

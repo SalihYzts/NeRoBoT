@@ -8,7 +8,13 @@ const SWEEP_INTERVAL_CALLS = 500;
 // Per-profile rate limiter. Wrapped in a factory so each profile has its
 // own buckets — otherwise the same raw userId string messaging two of
 // your bot numbers would share (and drain) one throttle across both.
-export function createRateLimiter(store) {
+//
+// `idVariants(id)` (optional, e.g. utils.js's WhatsApp @lid/@c.us resolver)
+// lets the same person spend from one shared bucket no matter which ID
+// form a given message arrives under — without it, someone switching
+// between forms would get two independent buckets and effectively double
+// their limit.
+export function createRateLimiter(store, idVariants) {
     const { state } = store;
 
     // buckets[userId] = { tokens: number, lastRefill: timestamp }
@@ -39,7 +45,7 @@ export function createRateLimiter(store) {
      * @param {string} userId
      * @returns {{ allowed: boolean, shouldWarn: boolean }}
      */
-    function checkRateLimit(userId) {
+    async function checkRateLimit(userId) {
         if (!state.rateLimitEnabled) return { allowed: true, shouldWarn: false };
 
         const now = Date.now();
@@ -50,12 +56,18 @@ export function createRateLimiter(store) {
             sweepIdleBuckets(now);
         }
 
+        // If this user already has a bucket under a different known ID form
+        // (e.g. @lid vs @c.us), spend from that one instead of starting a
+        // fresh bucket — otherwise the two forms silently double the limit.
+        const variants = idVariants ? await idVariants(userId) : [userId];
+        const key = variants.find(v => buckets[v]) || userId;
+
         // Init bucket for new user
-        if (!buckets[userId]) {
-            buckets[userId] = { tokens: rateLimitMaxTokens, lastRefill: now };
+        if (!buckets[key]) {
+            buckets[key] = { tokens: rateLimitMaxTokens, lastRefill: now };
         }
 
-        const bucket = buckets[userId];
+        const bucket = buckets[key];
 
         // Refill tokens based on elapsed time
         const elapsed = now - bucket.lastRefill;
@@ -72,11 +84,11 @@ export function createRateLimiter(store) {
         }
 
         // Rate limited — check if we should warn them
-        const lastWarn = lastWarnedAt[userId] || 0;
+        const lastWarn = lastWarnedAt[key] || 0;
         const shouldWarn = (now - lastWarn) >= rateLimitWarnCooldown;
 
         if (shouldWarn) {
-            lastWarnedAt[userId] = now;
+            lastWarnedAt[key] = now;
         }
 
         return { allowed: false, shouldWarn };
@@ -85,7 +97,12 @@ export function createRateLimiter(store) {
     /**
      * Reset the bucket for a specific user (e.g. after !clear)
      */
-    function resetRateLimitBucket(userId) {
+    async function resetRateLimitBucket(userId) {
+        const variants = idVariants ? await idVariants(userId) : [userId];
+        for (const v of variants) {
+            delete buckets[v];
+            delete lastWarnedAt[v];
+        }
         delete buckets[userId];
         delete lastWarnedAt[userId];
     }

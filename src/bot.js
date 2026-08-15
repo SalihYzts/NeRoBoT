@@ -17,6 +17,18 @@ const { PDFParse } = require('pdf-parse');
 
 const { Client } = pkg;
 
+// Caps how much extracted file text (PDF/Word/plain-text attachments) gets
+// folded into a prompt — applied to every format alike, not just plain text,
+// so a large PDF/Word document can't blow past the model's context window
+// (or a metered cloud model's token quota) the way an unbounded extraction
+// used to.
+const FILE_TEXT_MAX_CHARS = 30_000;
+function truncateFileText(text) {
+    return text.length > FILE_TEXT_MAX_CHARS
+        ? text.slice(0, FILE_TEXT_MAX_CHARS) + `\n\n[... ${text.length - FILE_TEXT_MAX_CHARS} characters truncated]`
+        : text;
+}
+
 // Creates one profile's whole bot stack: its own config store, utils,
 // rate limiter, AI memory and debug commands, and the whatsapp-web.js
 // Client wired to all of them. Two profiles calling this never share so
@@ -53,7 +65,7 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
     utils.getOllamaClient = getOllamaClient;
     const { setClient, sendText, replyText, sendImage, isBotSentMessage, idVariants, setHasAny } = utils;
 
-    const ratelimit = createRateLimiter(store);
+    const ratelimit = createRateLimiter(store, idVariants);
     const { checkRateLimit } = ratelimit;
 
     const { askModel, classifyImageIntent, describeImageForGeneration, describeGeneratedImage } = createAi({ store, utils });
@@ -110,7 +122,7 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
 
         try {
             // Rate limit check — runs before thinkMessage so we don't send "thinking..." then drop it
-            const { allowed, shouldWarn } = checkRateLimit(userId);
+            const { allowed, shouldWarn } = await checkRateLimit(userId);
             if (!allowed) {
                 if (shouldWarn) {
                     await sendText(chatId, state.rateLimitWarnMessage);
@@ -136,10 +148,23 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
             let fileContext = '';
 
             if (msg.hasMedia) {
+                // Only the actual download is attributed to 'downloadMedia' below —
+                // the type-detection/notification code that follows has its own
+                // sendText() calls, and if one of those fails it shouldn't be
+                // misreported as a download failure (falls through to the generic
+                // handleAiMessage catch instead, which is accurate either way).
+                let media;
                 try {
-                    const media = await msg.downloadMedia();
+                    media = await msg.downloadMedia();
                     if (!media) throw new Error('Failed to download media.');
+                } catch (err) {
+                    await reportError('downloadMedia', err);
+                    await sendText(chatId, state.aiErrorMessage);
+                    if (!rawPrompt) return;
+                    media = null;
+                }
 
+                if (media) {
                     const mime = media.mimetype || '';
                     const buffer = Buffer.from(media.data, 'base64');
                     const filename = (media.filename || '').toLowerCase();
@@ -168,7 +193,7 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                                 const parser = new PDFParse({ data: buffer });
                                 try {
                                     const result = await parser.getText();
-                                    fileContext = `[PDF content]\n${result.text.trim()}`;
+                                    fileContext = truncateFileText(`[PDF content]\n${result.text.trim()}`);
                                 } finally {
                                     await parser.destroy();
                                 }
@@ -187,7 +212,7 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                         } else {
                             try {
                                 const result = await mammoth.extractRawText({ buffer });
-                                fileContext = `[Word document content]\n${result.value.trim()}`;
+                                fileContext = truncateFileText(`[Word document content]\n${result.value.trim()}`);
                             } catch (e) {
                                 await sendText(chatId, '⚠️ Could not read the Word document.');
                                 if (!rawPrompt) return;
@@ -220,12 +245,7 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                         } else {
                             try {
                                 const text = buffer.toString('utf8');
-                                // Çok büyük dosyaları kırp (model context limiti gözetilerek)
-                                const MAX_CHARS = 30_000;
-                                const trimmed = text.length > MAX_CHARS
-                                    ? text.slice(0, MAX_CHARS) + `\n\n[... ${text.length - MAX_CHARS} characters truncated]`
-                                    : text;
-                                fileContext = `[File content (${mime})]\n${trimmed}`;
+                                fileContext = truncateFileText(`[File content (${mime})]\n${text}`);
                             } catch (e) {
                                 await sendText(chatId, '⚠️ Could not convert the file to text.');
                                 if (!rawPrompt) return;
@@ -240,13 +260,6 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                         );
                         if (!rawPrompt) return;
                     }
-
-                } catch (err) {
-                    // Media download failure shouldn't crash the flow — report
-                    // to debug chat and fall back to text-only if there's a caption.
-                    await reportError('downloadMedia', err);
-                    await sendText(chatId, state.aiErrorMessage);
-                    if (!rawPrompt) return;
                 }
             }
 
@@ -332,11 +345,20 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
     // the first message from a brand-new chat just goes out without one,
     // every message after that (once the fetch resolves) has it cached.
     const avatarCache = new Map();
+    // Capped FIFO — a profile that's been up for weeks and seen thousands of
+    // distinct chats shouldn't keep every avatar in memory forever.
+    const MAX_AVATAR_CACHE_SIZE = 1000;
+    function cacheAvatar(chatId, value) {
+        avatarCache.set(chatId, value);
+        while (avatarCache.size > MAX_AVATAR_CACHE_SIZE) {
+            avatarCache.delete(avatarCache.keys().next().value);
+        }
+    }
     function scheduleAvatarFetch(chatId) {
         if (avatarCache.has(chatId)) return;
-        avatarCache.set(chatId, null);
+        cacheAvatar(chatId, null);
         client.getProfilePicUrl(chatId)
-            .then(url => avatarCache.set(chatId, url || null))
+            .then(url => cacheAvatar(chatId, url || null))
             .catch(() => {});
     }
 
