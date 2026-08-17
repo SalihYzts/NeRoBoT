@@ -1,3 +1,30 @@
+## v4.4.29 - 2026-08-17
+
+### Yeni Özellikler
+- KVKK (Kişisel Verilerin Korunması) tarayıcı entegrasyonu için altyapı hazırlıkları
+- Sürüm yayınlama sürecini otomatikleştiren yeni `scripts/release.js` betiği eklendi
+- Arch Linux paket yapılandırması (`PKGBUILD`) güncellendi
+- Kullanıcı arayüzüne yeni bölümler ve bileşenler eklendi
+
+### İyileştirmeler
+- Ana uygulama mantığı (`app/main.js`) baştan yapılandırılarak daha kararlı bir çalışma sağlandı
+- Telegram bot bağlantısı ve mesajlaşma akışı iyileştirildi
+- Yapay zeka modülü, bot komutları ve profil yönetimi daha esnek hale getirildi
+- Hız sınırlama (rate limit) mekanizması güçlendirildi
+- Dosya çıkarma ve görsel üretimi modüllerinin güvenilirliği artırıldı
+- Ollama kurulum aracı daha kullanıcı dostu hale getirildi
+- Kurulum betikleri (`NeRoBoT_Kurulum.bat` / `.sh`) sadeleştirildi
+- README ve Türkçe READMETR dosyaları güncellendi
+
+### Hata Düzeltmeleri
+- Mevcut sürümde tespit edilen kararlılık ve uyumluluk sorunları giderildi
+
+### Diğer Değişiklikler
+- Eski derleme betikleri (`NeRoBoT_Derle.bat`, `NeRoBoT_Derle.sh` ve `scripts/build.js`) kaldırıldı
+- Eski yayınlama betikleri (`NeRoBoT_Yayinla.bat`, `NeRoBoT_Yayinla.sh`) kaldırıldı
+- Paket bağımlılıkları ve sürüm bilgileri güncellendi (`package.json`, `package-lock.json`)
+- GitHub Actions yayın akışı (`release.yml`) yeni yayın betiğiyle uyumlu hale getirildi
+
 ## v4.4.28 - 2026-08-08
 
 ### Hata Düzeltmeleri
