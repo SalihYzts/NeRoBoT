@@ -26,14 +26,16 @@
                                                                                                     
 ```
 
-**NeRoBoT** is a Windows desktop app that runs local-AI-powered bots on top of **WhatsApp** and **Telegram** — multiple accounts/platforms at once, each fully isolated — plus a standalone AI chat (**NeRoChAt**) that isn't tied to any chat account at all. Everything runs on [Ollama](https://ollama.com/) models on your own machine.
+---
 
-Developer: **Salih Yazıtaş**
+## What is NeRoBoT?
+NeRoBoT is a Windows desktop app that runs local-AI-powered bots on top of **WhatsApp** and **Telegram** — multiple accounts/platforms at once, each fully isolated — plus a standalone AI chat (**NeRoChAt**) that isn't tied to any chat account at all. Everything runs on [Ollama](https://ollama.com/) models on your own machine.
+
+> Developer: **Salih Yazıtaş**
 
 ---
 ## Documentation
-- [Türkçe README](READMETR.md)
-- Türkçe README dosyasına ulaşmak için.
+- [Türkçe README dosyasına ulaşmak için tıkla.](READMETR.md)
 ---
 
 ## Table of Contents
