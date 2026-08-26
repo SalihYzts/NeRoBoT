@@ -24,7 +24,15 @@
                                                                                                       
                                                                                                       
                                                                                                     
-```
+```                            
+                                       
+<p align="center">
+  <a href="#features"><img src="https://custom-icon-badges.demolab.com/badge/Features-0078D6?style=for-the-badge&logo=star&logoColor=white"></a>
+  <a href="#installation"><img src="https://custom-icon-badges.demolab.com/badge/Installation-0078D6?style=for-the-badge&logo=download&logoColor=white"></a>
+  <a href="#building--releasing"><img src="https://custom-icon-badges.demolab.com/badge/Build_%26_Release-0078D6?style=for-the-badge&logo=tools&logoColor=white"></a>
+  <a href="#commands"><img src="https://custom-icon-badges.demolab.com/badge/Commands-0078D6?style=for-the-badge&logo=terminal&logoColor=white"></a>
+  <a href="#troubleshooting"><img src="https://custom-icon-badges.demolab.com/badge/Troubleshooting-0078D6?style=for-the-badge&logo=bug&logoColor=white"></a>
+</p>
 
 ---
 
