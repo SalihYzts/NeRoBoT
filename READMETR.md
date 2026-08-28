@@ -451,7 +451,9 @@ Güncelleme kontrolü internet gerektirir ve pencere açılmadan önce (kısa bi
 
 ## Lisans
 
-Bu proje kişisel kullanım içindir. Lütfen WhatsApp'ın [Hizmet Şartları](https://www.whatsapp.com/legal/terms-of-service)'na ve Telegram'ın [Hizmet Şartları](https://telegram.org/tos)'na uygun şekilde kullanın.
+Bu proje [GNU General Public License v3.0](LICENSE) ile lisanslanmıştır — projeyi kullanabilir, değiştirebilir ve yeniden dağıtabilirsiniz; türev çalışmaların da aynı lisans altında kalması şartıyla.
+
+Ayrıca lütfen WhatsApp'ın [Hizmet Şartları](https://www.whatsapp.com/legal/terms-of-service)'na ve Telegram'ın [Hizmet Şartları](https://telegram.org/tos)'na uygun şekilde kullanın.
 
 ---
 

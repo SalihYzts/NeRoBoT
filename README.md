@@ -461,7 +461,9 @@ The update check needs internet access and runs (with a short timeout) before th
 
 ## License
 
-This project is for personal use. Please use it in compliance with WhatsApp's [Terms of Service](https://www.whatsapp.com/legal/terms-of-service) and Telegram's [Terms of Service](https://telegram.org/tos).
+This project is licensed under the [GNU General Public License v3.0](LICENSE) — you are free to use, modify, and redistribute it, as long as derivative works stay under the same license.
+
+Please also use it in compliance with WhatsApp's [Terms of Service](https://www.whatsapp.com/legal/terms-of-service) and Telegram's [Terms of Service](https://telegram.org/tos).
 
 ---
 
