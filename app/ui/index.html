@@ -91,37 +91,38 @@
         gap: 12px;
         padding: 0 16px;
         overflow: hidden; /* never let a crowded tab strip spill into a second row */
-        /* No -webkit-app-region ANYWHERE in this bar, deliberately — not
-           even on the static logo/brand/#spacer corner that used to carry
-           it. Tried native drag on #topbar itself (twice) and confirmed by
-           testing that clicking inside #tabStrip (switching tabs, closing
-           them) still breaks intermittently even with every clickable
-           element declaring its own explicit no-drag: Chromium's
-           drag-region hit-test map is keyed off actual on-screen
-           rectangles, and #spacer sits flex-adjacent to #tabStrip, which
-           gets torn down and rebuilt from scratch (renderTabs():
-           container.innerHTML = '' + recreate) on every profile/
-           notification push — every such rebuild can shift the tabStrip/
-           spacer boundary, and there's a real window where the OS-level
-           region map still reflects the PREVIOUS boundary, so a click that
-           now lands on a freshly-appeared tab gets misread as landing in
-           the (stale) drag area next to it and swallowed as a window-move
-           instead of reaching the tab. That race exists independent of
-           which elements are marked drag vs no-drag, as long as ANY drag
-           region sits adjacent to the tab strip's ever-changing bounds.
-           Window movement is instead handled entirely in JS — see the
-           pointerdown/pointermove drag-to-move handlers further down,
-           which drive BrowserWindow.setPosition() over IPC instead of
-           asking the compositor to do it — so no native drag region has to
-           exist near #tabStrip at all. */
+        /* Window dragging is native (-webkit-app-region: drag) and lives on
+           the logo/brand cluster and #spacer, which between them cover
+           every part of this bar that isn't a tab or a button. It CANNOT be
+           done in JS via BrowserWindow.setPosition() — under native Wayland
+           (this app's default on KDE/KWin) a client is not allowed to
+           position its own surface, so setPosition() is silently ignored
+           and the bar becomes completely undraggable. Only the compositor
+           can move the window, and -webkit-app-region: drag is what asks it
+           to. A previous attempt replaced native drag with JS pointer
+           handlers driving setPosition() and shipped a title bar that could
+           not be moved at all on Wayland; do not reintroduce that.
+
+           Every clickable thing in here (#tabStrip and its tabs, the home
+           button, the bell, settings, #winControls) declares its own
+           explicit no-drag, so clicks are never swallowed by the drag
+           region that surrounds them. */
     }
     #brandLogo {
+        -webkit-app-region: drag;
         width: auto;
         height: 22px;
         flex: 0 0 auto;
         margin-right: -4px; /* logo and brand text read as one unit */
     }
     #brand {
+        -webkit-app-region: drag;
+        /* Full bar height, not just the text's own 19px — a drag region is
+           only grabbable where it actually paints, and align-items: center
+           on #topbar would otherwise shrink this box vertically. */
+        align-self: stretch;
+        display: flex;
+        align-items: center;
         flex: 0 0 auto;
         font-weight: 700;
         letter-spacing: 1px;
@@ -129,7 +130,18 @@
         font-size: 14px;
     }
 
-    #spacer { flex: 1; }
+    /* The main grab handle of the title bar: every pixel of leftover bar
+       width (flex: 1), so the user can grab the window anywhere between the
+       tabs and the notification bell, the way a native title bar behaves.
+       align-self: stretch because an empty <span> is 0px tall otherwise —
+       a zero-height drag region is invisible-but-useless, which is exactly
+       how dragging silently broke once already. */
+    #spacer {
+        -webkit-app-region: drag;
+        align-self: stretch;
+        flex: 1;
+        min-width: 24px;
+    }
 
     /* ===== Bottom status bar — active profile's connection status, kept
        out of the (already crowded) tab strip row ===== */
@@ -222,13 +234,13 @@
         display: flex;
         align-items: center;
         gap: 4px;
-        /* flex-grow: 0 — must size to its own tabs, not steal the topbar's
-           leftover width. Growing here would swallow #spacer's drag region
-           (it's the ONLY no-drag distinction between the two), leaving a
-           visually-empty strip of topbar that silently can't drag the
-           window. flex-shrink stays 1 so a crowded strip still yields to
-           the window controls and scrolls (see overflow-x) instead of
-           overflowing them. */
+        /* Sizes to its own tabs — the bar's leftover width goes to #spacer
+           instead (flex: 1 there), because that slack is what the user
+           actually grabs to move the window and #spacer is the drag region.
+           Letting this no-drag box absorb the slack instead would leave a
+           wide, dead, visually-empty strip that silently can't drag.
+           flex-shrink stays 1 so a crowded strip still yields to the window
+           controls and scrolls (see overflow-x) instead of overflowing. */
         flex: 0 1 auto;
         min-width: 0;
         overflow-x: auto;
@@ -3795,10 +3807,11 @@
     window.nerobot.onWindowMaximizedChanged(setMaximizeIcon);
     window.nerobot.isWindowMaximized().then(setMaximizeIcon);
 
-    // Shared by the dblclick-to-maximize handler right below and the
-    // drag-to-move handlers further down — anything inside #tabStrip
-    // (tabs, their close buttons, the home button) or any other button in
-    // the bar is a click target, not a window-drag/maximize-toggle target.
+    // Shared by the dblclick-to-maximize handler right below — anything
+    // inside #tabStrip (tabs, their close buttons, the home button) or any
+    // other button in the bar is a click target, not a maximize-toggle
+    // target. (Window MOVEMENT is native -webkit-app-region: drag, see the
+    // #topbar CSS — it can't be done from JS under Wayland.)
     const topbarEl = document.getElementById('topbar');
     function isTopbarDragTarget(el) {
         return !!topbarEl.contains(el) && !el.closest('#tabStrip, button');
@@ -3808,33 +3821,6 @@
         if (!isTopbarDragTarget(e.target)) return;
         window.nerobot.maximizeToggleWindow().then(setMaximizeIcon);
     });
-
-    // Drag-to-move — see main.js's window:dragStart/dragMove/dragEnd IPC
-    // handlers for why this exists instead of the usual -webkit-app-region:
-    // drag CSS. In short: any native drag region placed anywhere near
-    // #tabStrip (even just adjacent to it, like the old #spacer) has proven
-    // to intermittently swallow real clicks inside the tab strip on this
-    // Chromium/Wayland/KWin combination, because #tabStrip's contents are
-    // rebuilt from scratch on every profile/notification push and
-    // Chromium's OS-level draggable-region map doesn't always keep up with
-    // the resulting boundary shifts. Doing this in JS instead means no
-    // native drag region ever has to exist near the tab strip at all.
-    let winDragging = false;
-    topbarEl.addEventListener('pointerdown', (e) => {
-        if (e.button !== 0 || winDragging || !isTopbarDragTarget(e.target)) return;
-        winDragging = true;
-        window.nerobot.startWindowDrag();
-    });
-    document.addEventListener('pointermove', () => {
-        if (winDragging) window.nerobot.dragWindowMove();
-    });
-    function endWinDrag() {
-        if (!winDragging) return;
-        winDragging = false;
-        window.nerobot.endWindowDrag();
-    }
-    document.addEventListener('pointerup', endWinDrag);
-    document.addEventListener('pointercancel', endWinDrag);
 
     // ============================
     // Notification panel — every open profile's incoming messages (WhatsApp

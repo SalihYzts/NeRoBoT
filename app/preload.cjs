@@ -71,11 +71,10 @@ contextBridge.exposeInMainWorld('nerobot', {
     isWindowMaximized: () => ipcRenderer.invoke('window:isMaximized'),
     closeWindow: () => ipcRenderer.invoke('window:close'),
     onWindowMaximizedChanged: (cb) => ipcRenderer.on('window:maximizedChanged', (_e, maximized) => cb(maximized)),
-    // Manual drag-to-move (see main.js's window:dragStart/dragMove handlers
-    // for why -webkit-app-region: drag alone isn't used for this bar).
-    startWindowDrag: () => ipcRenderer.invoke('window:dragStart'),
-    dragWindowMove: () => ipcRenderer.send('window:dragMove'),
-    endWindowDrag: () => ipcRenderer.send('window:dragEnd'),
+    // NOTE: no drag bridge here on purpose — window movement is native
+    // (-webkit-app-region: drag on #topbar's brand cluster and #spacer).
+    // Driving it from JS via setPosition() is silently ignored under
+    // native Wayland; see the #topbar comment in ui/index.html.
 
     // Global settings (Genel tab) — scoped to the given profile
     getSettings: (profileId) => ipcRenderer.invoke('settings:get', profileId),

@@ -1902,36 +1902,13 @@ ipcMain.handle('window:maximizeToggle', () => {
 ipcMain.handle('window:isMaximized', () => win?.isMaximized() ?? false);
 ipcMain.handle('window:close', () => win?.close());
 
-// Manual drag-to-move for #topbar (see its pointerdown/pointermove handlers
-// in index.html for why -webkit-app-region: drag isn't used there at all
-// anymore — placing a native drag region anywhere adjacent to #tabStrip
-// proved to intermittently swallow real clicks inside the tab strip on this
-// Chromium/Wayland/KWin combination). dragStart snapshots the cursor
-// position and the window's current position; every subsequent dragMove
-// re-reads the LIVE cursor position (screen.getCursorScreenPoint() — not
-// anything reported by the renderer, since renderer-relative coordinates
-// are meaningless mid-drag while the window they're relative to is the
-// thing moving) and applies the same delta to the snapshotted window
-// position. Confirmed working via a standalone setPosition() smoke test on
-// this exact machine, both under native Wayland and forced XWayland — no
-// platform-hint switch needed.
-let windowDragOrigin = null; // { cursorX, cursorY, winX, winY }
-ipcMain.handle('window:dragStart', () => {
-    if (!win) return;
-    if (win.isMaximized()) win.unmaximize();
-    const cursor = screen.getCursorScreenPoint();
-    const [winX, winY] = win.getPosition();
-    windowDragOrigin = { cursorX: cursor.x, cursorY: cursor.y, winX, winY };
-});
-ipcMain.on('window:dragMove', () => {
-    if (!win || !windowDragOrigin) return;
-    const cursor = screen.getCursorScreenPoint();
-    win.setPosition(
-        windowDragOrigin.winX + (cursor.x - windowDragOrigin.cursorX),
-        windowDragOrigin.winY + (cursor.y - windowDragOrigin.cursorY),
-    );
-});
-ipcMain.on('window:dragEnd', () => { windowDragOrigin = null; });
+// NOTE: there is deliberately no window:drag* IPC here. Moving the window
+// from the renderer via BrowserWindow.setPosition() does not work under
+// native Wayland (KDE/KWin, this app's default session) — a client cannot
+// position its own surface there, so the calls are silently ignored and the
+// title bar becomes undraggable. Window movement is handled by the
+// compositor through -webkit-app-region: drag on #topbar's brand cluster
+// and #spacer; see the long comment on #topbar in app/ui/index.html.
 
 ipcMain.handle('telegram:createProfile', async (_e, name, mode) => {
     // The app-wide api_id/api_hash is only needed for the bot's own MTProto
