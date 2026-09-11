@@ -34,7 +34,7 @@ export function createCommands({ store, utils, ratelimit }) {
         chatModels, saveChatModels,
         chatPrefixes, saveChatPrefixes,
     } = store;
-    const { sendText, getOllamaClient } = utils;
+    const { sendText, getAiClient } = utils;
     const { resetRateLimitBucket, resetAllRateLimitBuckets } = ratelimit;
 
 // ============================
@@ -723,7 +723,7 @@ async function Reset(msg, targetId) {
 //   chat <ID> <name>        → change the given chat's model override
 //   chat reset              → remove this chat's override (falls back to global)
 //   chat reset <ID>         → remove the given chat's override
-//   installed               → list installed Ollama models
+//   installed               → list models the provider has
 // ============================
 async function Model(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
@@ -746,10 +746,10 @@ async function Model(msg, targetId) {
     if (sub === 'installed') {
         let modelList = '';
         try {
-            const result = await getOllamaClient().list();
+            const result = await getAiClient().list();
             const models = result.models || [];
             if (models.length === 0) {
-                modelList = '(no models found — is Ollama running?)';
+                modelList = '(no models found — is the AI provider running?)';
             } else {
                 modelList = models
                     .map(m => {
@@ -768,7 +768,7 @@ async function Model(msg, targetId) {
         } catch (err) {
             modelList = `(could not fetch model list: ${err.message || err})`;
         }
-        return sendText(targetId, `Installed Ollama models:\n${modelList}`);
+        return sendText(targetId, `Available models:\n${modelList}`);
     }
 
     // ---- model global <name> ----
@@ -830,7 +830,7 @@ async function Model(msg, targetId) {
         `${state.debugPrefix}model chat <ID> <name>     — change a specific chat's model\n` +
         `${state.debugPrefix}model chat reset [ID]      — remove a chat's override\n` +
         `${state.debugPrefix}model list                 — show global model + all overrides\n` +
-        `${state.debugPrefix}model installed            — list installed Ollama models\n\n` +
+        `${state.debugPrefix}model installed            — list models the provider has\n\n` +
         `This chat is currently using: ${hasOverride ? chatModels[targetId] + ' (override)' : state.aiModel + ' (global)'}`
     );
 }

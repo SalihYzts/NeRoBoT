@@ -68,7 +68,7 @@ const DEFAULTS = {
     imageEnabled:          true,   // görsel okuma (vision)
     fileEnabled:           true,   // dosya okuma (pdf, word, txt, json, js...)
 
-    // Image generation — Ollama itself can't draw, so a request that's
+    // Image generation — chat models can't draw, so a request that's
     // clearly asking for a picture gets routed to a separate image backend
     // instead (see src/imagegen.js + ai.js's
     // classifyImageIntent()). On by default (Pollinations needs no API key,

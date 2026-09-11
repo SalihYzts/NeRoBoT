@@ -39,16 +39,16 @@ function truncateFileText(text) {
 // login (no saved session yet).
 // `onPasswordRequired(hint)` — called if the account has Telegram's cloud
 // password (2FA) enabled; must resolve with the password.
-// `getOllamaClient` — same as bot.js's createBot() (see its own doc): app/
-// main.js passes in a closure over readOllamaStatus() so a local/API mode
+// `getAiClient` — same as bot.js's createBot() (see its own doc): app/
+// main.js passes in a closure over readAiStatus() so a local/API mode
 // switch takes effect immediately, stashed onto `utils` for createAi/
 // createCommands to use as-is.
-export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessionString, onQr, onPasswordRequired, onIncomingMessage, abortSignal, getOllamaClient }) {
+export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessionString, onQr, onPasswordRequired, onIncomingMessage, abortSignal, getAiClient }) {
     const store = createProfileStore(profileDir);
     const { state, whitelist, blacklist, admins, noPrefixChats, groupChats, chatPrefixes } = store;
 
     const utils = createTelegramUtils(store);
-    utils.getOllamaClient = getOllamaClient;
+    utils.getAiClient = getAiClient;
     const { setClient, sendText, replyText, sendImage, isBotSentMessage, trackSentMessage, idVariants, setHasAny } = utils;
 
     const ratelimit = createRateLimiter(store, idVariants);

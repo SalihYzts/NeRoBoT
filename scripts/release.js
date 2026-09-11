@@ -73,13 +73,15 @@ const TOKEN_FILE = path.join(ROOT, '.release-token');
 const CLAUDE_KEY_FILE = path.join(ROOT, '.claude-api-key');
 const IS_WIN = process.platform === 'win32';
 
-// Değişiklik özetini changelog'a/duyuru metnine çeviren yerel model —
-// src/config.js'in aiModel varsayılanıyla aynı (uygulamanın
-// kendisi zaten kurulumda bunu bekliyor), başka bir yüklü modelle
-// değiştirmek istersen burayı düzenlemen yeterli. generateText önce Claude'u
-// dener (varsa anahtar), o da yoksa/başarısız olursa buraya düşer.
-const OLLAMA_URL = 'http://localhost:11434';
-const OLLAMA_MODEL = 'minimax-m3:cloud';
+// Changelog metnini yazan yerel model. Bu bir GELİŞTİRME aracı (uygulamanın
+// çalışma zamanı değil), yine de tek bir araca çivilenmemesi için adres ve
+// model ortam değişkeniyle değiştirilebiliyor:
+//     NEROBOT_AI_URL=http://127.0.0.1:1234 NEROBOT_AI_MODEL=... npm run release
+// Varsayılan, çoğu kurulumda hazır olan yerel sunucudur. generateText önce
+// Claude'u dener (varsa anahtar), yoksa buraya düşer; buraya da
+// ulaşılamazsa commit listesinden basit bir changelog üretilir.
+const LOCAL_AI_URL = process.env.NEROBOT_AI_URL || 'http://localhost:11434';
+const LOCAL_AI_MODEL = process.env.NEROBOT_AI_MODEL || 'minimax-m3:cloud';
 const CLAUDE_MODEL = 'claude-sonnet-5';
 
 function ask(question) {
@@ -307,10 +309,10 @@ async function ollamaGenerate(prompt, timeoutMs = 120000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+        const res = await fetch(`${LOCAL_AI_URL}/api/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: OLLAMA_MODEL, prompt, stream: false }),
+            body: JSON.stringify({ model: LOCAL_AI_MODEL, prompt, stream: false }),
             signal: controller.signal,
         });
         if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);

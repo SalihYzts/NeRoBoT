@@ -1594,8 +1594,46 @@
                         <div class="section">
                             <div class="sectionTitle" id="ollamaConnectionTitle">Bağlantı</div>
                             <div class="hint" id="ollamaConnectionStatusText">Şu an: —</div>
-                            <button id="ollamaConnectionSwitchToApiBtn" class="miniBtn" style="width:100%; margin-top:8px;">API Anahtarı Kullan</button>
-                            <button id="ollamaConnectionSwitchToLocalBtn" class="miniBtn" style="width:100%; margin-top:8px;">Yerel Ollama Bağlantısı</button>
+                            <!-- Sağlayıcı listesi burada SABİT DEĞİL: main.js'in
+                                 ai:getProviders kanalı üzerinden src/ai-provider.js
+                                 registry'sinden doldurulur. Yeni bir araç eklemek
+                                 bu HTML'i değiştirmez. -->
+                            <div class="field" style="margin-top:8px;">
+                                <label class="name" id="aiModeLabel">Nerede çalışsın</label>
+                                <select id="aiModeSelect">
+                                    <option value="local">Kendi bilgisayarımda / kendi sunucumda</option>
+                                    <option value="agent">Kurulu bir AI aracı (Claude Code, Hermes…)</option>
+                                    <option value="api">Bulut sağlayıcı (API anahtarı)</option>
+                                </select>
+                            </div>
+                            <div class="field" id="aiLocalRuntimeField">
+                                <label class="name" id="aiLocalRuntimeLabel">Yerel çalışma zamanı</label>
+                                <select id="aiLocalRuntimeSelect"></select>
+                            </div>
+                            <div class="field" id="aiLocalEndpointField">
+                                <label class="name" id="aiLocalEndpointLabel">Sunucu adresi</label>
+                                <div class="btnRow">
+                                    <input type="text" id="aiLocalEndpointInput" placeholder="sunucu adresi">
+                                    <button id="aiTestConnectionBtn" class="miniBtn">Dene</button>
+                                </div>
+                            </div>
+                            <!-- Kurulu CLI ajanları — liste main.js'in taramasından
+                                 gelir (ai:getProviders → cliAgents), burada sabit
+                                 araç adı yok. Kurulu olmayanlar devre dışı görünür. -->
+                            <div class="field" id="aiAgentField" style="display:none;">
+                                <label class="name" id="aiAgentLabel">Araç</label>
+                                <select id="aiAgentSelect"></select>
+                            </div>
+                            <div class="hint" id="aiAgentLimitsHint" style="display:none; margin-top:6px;"></div>
+                            <div class="field" id="aiCloudProviderField" style="display:none;">
+                                <label class="name" id="aiCloudProviderLabel">Sağlayıcı</label>
+                                <select id="aiCloudProviderSelect"></select>
+                            </div>
+                            <div class="field" id="aiCloudBaseUrlField" style="display:none;">
+                                <label class="name" id="aiCloudBaseUrlLabel">Adres</label>
+                                <input type="text" id="aiCloudBaseUrlInput" placeholder="https://...">
+                            </div>
+                            <div class="hint" id="aiConnectionProbeText" style="margin-top:6px;"></div>
                             <button id="ollamaConnectionChangeKeyBtn" class="miniBtn" style="width:100%; margin-top:8px;">Anahtarı Değiştir</button>
                         </div>
                         <div class="section">
@@ -2167,7 +2205,7 @@
          in the script) — asks once whether to install Ollama locally or use
          Ollama's hosted Cloud API with a key instead, so no one HAS to
          install anything just to try the app's AI features. The choice is
-         saved (ollamaConnectionMode) and reused on every later gate check —
+         saved (aiConnectionMode) and reused on every later gate check —
          this panel only ever shows again if the user explicitly switches
          modes from Ayarlar → NeRoChAt's "Bağlantı" section. -->
     <div id="ollamaModeChoiceOverlay" class="modalOverlay">
@@ -2184,17 +2222,18 @@
         </div>
     </div>
 
-    <!-- Opened whenever ollamaConnectionMode is 'api' but no key is saved
+    <!-- Opened whenever aiConnectionMode is 'api' but no key is saved
          yet (first choice, or switched to API mode from Ayarlar without one)
          — also reachable any time from Ayarlar → NeRoChAt to change an
-         existing key. "Nasıl Alınır?" is plain numbered steps + a button
-         that opens the REAL ollama.com page in the user's own browser,
-         deliberately not a screenshot baked into the app (always current,
-         and nothing here can actually capture/verify a live one anyway). -->
+         existing key. Başlık, ipucu ve "Nasıl Alınır?" adımları SEÇİLİ
+         sağlayıcıya göre doldurulur (bkz. openOllamaApiKeyPanel) — burada
+         sabit bir sağlayıcı adı yok. Bağlantı düğmesi sağlayıcının GERÇEK
+         sayfasını kullanıcının kendi tarayıcısında açar, uygulamaya gömülü
+         bir ekran görüntüsü değil (böylece hep güncel). -->
     <div id="ollamaApiKeyOverlay" class="modalOverlay">
         <div class="modalPanel">
             <div class="modalHeader">
-                <span id="ollamaApiKeyTitle">Ollama API Anahtarı</span>
+                <span id="ollamaApiKeyTitle">API Anahtarı</span>
                 <button class="modalClose" id="ollamaApiKeyClose">✕</button>
             </div>
             <div class="miniTabBar">
@@ -2203,21 +2242,16 @@
             </div>
             <div class="modalBody">
                 <div id="tab-akey-enter">
-                    <div class="hint" id="ollamaApiKeyHint">Ollama Cloud hesabından aldığın API anahtarını buraya yapıştır.</div>
+                    <div class="hint" id="ollamaApiKeyHint">Sağlayıcıdan aldığın API anahtarını buraya yapıştır.</div>
                     <div class="field">
-                        <input type="password" id="ollamaApiKeyInput" placeholder="ollama_...">
+                        <input type="password" id="ollamaApiKeyInput" placeholder="sk-...">
                     </div>
                     <div class="hint warn" id="ollamaApiKeyError" style="display:none"></div>
                     <button id="ollamaApiKeySaveBtn" class="miniBtn" style="width:100%">Kaydet</button>
                 </div>
                 <div id="tab-akey-guide" style="display:none">
-                    <div class="hint" id="ollamaApiKeyGuideSteps">
-                        1. ollama.com adresine git ve giriş yap<br>
-                        2. Sağ üstten hesap menüsü → Settings'e git<br>
-                        3. API Keys sekmesinde "Create API Key" ile yeni bir anahtar oluştur<br>
-                        4. Anahtarı kopyala ve "Anahtar Gir" sekmesine yapıştır
-                    </div>
-                    <button id="ollamaApiKeyOpenSiteBtn" class="miniBtn" style="width:100%; margin-top:10px;">ollama.com/settings/keys sayfasını aç</button>
+                    <div class="hint" id="ollamaApiKeyGuideSteps"></div>
+                    <button id="ollamaApiKeyOpenSiteBtn" class="miniBtn" style="width:100%; margin-top:10px;">Anahtar sayfasını aç</button>
                 </div>
             </div>
         </div>
@@ -3111,7 +3145,7 @@
             // visibility every time Uygulama is opened, same as
             // loadOllamaGeneralTab() already does for whoever's looking at
             // NeRoChAt's tab instead.
-            updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+            await updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
             return;
         }
 
@@ -3756,7 +3790,16 @@
         });
         try {
             const apiMessages = neroHistory.map(({ role, content }) => ({ role, content }));
-            await window.nerobot.sendOllamaChat(model, apiMessages);
+            const res = await window.nerobot.sendOllamaChat(model, apiMessages);
+            // Akış parçaları ayrı IPC mesajı; tek parçalı sağlayıcılarda (CLI
+            // ajanları) son parça bu await'ten SONRA teslim olup aşağıdaki
+            // off()'a yakalanabiliyor → boş mesaj. Dönüş değeri garanti.
+            if (!full && res?.content) {
+                full = res.content;
+                aiDiv.classList.remove('pending');
+                aiDiv.textContent = full;
+                neroPopupMessages.scrollTop = neroPopupMessages.scrollHeight;
+            }
         } finally {
             off?.();
             if (full) neroHistory.push({ role: 'assistant', content: full });
@@ -4985,44 +5028,175 @@
         ollamaImageGenApiKeyOpenai.value = status.imageGenApiKeyOpenai || '';
         ollamaImageGenApiKeyStability.value = status.imageGenApiKeyStability || '';
         updateOllamaImageGenVisibility();
-        updateOllamaConnectionSection(status);
+        await updateOllamaConnectionSection(status);
     }
 
     // "Bağlantı" section — mirrors ensureOllamaOrPrompt's own local/api
-    // distinction (see above), just as an explicit later-switch instead of
-    // the one-time first-choice panel. Exactly one of the two switch
+    // distinction (see above), as an explicit later-switch instead of the
+    // one-time first-choice panel. The provider lists come from the registry
+    // (ai:getProviders), not from this file. Exactly one of the two switch
     // buttons ever shows — never both, never neither (see the plan this
     // was built from: "biri açıkken diğeri kapalı").
     function maskApiKey(key) {
         if (!key) return '';
         return key.length <= 4 ? '••••' : '•'.repeat(Math.max(4, key.length - 4)) + key.slice(-4);
     }
-    function updateOllamaConnectionSection(status) {
-        const isApi = status.ollamaConnectionMode === 'api';
-        document.getElementById('ollamaConnectionStatusText').textContent = isApi
-            ? `Şu an: API Anahtarı (${maskApiKey(status.ollamaCloudApiKey) || 'kaydedilmedi'})`
-            : 'Şu an: Yerel Ollama';
-        document.getElementById('ollamaConnectionSwitchToApiBtn').style.display = isApi ? 'none' : '';
-        document.getElementById('ollamaConnectionSwitchToLocalBtn').style.display = isApi ? '' : 'none';
-        document.getElementById('ollamaConnectionChangeKeyBtn').style.display = isApi ? '' : 'none';
-        document.getElementById('ollamaModelsSection').style.display = isApi ? 'none' : '';
-        document.getElementById('ollamaCloudModelHint').style.display = isApi ? '' : 'none';
+    // Bağlantı bölümü — sağlayıcı listesi registry'den gelir (ai:getProviders),
+    // burada sabit bir araç adı yok. Yeni bir çalışma zamanı/sağlayıcı eklemek
+    // src/ai-provider.js'e bir satır eklemekten ibarettir; bu fonksiyon
+    // değişmez.
+    let aiProvidersCache = null;
+    async function aiProviders() {
+        if (!aiProvidersCache) aiProvidersCache = await window.nerobot.getAiProviders();
+        return aiProvidersCache;
     }
-    document.getElementById('ollamaConnectionSwitchToApiBtn').addEventListener('click', async () => {
-        const status = await window.nerobot.setOllamaConnectionMode('api');
-        updateOllamaConnectionSection(status);
-        if (!status.ollamaCloudApiKey) await openOllamaApiKeyPanel();
-        updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+
+    function fillSelect(select, items, selectedId) {
+        select.innerHTML = '';
+        for (const item of items) {
+            const opt = document.createElement('option');
+            opt.value = item.id;
+            opt.textContent = item.label;
+            select.appendChild(opt);
+        }
+        if (selectedId) select.value = selectedId;
+    }
+
+    async function updateOllamaConnectionSection(status) {
+        const { localRuntimes, cloudProviders, cliAgents } = await aiProviders();
+        const mode = ['api', 'agent'].includes(status.aiConnectionMode)
+            ? status.aiConnectionMode : 'local';
+        const isApi = mode === 'api';
+        const isAgent = mode === 'agent';
+        const isLocal = mode === 'local';
+
+        document.getElementById('aiModeSelect').value = mode;
+        document.getElementById('aiLocalRuntimeField').style.display = isLocal ? '' : 'none';
+        document.getElementById('aiLocalEndpointField').style.display = isLocal ? '' : 'none';
+        document.getElementById('aiAgentField').style.display = isAgent ? '' : 'none';
+        document.getElementById('aiAgentLimitsHint').style.display = isAgent ? '' : 'none';
+        document.getElementById('aiCloudProviderField').style.display = isApi ? '' : 'none';
+
+        // Kurulu ajanlar — kurulu OLMAYANLAR da görünür ama seçilemez, ve
+        // neden seçilemediği yazılı (gizlemek "neden yok?" sorusunu doğurur).
+        const agentSelect = document.getElementById('aiAgentSelect');
+        agentSelect.innerHTML = '';
+        for (const a of (cliAgents || [])) {
+            const opt = document.createElement('option');
+            opt.value = a.id;
+            opt.textContent = a.installed ? a.label : `${a.label} — kurulu değil`;
+            opt.disabled = !a.installed;
+            agentSelect.appendChild(opt);
+        }
+        const kuruluAjan = (cliAgents || []).find(a => a.id === status.aiAgentId && a.installed)
+            || (cliAgents || []).find(a => a.installed);
+        if (kuruluAjan) agentSelect.value = status.aiAgentId || kuruluAjan.id;
+        document.getElementById('aiAgentLimitsHint').textContent =
+            'Bu modda API anahtarı gerekmez — aracın kendi oturumu kullanılır. ' +
+            'Vektör hafıza, görsel okuma ve model indirme bu modda çalışmaz; ' +
+            'yanıtlar birkaç saniye daha uzun sürebilir.';
+
+        const runtimeId = status.aiLocalRuntime || localRuntimes[0].id;
+        const runtime = localRuntimes.find(r => r.id === runtimeId) || localRuntimes[0];
+        fillSelect(document.getElementById('aiLocalRuntimeSelect'), localRuntimes, runtime.id);
+        const endpointInput = document.getElementById('aiLocalEndpointInput');
+        endpointInput.value = status.aiLocalEndpoint || runtime.defaultEndpoint || '';
+        // Örnek adres registry'den gelir — burada sabit bir port yok.
+        endpointInput.placeholder = runtime.defaultEndpoint || 'http://sunucu:port';
+
+        const providerId = status.aiCloudProvider || cloudProviders[0].id;
+        const provider = cloudProviders.find(p => p.id === providerId) || cloudProviders[0];
+        fillSelect(document.getElementById('aiCloudProviderSelect'), cloudProviders, provider.id);
+        // Yalnızca "Diğer (OpenAI-uyumlu)" kendi adresini ister.
+        document.getElementById('aiCloudBaseUrlField').style.display =
+            (isApi && provider.custom) ? '' : 'none';
+        document.getElementById('aiCloudBaseUrlInput').value = status.aiCloudBaseUrl || '';
+
+        // Ham anahtar renderer'a hiç gelmiyor (main.js's ollama:getStatus) —
+        // yalnızca "kayıtlı mı" bilgisi geliyor.
+        const keyPresent = !!(status.aiApiKeyPresent || {})[provider.id];
+        document.getElementById('ollamaConnectionStatusText').textContent = isApi
+            ? `Şu an: ${provider.label} (${keyPresent ? 'anahtar kayıtlı' : 'anahtar kaydedilmedi'})`
+            : isAgent
+                ? `Şu an: ${kuruluAjan ? kuruluAjan.label : 'kurulu araç yok'}`
+                : `Şu an: ${runtime.label}`;
+        document.getElementById('ollamaConnectionChangeKeyBtn').style.display = isApi ? '' : 'none';
+
+        // Model indirme/silme yalnızca bunu destekleyen sağlayıcılarda anlamlı
+        // (bkz. registry'deki canPull) — diğerlerinde kullanıcı modelleri
+        // kendi arayüzünden yönetir, bu yüzden bölümü göstermek yanıltıcı olur.
+        // Ajan modunda model listesi/indirme yok (ajan kendi modelini yönetir).
+        const canManageModels = isLocal && runtime.canPull;
+        document.getElementById('ollamaModelsSection').style.display = canManageModels ? '' : 'none';
+        document.getElementById('ollamaCloudModelHint').style.display = canManageModels ? 'none' : '';
+    }
+
+    // "Ulaşılamıyor" ile "ulaşılıyor ama model yok" AYRI durumlar — çözümleri
+    // farklı olduğu için mesajları da farklı.
+    async function refreshAiProbe() {
+        const el = document.getElementById('aiConnectionProbeText');
+        el.textContent = 'Deneniyor…';
+        const probe = await window.nerobot.probeAiConnection();
+        if (!probe.online) {
+            el.textContent = probe.error || 'Bağlanılamadı.';
+        } else if (!probe.models.length) {
+            el.textContent = `${probe.label}: bağlantı çalışıyor ama hiç model yok.`;
+        } else {
+            el.textContent = `${probe.label}: bağlı — ${probe.models.length} model.`;
+        }
+    }
+
+    document.getElementById('aiModeSelect').addEventListener('change', async (e) => {
+        const mode = e.target.value;
+        await window.nerobot.setOllamaConnectionMode(mode);
+        const status = await window.nerobot.getOllamaStatus();
+        if (mode === 'agent') {
+            // İlk kurulu ajanı seç — kullanıcı ayrıca bir adım atmak zorunda kalmasın.
+            const { cliAgents } = await aiProviders();
+            const ilk = (cliAgents || []).find(a => a.installed);
+            if (ilk) await window.nerobot.setAiAgent(status.aiAgentId || ilk.id);
+        }
+        const cloudId = status.aiCloudProvider || (await aiProviders()).cloudProviders[0].id;
+        if (mode === 'api' && !(status.aiApiKeyPresent || {})[cloudId]) await openOllamaApiKeyPanel();
+        await updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+        await loadOllamaGeneralTab();
     });
-    document.getElementById('ollamaConnectionSwitchToLocalBtn').addEventListener('click', async () => {
-        const ok = await ensureLocalOllamaOrPrompt();
-        if (ok) await window.nerobot.setOllamaConnectionMode('local');
-        updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
-        if (ok) await loadOllamaGeneralTab(); // model list is meaningful again — refresh it
+    document.getElementById('aiLocalRuntimeSelect').addEventListener('change', async (e) => {
+        // Adres boş bırakılır ki main.js o runtime'ın varsayılanına dönsün —
+        // önceki runtime'ın portu yeni seçimde yanlış olurdu.
+        await window.nerobot.setAiLocalRuntime(e.target.value, '');
+        await updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+        await refreshAiProbe();
+        await loadOllamaGeneralTab();
+    });
+    document.getElementById('aiLocalEndpointInput').addEventListener('change', async (e) => {
+        const runtimeId = document.getElementById('aiLocalRuntimeSelect').value;
+        await window.nerobot.setAiLocalRuntime(runtimeId, e.target.value.trim());
+        await refreshAiProbe();
+        showSaved();
+    });
+    document.getElementById('aiAgentSelect').addEventListener('change', async (e) => {
+        await window.nerobot.setAiAgent(e.target.value);
+        await updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+        await refreshAiProbe();
+        await loadOllamaGeneralTab();
+    });
+    document.getElementById('aiTestConnectionBtn').addEventListener('click', refreshAiProbe);
+    document.getElementById('aiCloudProviderSelect').addEventListener('change', async (e) => {
+        await window.nerobot.setAiCloudProvider(e.target.value);
+        const status = await window.nerobot.getOllamaStatus();
+        await updateOllamaConnectionSection(status);
+        if (!(status.aiApiKeyPresent || {})[e.target.value]) await openOllamaApiKeyPanel();
+        await updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+    });
+    document.getElementById('aiCloudBaseUrlInput').addEventListener('change', async (e) => {
+        const providerId = document.getElementById('aiCloudProviderSelect').value;
+        await window.nerobot.setAiCloudProvider(providerId, e.target.value.trim());
+        showSaved();
     });
     document.getElementById('ollamaConnectionChangeKeyBtn').addEventListener('click', async () => {
         await openOllamaApiKeyPanel();
-        updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+        await updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
     });
 
     ollamaImageGenEnabled.addEventListener('change', async () => {
@@ -5656,8 +5830,29 @@
     // Opens the API-key entry panel (#ollamaApiKeyOverlay) — resolves true
     // once a key is saved, false if closed without saving. Reused both by
     // the gate below (mode already 'api' but no key yet) and Ayarlar →
-    // NeRoChAt's own "Değiştir"/"API Anahtarı Kullan" buttons.
-    function openOllamaApiKeyPanel() {
+    // NeRoChAt's own key button.
+    //
+    // Panelin başlığı/ipucu/adımları SEÇİLİ sağlayıcıya göre doldurulur:
+    // anahtarın nereden alınacağı sağlayıcıya göre değişir, sabit bir
+    // ollama.com metni yanlış sağlayıcıda kullanıcıyı yanlış yere gönderirdi.
+    let aiKeyPageUrl = null;
+    async function openOllamaApiKeyPanel() {
+        const { cloudProviders } = await aiProviders();
+        const status = await window.nerobot.getOllamaStatus();
+        const provider = cloudProviders.find(p => p.id === status.aiCloudProvider) || cloudProviders[0];
+        aiKeyPageUrl = provider.keyUrl || null;
+
+        document.getElementById('ollamaApiKeyTitle').textContent = `${provider.label} API Anahtarı`;
+        document.getElementById('ollamaApiKeyHint').textContent =
+            `${provider.label} hesabından aldığın API anahtarını buraya yapıştır.`;
+        document.getElementById('ollamaApiKeyGuideSteps').innerHTML =
+            `1. ${provider.keyHint} adresine git ve giriş yap<br>` +
+            '2. Yeni bir API anahtarı oluştur<br>' +
+            '3. Anahtarı kopyala ve "Anahtar Gir" sekmesine yapıştır';
+        const openBtn = document.getElementById('ollamaApiKeyOpenSiteBtn');
+        openBtn.style.display = aiKeyPageUrl ? '' : 'none';
+        openBtn.textContent = aiKeyPageUrl ? `${provider.keyHint} sayfasını aç` : '';
+
         return new Promise((resolve) => {
             const overlay = document.getElementById('ollamaApiKeyOverlay');
             const closeBtn = document.getElementById('ollamaApiKeyClose');
@@ -5706,7 +5901,8 @@
     document.getElementById('tabBtnApiKeyEnter').addEventListener('click', () => switchApiKeyTab('enter'));
     document.getElementById('tabBtnApiKeyGuide').addEventListener('click', () => switchApiKeyTab('guide'));
     document.getElementById('ollamaApiKeyOpenSiteBtn').addEventListener('click', () => {
-        window.nerobot.openExternalLink('https://ollama.com/settings/keys');
+        // Seçili sağlayıcının kendi anahtar sayfası (registry'den gelir).
+        if (aiKeyPageUrl) window.nerobot.openExternalLink(aiKeyPageUrl);
     });
 
     // ============================
@@ -5747,24 +5943,24 @@
     });
 
     // Makes sure the profile's chosen connection is actually ready to use —
-    // installs/connects LOCAL Ollama, or makes sure an API key is saved,
-    // whichever ollamaConnectionMode currently says (see Ayarlar →
+    // connects the selected local runtime, or makes sure an API key is saved,
+    // whichever aiConnectionMode currently says (see Ayarlar →
     // NeRoChAt's "Bağlantı" section to switch). The very first time this
     // runs (mode never chosen), asks once via showOllamaModeChoicePanel and
     // remembers the answer — every call after that is silent unless
     // something's actually missing (not installed yet / no key saved yet).
     // Resolves true if ready to go, false if the user backed out or
-    // install/key-entry failed. Used by the Ollama tile, the AI Bot toggle,
-    // and Ayarlar → NeRoChAt's own connection buttons.
+    // install/key-entry failed. Used by the NeRoChAt tile, the AI Bot
+    // toggle, and Ayarlar → NeRoChAt's own connection section.
     async function ensureOllamaOrPrompt() {
         let status = await window.nerobot.getOllamaStatus();
 
-        if (!status.ollamaConnectionMode) {
-            // Someone with an already-working local install from before this
+        if (!status.aiConnectionMode) {
+            // Someone with an already-working local setup from before this
             // choice existed shouldn't suddenly get asked to pick a mode —
             // silently default them to 'local' instead of interrupting a
             // setup that's already fine. Only genuinely fresh installs (no
-            // Ollama, no mode chosen yet) see the picker.
+            // local runtime reachable, no mode chosen) see the picker.
             if (await window.nerobot.checkOllamaInstalled()) {
                 status = await window.nerobot.setOllamaConnectionMode('local');
             } else {
@@ -5774,8 +5970,9 @@
             }
         }
 
-        if (status.ollamaConnectionMode === 'api') {
-            if (status.ollamaCloudApiKey) return true;
+        if (status.aiConnectionMode === 'api') {
+            const cloudId = status.aiCloudProvider || (await aiProviders()).cloudProviders[0].id;
+            if ((status.aiApiKeyPresent || {})[cloudId]) return true;
             return await openOllamaApiKeyPanel();
         }
         return await ensureLocalOllamaOrPrompt();

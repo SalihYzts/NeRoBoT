@@ -51,18 +51,18 @@ function truncateFileText(text) {
 // needs to exist either way, whatsapp-web.js has no other way to drive the
 // session, this just keeps it a plain manual WhatsApp Web tab with no bot
 // reading/replying to anything.
-// `getOllamaClient` — resolves which Ollama instance (local daemon or
-// Ollama Cloud API, see src/ollama-client.js) this profile's AI
+// `getAiClient` — resolves which AI provider (local runtime or
+// a cloud API, see src/ai-client.js) this profile's AI
 // calls should use right now; app/main.js passes in a closure over its own
-// readOllamaStatus() so a mode switch takes effect on the very next call,
+// readAiStatus() so a provider switch takes effect on the very next call,
 // no restart needed. Stashed onto `utils` (rather than added to createAi/
 // createCommands' own signatures) since both already receive `utils` as-is.
-export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, userAgent, automationEnabled = true, onIncomingMessage, getOllamaClient } = {}) {
+export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, userAgent, automationEnabled = true, onIncomingMessage, getAiClient } = {}) {
     const store = createProfileStore(profileDir);
     const { state, whitelist, blacklist, admins, noPrefixChats, groupChats, chatPrefixes } = store;
 
     const utils = createUtils(store);
-    utils.getOllamaClient = getOllamaClient;
+    utils.getAiClient = getAiClient;
     const { setClient, sendText, replyText, sendImage, isBotSentMessage, idVariants, setHasAny } = utils;
 
     const ratelimit = createRateLimiter(store, idVariants);
@@ -135,7 +135,7 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
 
             // ============================
             // Media handling
-            // Images are sent to Ollama as base64 (vision models).
+            // Images are sent to the provider as base64 (vision models).
             // PDF, Word, and text-based files are extracted to plain text
             // and prepended to the prompt so any model can read them.
             //
@@ -175,7 +175,7 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                         || filename.endsWith('.docx') || filename.endsWith('.doc');
 
                     if (mime.startsWith('image/')) {
-                        // Görsel → Ollama vision
+                        // Görsel → vision modeli
                         if (!state.imageEnabled) {
                             await sendText(chatId, '⚠️ Image reading is currently disabled. To enable: !media image');
                             if (!rawPrompt) return;

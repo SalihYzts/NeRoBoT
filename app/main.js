@@ -39,7 +39,11 @@ import {
 } from '../src/ai.js';
 import { createTelegramBot } from '../src/telegram-bot.js';
 import { getEmbeddedTelegramCredentials } from '../src/telegram-default-app.js';
-import { getOllamaClient as resolveOllamaClient } from '../src/ollama-client.js';
+import { createAiClient, probeConnection } from '../src/ai-client.js';
+import { LOCAL_RUNTIMES, CLOUD_PROVIDERS, resolveConnection, findLocalRuntime,
+         findCloudProvider, apiKeyFor, migrateLegacyStatus,
+         ALLOWED_EXTERNAL_HOSTS } from '../src/ai-provider.js';
+import { detectCliAgents } from '../src/ai-agents.js';
 import QRCode from 'qrcode';
 // electron-updater is CommonJS — its named exports aren't statically
 // analyzable from an ESM import, hence the default-import + destructure
@@ -89,7 +93,11 @@ const DB_DIR = path.join(DATA_ROOT, 'NeRoBoT_db');
     }
 }
 
-const OLLAMA_STATUS_FILE = path.join(DB_DIR, 'ollama.json');
+const AI_STATUS_FILE = path.join(DB_DIR, 'ai.json');
+// Bu dosya v4.4.30'a kadar 'ollama.json' idi ve alanları tek bir sağlayıcıya
+// göre adlandırılmıştı. readAiStatus() eskisini bir kez okuyup yeni şemaya
+// taşır (bkz. migrateLegacyStatus) — kullanıcı ayarlarını kaybetmesin.
+const LEGACY_STATUS_FILE = path.join(DB_DIR, 'ollama.json');
 // The mini Ollama chat window's saved conversations — independent of any
 // WhatsApp profile (it's a standalone Home-screen shortcut, see the
 // Ollama-tile design note in src/ollama-installer.js).
@@ -1322,7 +1330,7 @@ async function attemptBotStart(session) {
         // message/AI dispatch (see createBot's automationEnabled doc).
         automationEnabled: session.mode !== 'web',
         onIncomingMessage: (payload) => pushNotification(session, payload),
-        getOllamaClient: currentOllamaClient,
+        getAiClient: currentAiClient,
     });
     session.client = built.client;
     session.reportError = built.reportError;
@@ -1573,7 +1581,7 @@ async function openTelegramProfile(session) {
         apiHash: appCreds.apiHash,
         sessionString,
         abortSignal: controller.signal,
-        getOllamaClient: currentOllamaClient,
+        getAiClient: currentAiClient,
         onQr: async (url) => {
             try {
                 const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 280 });
@@ -2183,32 +2191,107 @@ ipcMain.handle('app:helpText', (_e, lang) => {
 });
 
 // ============================
-// IPC — Ollama (install gate + the small built-in chat shortcut)
+// IPC — AI sağlayıcısı (bağlantı + yerleşik küçük sohbet kısayolu)
 // ============================
-function readOllamaStatus() {
+// Eski şemadan göç + izinli dış bağlantı alan adları registry'de
+// (src/ai-provider.js) — sağlayıcıya özgü her bilgi tek yerde.
+function readAiStatus() {
     try {
-        return JSON.parse(fs.readFileSync(OLLAMA_STATUS_FILE, 'utf8'));
-    } catch (_) {
-        return { shortcutCreated: false };
-    }
+        return migrateLegacyStatus(JSON.parse(fs.readFileSync(AI_STATUS_FILE, 'utf8')));
+    } catch (_) {}
+    try {
+        // İlk çalıştırmada eski dosyadan devral ve yenisine yaz.
+        const legacy = migrateLegacyStatus(JSON.parse(fs.readFileSync(LEGACY_STATUS_FILE, 'utf8')));
+        writeAiStatus(legacy);
+        return legacy;
+    } catch (_) {}
+    return { shortcutCreated: false };
 }
 
-function writeOllamaStatus(status) {
+function writeAiStatus(status) {
     fs.mkdirSync(DB_DIR, { recursive: true });
-    fs.writeFileSync(OLLAMA_STATUS_FILE, JSON.stringify(status, null, 2));
+    fs.writeFileSync(AI_STATUS_FILE, JSON.stringify(status, null, 2));
 }
 
-// The one place every chat()/list()/embed()/etc. call in this file resolves
-// its Ollama client from — reads the just-saved connection mode
-// fresh every time (readOllamaStatus is a cheap sync file read), so
-// switching between local Ollama and the Ollama Cloud API in Ayarlar →
-// NeRoChAt takes effect on the very next call, no restart needed. See
-// src/ollama-client.js's own doc for what the two modes mean.
-function currentOllamaClient() {
-    return resolveOllamaClient(readOllamaStatus());
+// Bu dosyadaki her chat()/list()/embed() çağrısının istemcisini aldığı tek
+// yer — kaydedilmiş ayarları her seferinde taze okur (readAiStatus ucuz bir
+// senkron dosya okuması), böylece Ayarlar'dan sağlayıcı değiştirmek bir
+// sonraki çağrıda geçerli olur, yeniden başlatma gerekmez.
+function currentAiClient() {
+    return createAiClient(readAiStatus());
 }
 
-ipcMain.handle('ollama:checkInstalled', () => isOllamaInstalled());
+// Kurulum yardımcısı YALNIZCA Ollama için anlamlı (tek otomatik kurulabilen
+// yerel çalışma zamanı o). Başka bir runtime seçiliyse "kurulu değil" gibi
+// davranmak yanlış olurdu — o sunucuyu kullanıcı kendi başlatıyor.
+function selectedRuntimeIsOllama() {
+    const status = readAiStatus();
+    if (status.aiConnectionMode === 'api' || status.aiConnectionMode === 'agent') return false;
+    return findLocalRuntime(status.aiLocalRuntime).id === 'ollama';
+}
+
+ipcMain.handle('ollama:checkInstalled', async () => {
+    if (!selectedRuntimeIsOllama()) return true; // kurulum gerektirmeyen sağlayıcı
+    return isOllamaInstalled();
+});
+
+// Seçilebilir sağlayıcı listesi — UI bunu kendi elinde tutmuyor, registry
+// tek kaynak (src/ai-provider.js).
+ipcMain.handle('ai:getProviders', () => ({
+    // Bilgisayarda KURULU olan CLI ajanları (Claude Code, Hermes …) — taze
+    // taranır, kurulum/kaldırma arada değişmiş olabilir. Kurulu olmayanlar da
+    // döner (installed:false) ki UI "neden yok?" sorusunu cevaplayabilsin.
+    cliAgents: detectCliAgents(),
+    localRuntimes: LOCAL_RUNTIMES.map(({ id, label, dialect, defaultEndpoint, canPull, custom }) =>
+        ({ id, label, dialect, defaultEndpoint, canPull, custom: !!custom })),
+    cloudProviders: CLOUD_PROVIDERS.map(({ id, label, dialect, baseUrl, needsKey, keyHint, keyUrl, custom }) =>
+        ({ id, label, dialect, baseUrl, needsKey, keyHint, keyUrl: keyUrl || null, custom: !!custom })),
+}));
+
+// Sunucu ayakta mı + hangi modeller var? "Ulaşılamıyor" ile "ulaşılıyor ama
+// model yok" ayrı durumlar (bkz. ai-client.js's probeConnection).
+ipcMain.handle('ai:probeConnection', () => probeConnection(readAiStatus()));
+
+// Seçili bağlantının özeti — UI durum satırı için.
+ipcMain.handle('ai:getConnection', () => {
+    const conn = resolveConnection(readAiStatus());
+    return {
+        mode: conn.mode, label: conn.label, providerId: conn.providerId,
+        baseUrl: conn.baseUrl, canPull: conn.canPull,
+        canEmbed: conn.canEmbed !== false,
+        hasModelList: conn.hasModelList !== false,
+        missingKey: conn.missingKey, missingEndpoint: conn.missingEndpoint,
+    };
+});
+
+// Yerel çalışma zamanını seç. Adres verilmezse o runtime'ın varsayılanına
+// döner (ve eski runtime'dan kalan adres temizlenir).
+ipcMain.handle('ai:setLocalRuntime', (_e, runtimeId, endpoint) => {
+    const status = readAiStatus();
+    const runtime = findLocalRuntime(runtimeId);
+    status.aiLocalRuntime = runtime.id;
+    status.aiLocalEndpoint = endpoint || runtime.defaultEndpoint || '';
+    writeAiStatus(status);
+    return status;
+});
+
+// Kurulu bir CLI ajanını seç (mod da 'agent' olur — ayrı bir adım gerekmesin).
+ipcMain.handle('ai:setAgent', (_e, agentId) => {
+    const status = readAiStatus();
+    status.aiConnectionMode = 'agent';
+    status.aiAgentId = agentId;
+    writeAiStatus(status);
+    return status;
+});
+
+ipcMain.handle('ai:setCloudProvider', (_e, providerId, baseUrl) => {
+    const status = readAiStatus();
+    status.aiCloudProvider = providerId;
+    if (baseUrl !== undefined) status.aiCloudBaseUrl = baseUrl || '';
+    writeAiStatus(status);
+    return status;
+});
+
 
 // Streams progress back over 'ollama:installProgress' while the single
 // `install` call is in flight, then resolves with the final result.
@@ -2220,12 +2303,24 @@ ipcMain.handle('ollama:install', async () => {
     return result;
 });
 
-ipcMain.handle('ollama:getStatus', () => readOllamaStatus());
+// UI'a giden kopyada anahtarların KENDİSİ yok — yalnızca "var mı?" bilgisi.
+// Renderer'ın anahtarı görmeye ihtiyacı yok (maskeleme zaten gösterim için),
+// ham sırrı pencereye göndermemek daha doğru.
+ipcMain.handle('ollama:getStatus', () => {
+    const status = readAiStatus();
+    const keys = status.aiApiKeys || {};
+    return {
+        ...status,
+        aiApiKeys: undefined,
+        aiApiKeyPresent: Object.fromEntries(
+            Object.entries(keys).map(([id, k]) => [id, !!k])),
+    };
+});
 
 ipcMain.handle('ollama:setShortcutCreated', (_e, created) => {
-    const status = readOllamaStatus();
+    const status = readAiStatus();
     status.shortcutCreated = !!created;
-    writeOllamaStatus(status);
+    writeAiStatus(status);
     return status;
 });
 
@@ -2235,9 +2330,9 @@ ipcMain.handle('ollama:setShortcutCreated', (_e, created) => {
 // profile-independent status file as shortcutCreated since NeRoChAt isn't
 // scoped to a WA profile.
 ipcMain.handle('ollama:setPersonality', (_e, personality) => {
-    const status = readOllamaStatus();
+    const status = readAiStatus();
     status.personality = personality || '';
-    writeOllamaStatus(status);
+    writeAiStatus(status);
     return status;
 });
 
@@ -2245,16 +2340,16 @@ ipcMain.handle('ollama:setPersonality', (_e, personality) => {
 // same feature as a WA profile's imageGenEnabled setting, just stored in
 // this profile-independent status file since NeRoChAt isn't scoped to one.
 ipcMain.handle('ollama:setImageGenEnabled', (_e, enabled) => {
-    const status = readOllamaStatus();
+    const status = readAiStatus();
     status.imageGenEnabled = !!enabled;
-    writeOllamaStatus(status);
+    writeAiStatus(status);
     return status;
 });
 
 ipcMain.handle('ollama:setImageGenProvider', (_e, provider) => {
-    const status = readOllamaStatus();
+    const status = readAiStatus();
     status.imageGenProvider = provider;
-    writeOllamaStatus(status);
+    writeAiStatus(status);
     return status;
 });
 
@@ -2262,21 +2357,21 @@ ipcMain.handle('ollama:setImageGenProvider', (_e, provider) => {
 // (imageGenApiKeyOpenai/imageGenApiKeyStability) so switching
 // imageGenProvider back and forth never overwrites the other one.
 ipcMain.handle('ollama:setImageGenApiKey', (_e, provider, apiKey) => {
-    const status = readOllamaStatus();
+    const status = readAiStatus();
     if (provider === 'openai') status.imageGenApiKeyOpenai = apiKey || '';
     else if (provider === 'stability') status.imageGenApiKeyStability = apiKey || '';
-    writeOllamaStatus(status);
+    writeAiStatus(status);
     return status;
 });
 
-// 'local' | 'api' — see src/ollama-client.js / currentOllamaClient
-// above for what each mode actually resolves to. Left unset (undefined)
-// until the user picks one, which index.html's ensureOllamaOrPrompt() reads
-// as "never chosen yet" and shows the local-vs-API picker for.
+// 'local' (bir adresteki sunucu) | 'api' (bulut sağlayıcı) — hangisinin
+// neye çözümlendiği için bkz. src/ai-provider.js's resolveConnection.
+// Kullanıcı seçene kadar tanımsız kalır; index.html'in ensureAiOrPrompt()'u
+// bunu "henüz seçilmedi" olarak okuyup seçiciyi gösterir.
 ipcMain.handle('ollama:setConnectionMode', (_e, mode) => {
-    const status = readOllamaStatus();
-    status.ollamaConnectionMode = mode === 'api' ? 'api' : 'local';
-    writeOllamaStatus(status);
+    const status = readAiStatus();
+    status.aiConnectionMode = ['api', 'agent'].includes(mode) ? mode : 'local';
+    writeAiStatus(status);
     return status;
 });
 
@@ -2285,19 +2380,29 @@ ipcMain.handle('ollama:setConnectionMode', (_e, mode) => {
 // the WhatsApp session/whitelist files already sitting there); Ayarlar's
 // own UI is responsible for masking it on screen when showing it back.
 ipcMain.handle('ollama:setCloudApiKey', (_e, apiKey) => {
-    const status = readOllamaStatus();
-    status.ollamaCloudApiKey = apiKey || '';
-    writeOllamaStatus(status);
+    const status = readAiStatus();
+    // Anahtar SEÇİLİ sağlayıcının altına yazılır — sağlayıcı değiştirince
+    // birinin anahtarı diğerine gönderilmesin (bkz. ai-provider.js apiKeyFor).
+    const providerId = findCloudProvider(status.aiCloudProvider).id;
+    status.aiApiKeys = status.aiApiKeys || {};
+    status.aiApiKeys[providerId] = apiKey || '';
+    writeAiStatus(status);
     return status;
 });
 
-// The API-key setup panel's "Nasıl Alınır?" tab opens the real ollama.com
-// page in the user's actual browser (not scraped/embedded here — always
-// current, unlike a screenshot baked into this app) instead of a fake
-// mocked-up guide. Only ever called with a fixed https://ollama.com/...
-// URL from index.html, never arbitrary renderer-supplied input.
+// API anahtarı panelinin "Nasıl Alınır?" sekmesi, sağlayıcının GERÇEK
+// sayfasını kullanıcının kendi tarayıcısında açar (uygulamaya gömülü bir
+// ekran görüntüsü değil — böylece hep güncel). Yalnızca registry'de kayıtlı
+// sağlayıcıların alan adlarına izin verilir; renderer'dan gelen rastgele
+// bir adres açılmaz.
 ipcMain.handle('app:openExternal', (_e, url) => {
-    if (typeof url === 'string' && url.startsWith('https://ollama.com')) shell.openExternal(url);
+    if (typeof url !== 'string') return;
+    let host;
+    try { host = new URL(url).hostname; } catch (_) { return; }
+    if (!url.startsWith('https://')) return;
+    if (ALLOWED_EXTERNAL_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) {
+        shell.openExternal(url);
+    }
 });
 
 // Classifies whether a NeRoChAt message is asking for an image, using
@@ -2313,8 +2418,8 @@ ipcMain.handle('ollama:classifyImageIntent', async (_e, { prompt, model, hasImag
     if (!prompt) return { image: false, prompt: '' };
     try {
         const content = hasImage ? `${prompt}\n\n[the user also attached a photo]` : prompt;
-        const response = await currentOllamaClient().chat({
-            model: await pickClassifierModel(model, currentOllamaClient()),
+        const response = await currentAiClient().chat({
+            model: await pickClassifierModel(model, currentAiClient()),
             messages: [
                 { role: 'system', content: IMAGE_CLASSIFY_PROMPT },
                 { role: 'user', content },
@@ -2339,9 +2444,9 @@ ipcMain.handle('ollama:classifyImageIntent', async (_e, { prompt, model, hasImag
 // describeImageForGeneration (WhatsApp/Telegram side).
 ipcMain.handle('ollama:describeImageForGeneration', async (_e, { model, imageBase64, extraInstruction }) => {
     try {
-        const visionModel = await resolveVisionModel(model, currentOllamaClient());
+        const visionModel = await resolveVisionModel(model, currentAiClient());
         if (!visionModel) return { ok: false, error: 'Görsel okuyabilen bir model yüklü değil — önce bir tane indir (örn. llava, qwen2.5vl).' };
-        const response = await currentOllamaClient().chat({
+        const response = await currentAiClient().chat({
             model: visionModel,
             messages: [
                 { role: 'system', content: IMAGE_DESCRIBE_FOR_GEN_PROMPT },
@@ -2364,11 +2469,11 @@ ipcMain.handle('ollama:describeImageForGeneration', async (_e, { model, imageBas
 // pulled has vision capability, matching this app's behavior before this
 // fallback existed.
 ipcMain.handle('ollama:prepareImageForChat', async (_e, { model, imageBase64 }) => {
-    if (await modelHasVision(model, currentOllamaClient())) return { ok: true, mode: 'vision' };
-    const visionModel = await pickVisionFallbackModel(model, currentOllamaClient());
+    if (await modelHasVision(model, currentAiClient())) return { ok: true, mode: 'vision' };
+    const visionModel = await pickVisionFallbackModel(model, currentAiClient());
     if (!visionModel) return { ok: true, mode: 'vision' };
     try {
-        const response = await currentOllamaClient().chat({
+        const response = await currentAiClient().chat({
             model: visionModel,
             messages: [
                 { role: 'system', content: IMAGE_READ_FALLBACK_PROMPT },
@@ -2386,7 +2491,7 @@ ipcMain.handle('ollama:prepareImageForChat', async (_e, { model, imageBase64 }) 
 // for the renderer to display inline in the chat.
 ipcMain.handle('ollama:generateImage', async (_e, prompt) => {
     try {
-        const status = readOllamaStatus();
+        const status = readAiStatus();
         const provider = status.imageGenProvider || 'pollinations';
         const apiKey = provider === 'openai' ? status.imageGenApiKeyOpenai
             : provider === 'stability' ? status.imageGenApiKeyStability
@@ -2529,7 +2634,7 @@ ipcMain.handle('ollama:listModels', async () => {
     openOllamaApp();
     for (let attempt = 0; ; attempt++) {
         try {
-            const { models } = await currentOllamaClient().list();
+            const { models } = await currentAiClient().list();
             return {
                 ok: true,
                 models: models.map(m => m.name),
@@ -2553,7 +2658,7 @@ ipcMain.handle('ollama:listModels', async () => {
 // reach the quick-popup's model dropdown too if it's the one open.
 ipcMain.handle('ollama:deleteModel', async (_e, model) => {
     try {
-        await currentOllamaClient().delete({ model });
+        await currentAiClient().delete({ model });
         if (ollamaView && !ollamaView.webContents.isDestroyed()) ollamaView.webContents.send('ollama:modelsChanged');
         if (win && !win.isDestroyed()) win.webContents.send('ollama:modelsChanged');
         return { ok: true };
@@ -2568,7 +2673,7 @@ ipcMain.handle('ollama:deleteModel', async (_e, model) => {
 ipcMain.handle('ollama:pullModel', async (e, model) => {
     const sender = e.sender;
     try {
-        const stream = await currentOllamaClient().pull({ model, stream: true });
+        const stream = await currentAiClient().pull({ model, stream: true });
         for await (const part of stream) {
             if (sender.isDestroyed()) return { ok: false };
             sender.send('ollama:pullProgress', { status: part.status, completed: part.completed, total: part.total });
@@ -2592,13 +2697,25 @@ ipcMain.handle('ollama:pullModel', async (e, model) => {
 ipcMain.handle('ollama:chatSend', async (e, { model, messages }) => {
     const sender = e.sender;
     try {
-        const stream = await currentOllamaClient().chat({ model, messages, stream: true });
+        const stream = await currentAiClient().chat({ model, messages, stream: true });
+        // Tam metin DÖNÜŞ DEĞERİNDE de veriliyor, yalnızca akış parçalarında
+        // değil. Sebebi gerçek bir hata: akış parçaları ('ollama:chatChunk')
+        // ayrı bir IPC mesajı olarak gidiyor ve çağıran taraf genelde
+        // `await sendOllamaChat(...)` biter bitmez finally içinde listener'ı
+        // kaldırıyor. HTTP sağlayıcılarda parçalar await sürerken damla damla
+        // geldiği için bu yarış zararsızdı; ama CLI ajanlarında (Claude Code,
+        // Hermes) yanıtın TAMAMI tek bir parça olarak en sonda gönderiliyor —
+        // o tek parça yarışı kaybedince kullanıcı BOŞ mesaj görüyordu.
+        // Dönüş değeri teslimi garanti, o yüzden UI boş kalırsa buna düşüyor.
+        let full = '';
         for await (const part of stream) {
             if (sender.isDestroyed()) return { ok: false, error: 'Pencere kapatıldı.' };
-            sender.send('ollama:chatChunk', { content: part.message?.content || '', done: false });
+            const content = part.message?.content || '';
+            full += content;
+            sender.send('ollama:chatChunk', { content, done: false });
         }
         sender.send('ollama:chatChunk', { content: '', done: true });
-        return { ok: true };
+        return { ok: true, content: full };
     } catch (err) {
         if (!sender.isDestroyed()) sender.send('ollama:chatChunk', { content: '', done: true, error: err.message || String(err) });
         return { ok: false, error: err.message || String(err) };
@@ -2974,7 +3091,7 @@ function looksLikeLanguageMismatch(draft, variants) {
 // overlay shows up rather than an error the user has to dismiss.
 async function requestTextCorrections(model, draft) {
     try {
-        const response = await currentOllamaClient().chat({
+        const response = await currentAiClient().chat({
             model,
             messages: [
                 { role: 'system', content: FIX_TEXT_PROMPT },
@@ -3009,7 +3126,7 @@ async function getTextCorrections(session, draft) {
     if (!preferredModel) return null;
 
     const useLocal = readAppConfig().fixTextUseLocalModel !== false;
-    const model = useLocal ? await pickClassifierModel(preferredModel, currentOllamaClient()) : preferredModel;
+    const model = useLocal ? await pickClassifierModel(preferredModel, currentAiClient()) : preferredModel;
 
     let result = await requestTextCorrections(model, draft);
     if (useLocal && model !== preferredModel && (!result || looksLikeLanguageMismatch(draft, result))) {
@@ -3023,7 +3140,7 @@ async function getTextCorrections(session, draft) {
 // overlay (see handleFixTextAction's 'translate:' branch).
 async function requestTranslation(model, draft, targetLabel) {
     try {
-        const response = await currentOllamaClient().chat({
+        const response = await currentAiClient().chat({
             model,
             messages: [
                 { role: 'system', content: buildTranslatePrompt(targetLabel) },
@@ -3050,7 +3167,7 @@ async function getTranslation(session, draft, targetLabel) {
     if (!preferredModel) return null;
 
     const useLocal = readAppConfig().fixTextUseLocalModel !== false;
-    const model = useLocal ? await pickClassifierModel(preferredModel, currentOllamaClient()) : preferredModel;
+    const model = useLocal ? await pickClassifierModel(preferredModel, currentAiClient()) : preferredModel;
 
     let result = await requestTranslation(model, draft, targetLabel);
     if (useLocal && model !== preferredModel && !result) {

@@ -119,8 +119,11 @@ contextBridge.exposeInMainWorld('nerobot', {
     // labels once WhatsApp's media permission has been granted.
     listWaMediaDevices: (profileId) => ipcRenderer.invoke('wa:listMediaDevices', profileId),
 
-    // Ollama — install gate (Home tile + AI Bot toggle) and the small
-    // built-in chat window
+    // AI sağlayıcısı — kurulum kapısı (Home kutucuğu + AI Bot anahtarı) ve
+    // yerleşik küçük sohbet penceresi. NOT: aşağıdaki 'ollama:*' IPC kanal
+    // adları tarihsel; artık hangi sağlayıcının kullanıldığını main.js
+    // registry'den çözüyor (bkz. currentAiClient), kanal adı bir sağlayıcı
+    // ima etmiyor.
     checkOllamaInstalled: () => ipcRenderer.invoke('ollama:checkInstalled'),
     installOllama: () => ipcRenderer.invoke('ollama:install'),
     getOllamaStatus: () => ipcRenderer.invoke('ollama:getStatus'),
@@ -130,9 +133,22 @@ contextBridge.exposeInMainWorld('nerobot', {
     setOllamaImageGenEnabled: (enabled) => ipcRenderer.invoke('ollama:setImageGenEnabled', enabled),
     setOllamaImageGenProvider: (provider) => ipcRenderer.invoke('ollama:setImageGenProvider', provider),
     setOllamaImageGenApiKey: (provider, apiKey) => ipcRenderer.invoke('ollama:setImageGenApiKey', provider, apiKey),
-    // 'local' (today's install-gate flow) vs 'api' (Ollama Cloud API key,
-    // no local install) — see ensureOllamaOrPrompt/the Ayarlar → NeRoChAt
-    // "Bağlantı" section in index.html, and currentOllamaClient in main.js.
+    // Sağlayıcı seçimi — hangi yerel çalışma zamanı (Ollama, LM Studio,
+    // llama.cpp, vLLM, OpenAI-uyumlu herhangi biri) ya da hangi bulut
+    // sağlayıcısı (OpenAI, OpenRouter, Groq, Together, Ollama Cloud …)
+    // kullanılacak. Liste uygulama içinde sabit değil: src/ai-provider.js
+    // registry'sinden gelir (getAiProviders).
+    getAiProviders: () => ipcRenderer.invoke('ai:getProviders'),
+    getAiConnection: () => ipcRenderer.invoke('ai:getConnection'),
+    probeAiConnection: () => ipcRenderer.invoke('ai:probeConnection'),
+    setAiLocalRuntime: (runtimeId, endpoint) => ipcRenderer.invoke('ai:setLocalRuntime', runtimeId, endpoint),
+    setAiCloudProvider: (providerId, baseUrl) => ipcRenderer.invoke('ai:setCloudProvider', providerId, baseUrl),
+    // Kurulu CLI ajanı seç (Claude Code, Hermes …) — anahtar gerekmez,
+    // zaten giriş yapılmış aracı kullanır.
+    setAiAgent: (agentId) => ipcRenderer.invoke('ai:setAgent', agentId),
+    // 'local' (bir adresteki sunucu) vs 'api' (bulut sağlayıcı) — bkz.
+    // index.html'deki Ayarlar → NeRoChAt "Bağlantı" bölümü ve main.js'teki
+    // currentAiClient.
     setOllamaConnectionMode: (mode) => ipcRenderer.invoke('ollama:setConnectionMode', mode),
     setOllamaCloudApiKey: (apiKey) => ipcRenderer.invoke('ollama:setCloudApiKey', apiKey),
     openExternalLink: (url) => ipcRenderer.invoke('app:openExternal', url),

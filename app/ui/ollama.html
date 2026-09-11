@@ -586,7 +586,13 @@
             }
         });
         try {
-            await window.nerobot.sendOllamaChat(model, ackMessages);
+            const res = await window.nerobot.sendOllamaChat(model, ackMessages);
+            // Bkz. yukarıdaki aynı düzeltme: tek parçalı sağlayıcılarda parça
+            // off()'a yarışı kaybedebiliyor, dönüş değeri garanti.
+            if (!full && res?.content) {
+                full = res.content;
+                captionDiv.textContent = full;
+            }
         } finally {
             off?.();
             history.push({ role: 'assistant', content: full, images: [result.base64], mime: result.mimetype });
@@ -701,7 +707,17 @@
                 images && !_skipImageInApi ? { role, content, images } : { role, content });
             if (personality) apiMessages.unshift({ role: 'system', content: personality });
 
-            await window.nerobot.sendOllamaChat(model, apiMessages);
+            const res = await window.nerobot.sendOllamaChat(model, apiMessages);
+            // Akış parçaları ayrı IPC mesajı olarak geldiği için, tek parçalı
+            // sağlayıcılarda (CLI ajanları) son parça bu await bittikten SONRA
+            // teslim olabiliyor ve aşağıdaki off() onu yutuyordu → boş mesaj.
+            // Dönüş değeri teslimi garanti; parçalar boş kaldıysa ona düşüyoruz.
+            if (!full && res?.content) {
+                full = res.content;
+                aiDiv.classList.remove('pending');
+                aiDiv.textContent = full;
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
         } finally {
             off?.();
             if (full) history.push({ role: 'assistant', content: full });

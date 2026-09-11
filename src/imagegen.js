@@ -1,5 +1,5 @@
 // Image generation backends for the AI bot's "draw me a picture" requests —
-// Ollama itself has no image-generation model, so these get routed here
+// Chat providers have no image-generation model, so these get routed here
 // instead (see ai.js's classifyImageIntent() for how a message gets flagged
 // as an image request, and bot.js's handleAiMessage for where the two paths
 // split). Pollinations needs no API key; OpenAI/Stability AI do — see
