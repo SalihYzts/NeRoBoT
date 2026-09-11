@@ -99,8 +99,6 @@ Geliştirici: **Salih Yazıtaş**
 ```
 nerobot/
 ├── package.json
-├── NeRoBoT_App.bat / .sh           # Masaüstü uygulamasını başlatır (Windows / Linux)
-├── NeRoBoT_Kurulum.bat / .sh       # TEK betik: kurulum + opsiyonel yerel derleme + yayın (aşağıya bakın)
 ├── .github/workflows/release.yml   # Etiket push'landığında Windows .exe + Linux .AppImage'i derleyip yayınlayan CI
 ├── packaging/arch/                 # Linux (Arch) için pacman paketi — bkz. Kurulum bölümü
 │   ├── PKGBUILD
@@ -126,7 +124,7 @@ nerobot/
 │   ├── file-extract.js             # AI'ın okuyabilmesi için PDF/Word/metin çıkarımı
 │   └── ollama-installer.js         # Windows'ta Ollama'yı algılar/sessizce kurar
 ├── scripts/                        # Sadece geliştirme sırasında kullanılan araçlar, pakete dahil edilmez
-│   ├── release.js                  # NeRoBoT_Kurulum.bat / npm run release'in arkasındaki betik — kurulum + derleme + yayın, hepsi bir arada
+│   ├── release.js                  # `npm run release`'in arkasındaki betik — kurulum + derleme + yayın, hepsi bir arada
 │   └── gen-icons.js                # logo.svg'den app/ui/icon.ico + icon.png'yi yeniden üretir
 └── build/installer.nsh             # Özel NSIS kurulum-zamanı kancası (en iyi çaba Ollama kurulumu)
 ```
@@ -177,7 +175,7 @@ cd nerobot
 
 ### 2. Kurulum
 
-Windows'ta `NeRoBoT_Kurulum.bat`'a, Linux'ta `NeRoBoT_Kurulum.sh`'e çift tıklayın (Linux'ta önce `chmod +x NeRoBoT_Kurulum.sh` gerekebilir), ya da elle çalıştırın:
+Çalıştırın:
 
 ```bash
 npm install
@@ -201,7 +199,7 @@ ollama pull llava
 npm start
 ```
 
-Windows'ta `NeRoBoT_App.bat`, Linux'ta `NeRoBoT_App.sh` dosyasına çift tıklayarak da açabilirsiniz. Home ekranından ilk WhatsApp ya da Telegram profilinizi oluşturabilirsiniz.
+Home ekranından ilk WhatsApp ya da Telegram profilinizi oluşturabilirsiniz.
 
 ### 5. Bir Profili Bağlayın
 
@@ -218,7 +216,7 @@ Bunu her profil için sadece bir kez yapmanız gerekir — oturum kaydedilir ve 
 Tek betik, tek komut — ayrı ayrı adımlar hatırlamaya gerek yok:
 
 ```bash
-npm run release   # ya da NeRoBoT_Kurulum.bat / NeRoBoT_Kurulum.sh
+npm run release
 ```
 
 1. Gerekirse npm bağımlılıklarını kurar/günceller ve uygulama ikonlarını yeniden üretir.

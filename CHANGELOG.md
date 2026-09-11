@@ -1,3 +1,28 @@
+## v4.4.30 - 2026-09-11
+
+### Hata Düzeltmeleri
+
+- **Başlık çubuğundan pencere sürükleme yeniden çalışıyor (Linux/Wayland).**
+  v4.4.27'de üst çubuktaki native sürükleme bölgesi kaldırılıp yerine
+  pencereyi JS'ten konumlandıran bir yöntem konmuştu. Wayland oturumlarında
+  (KDE/KWin varsayılanı) bir uygulama kendi penceresini konumlandıramadığı
+  için bu çağrılar sessizce yok sayılıyor ve başlık çubuğu hiç
+  sürüklenemiyordu. Sürükleme yeniden pencere yöneticisine bırakıldı.
+- Sürüklenebilir alan genişletildi: artık yalnızca logo/başlık değil, üst
+  çubuğun sekmeler ile sağdaki düğmeler arasında kalan tüm boşluğu pencereyi
+  taşımak için kullanılabiliyor.
+- Sekme ve düğme tıklamaları etkilenmiyor: sekmeler, ev/bildirim/ayarlar ve
+  pencere düğmeleri sürükleme bölgesinin dışında tutuldu.
+
+### Diğer Değişiklikler
+
+- Kullanılmayan pencere sürükleme IPC katmanı (`window:dragStart` /
+  `dragMove` / `dragEnd`) ve preload köprüsü kaldırıldı.
+- Kısayol dosyaları (`NeRoBoT_App.bat/.sh`, `NeRoBoT_Kurulum.bat/.sh`)
+  kaldırıldı — her şey npm betikleriyle yönetiliyor (`npm start`,
+  `npm run release`).
+- Yayın akışından LinkedIn duyuru metni ve Word (.docx) üretimi çıkarıldı.
+
 ## v4.4.29 - 2026-08-17
 
 ### Yeni Özellikler

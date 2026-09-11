@@ -109,8 +109,6 @@ NeRoBoT is a Windows desktop app that runs local-AI-powered bots on top of **Wha
 ```
 nerobot/
 ├── package.json
-├── NeRoBoT_App.bat / .sh           # Launches the desktop app (Windows / Linux)
-├── NeRoBoT_Kurulum.bat / .sh       # ONE script: setup + optional local build + publish (see below)
 ├── .github/workflows/release.yml   # CI that builds Windows .exe + Linux .AppImage on tag push and publishes them
 ├── packaging/arch/                 # Arch Linux pacman package — see Installation
 │   ├── PKGBUILD
@@ -136,7 +134,7 @@ nerobot/
 │   ├── file-extract.js             # PDF/Word/text extraction for the AI to read
 │   └── ollama-installer.js         # Detects/silently installs Ollama on Windows
 ├── scripts/                        # Dev-only tooling, not shipped in the packaged app
-│   ├── release.js                  # Behind NeRoBoT_Kurulum.bat / npm run release — setup + build + publish, all in one
+│   ├── release.js                  # Behind `npm run release` — setup + build + publish, all in one
 │   └── gen-icons.js                # Regenerates app/ui/icon.ico + icon.png from logo.svg
 └── build/installer.nsh             # Custom NSIS install-time hook (best-effort Ollama install)
 ```
@@ -187,7 +185,7 @@ cd nerobot
 
 ### 2. Set Up
 
-Double-click `NeRoBoT_Kurulum.bat` on Windows, `NeRoBoT_Kurulum.sh` on Linux (you may need `chmod +x NeRoBoT_Kurulum.sh` first), or run manually:
+Run:
 
 ```bash
 npm install
@@ -211,7 +209,7 @@ ollama pull llava
 npm start
 ```
 
-On Windows you can also double-click `NeRoBoT_App.bat`, on Linux `NeRoBoT_App.sh`. The Home screen lets you create your first WhatsApp or Telegram profile.
+The Home screen lets you create your first WhatsApp or Telegram profile.
 
 ### 5. Connect a Profile
 
@@ -228,7 +226,7 @@ You only need to do this once per profile — the session is stored and restored
 One script, one command, walks through the whole thing — no need to remember a sequence of separate steps:
 
 ```bash
-npm run release   # or double-click NeRoBoT_Kurulum.bat / NeRoBoT_Kurulum.sh
+npm run release
 ```
 
 1. Installs/updates npm dependencies and regenerates the app icons if needed.

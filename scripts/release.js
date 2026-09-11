@@ -1,5 +1,5 @@
 // TEK betik: kurulum + yerel derleme + GitHub'a yayın. Eskiden bunlar üç
-// ayrı betikti (Kurulum.sh → sadece npm install/ikonlar, build.js → sürüm
+// ayrı betikti (kurulum betiği → sadece npm install/ikonlar, build.js → sürüm
 // numarası sorup yerelde derleme, release.js → commit/push/tag/yayın) —
 // şimdi hepsi burada, tek bir akışta ("kur, derle, yayınla" ayrı script
 // olmasın diye birleştirildi). Sırayla:
@@ -36,29 +36,22 @@
 //      burada sadece o release'in notlarını 4. adımdaki changelog'la
 //      dolduruyor (REST API ile) — CI zaten tag push'ı üzerine kendiliğinden
 //      çalışır, bu adımdan bağımsız.
-//   6) Changelog'u temel alarak LinkedIn'de paylaşılabilecek kısa bir
-//      duyuru metni hazırlar (yine generateText ile), istersen panodan
-//      (Win+Shift+S) 1-2 ekran görüntüsü ister, ve hepsini gömülü bir Word
-//      (.docx) dosyasına paketler — Word oluşturulamazsa düz .txt'ye düşer.
-//   7) CI'nın Linux .AppImage'i release'e yüklemesini bekleyip (bkz.
+//   6) CI'nın Linux .AppImage'i release'e yüklemesini bekleyip (bkz.
 //      updateArchPkgbuild) packaging/arch/PKGBUILD'i bu sürüme göre
 //      günceller (pkgver + sha256) ve istersen commit'leyip push eder —
-//      Arch paketi artık her sürümde elle "updpkgsums" gerektirmiyor. Bu,
-//      LinkedIn adımından SONRA çalışır (CI'nın derlemesini beklediğinden,
-//      birkaç dakika sürebilir) — böylece hızlı adımlar önce biter.
-// Çalıştırma: npm run release  (ya da NeRoBoT_Kurulum.bat/.sh'e çift tıkla —
-// aynı betik, "kurulum" adı ilk kez çalıştıran biri için daha tanıdık)
+//      Arch paketi artık her sürümde elle "updpkgsums" gerektirmiyor. CI'nın
+//      derlemesini beklediğinden birkaç dakika sürebilir, o yüzden en sonda.
+// Çalıştırma: npm run release
 //
 // git push / GitHub Release oluşturma gibi geri alınması zor, herkese görünür
 // adımlardan hemen önce her seferinde ayrı ayrı e/h onayı ister — bu betiği
 // kimin ne zaman çalıştırdığından bağımsız olarak, yanlışlıkla gönderim
-// yapılmasını engellemek için. Changelog/LinkedIn metni üretimi (Claude API
-// kullanılmıyorsa) salt-yerel olduğundan bu onaylardan muaf — en kötü
-// ihtimalle basit bir fallback metne düşer.
+// yapılmasını engellemek için. Changelog üretimi (Claude API kullanılmıyorsa)
+// salt-yerel olduğundan bu onaylardan muaf — en kötü ihtimalle basit bir
+// fallback metne düşer.
 import { spawnSync, execSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -78,7 +71,6 @@ const TOKEN_FILE = path.join(ROOT, '.release-token');
 // hiç sorulmadan Enter'a basılırsa) generateText Ollama'ya düşer, bu betik
 // hiçbir şekilde Claude'u zorunlu kılmaz.
 const CLAUDE_KEY_FILE = path.join(ROOT, '.claude-api-key');
-const ASSETS_DIR = path.join(ROOT, 'release-assets');
 const IS_WIN = process.platform === 'win32';
 
 // Değişiklik özetini changelog'a/duyuru metnine çeviren yerel model —
@@ -114,17 +106,6 @@ function spawn(cmd, args, extraOpts) {
     const opts = { cwd: ROOT, ...extraOpts };
     if (IS_WIN) return spawnSync([cmd, ...args.map(shellQuote)].join(' '), { ...opts, shell: true });
     return spawnSync(cmd, args, opts);
-}
-
-// buildDocx/grabClipboardImage below pass multi-line PowerShell scripts as
-// a single -Command argument — shellQuote/spawn's cmd.exe-string-joining
-// above chokes on embedded newlines (cmd.exe's own line-based parsing, not
-// Node's), so these call powershell.exe directly with a real argv array
-// instead (Windows' native CreateProcess argument marshaling handles
-// embedded newlines inside one argument just fine; only routing through
-// cmd.exe as a shell doesn't).
-function runPowerShell(args) {
-    return spawnSync('powershell', args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 1024 * 1024 * 32 });
 }
 
 // Alt komutların çıktısını canlı gösterir (electron-builder'ın kendi
@@ -399,160 +380,6 @@ async function generateText(prompt, { maxTokens = 4000, timeoutMs = 120000 } = {
     return await ollamaGenerate(prompt, timeoutMs);
 }
 
-// ============================
-// LinkedIn duyurusu için Word (.docx) — başlık + metin + (varsa) panodan
-// alınan ekran görüntüleri. Elle bir .docx kütüphanesi kurmadan, OOXML'i
-// (Word'ün kendi iç zip+xml formatı) doğrudan yazıp PowerShell'in
-// Compress-Archive'ıyla zip'liyor — bu betiğin tek harici bağımlılığı zaten
-// git + gh + (opsiyonel) Ollama/Claude, bir npm paketi daha eklemeye
-// değmedi.
-// ============================
-function escapeXml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&apos;');
-}
-
-function pngDimensions(buf) {
-    try {
-        const width = buf.readUInt32BE(16);
-        const height = buf.readUInt32BE(20);
-        if (width > 0 && height > 0) return { width, height };
-    } catch (_) {}
-    return { width: 800, height: 600 };
-}
-
-function textParagraphXml(text, { bold = false, size = 22 } = {}) {
-    const rPr = `<w:rPr>${bold ? '<w:b/>' : ''}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr>`;
-    return `<w:p><w:r>${rPr}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
-}
-
-function imageParagraphXml(relId, cx, cy, name) {
-    return (
-        `<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">` +
-        `<wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>` +
-        `<wp:docPr id="${relId}" name="${escapeXml(name)}"/>` +
-        `<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
-        `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
-        `<pic:pic><pic:nvPicPr><pic:cNvPr id="${relId}" name="${escapeXml(name)}"/><pic:cNvPicPr/></pic:nvPicPr>` +
-        `<pic:blipFill><a:blip r:embed="rId${relId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
-        `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
-        `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>` +
-        `</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
-    );
-}
-
-function psQuote(s) {
-    return "'" + String(s).replace(/'/g, "''") + "'";
-}
-
-function buildDocx(destPath, { title, bodyLines, images }) {
-    const tmp = path.join(os.tmpdir(), 'nerobot-docx-' + Date.now());
-    fs.mkdirSync(path.join(tmp, '_rels'), { recursive: true });
-    fs.mkdirSync(path.join(tmp, 'word', '_rels'), { recursive: true });
-    fs.mkdirSync(path.join(tmp, 'word', 'media'), { recursive: true });
-
-    const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Default Extension="png" ContentType="image/png"/>
-<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`;
-    fs.writeFileSync(path.join(tmp, '[Content_Types].xml'), contentTypes, 'utf8');
-
-    const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`;
-    fs.writeFileSync(path.join(tmp, '_rels', '.rels'), rootRels, 'utf8');
-
-    const imgRels = images
-        .map((img, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${img.mediaName}"/>`)
-        .join('');
-    const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-${imgRels}
-</Relationships>`;
-    fs.writeFileSync(path.join(tmp, 'word', '_rels', 'document.xml.rels'), docRels, 'utf8');
-
-    images.forEach((img) => {
-        fs.copyFileSync(img.path, path.join(tmp, 'word', 'media', img.mediaName));
-    });
-
-    const bodyParts = [];
-    bodyParts.push(textParagraphXml(title, { bold: true, size: 32 }));
-    bodyParts.push('<w:p/>');
-    bodyLines.forEach((line) => {
-        bodyParts.push(textParagraphXml(line || '', { size: 22 }));
-    });
-    images.forEach((img, i) => {
-        bodyParts.push('<w:p/>');
-        bodyParts.push(imageParagraphXml(i + 1, img.cx, img.cy, img.mediaName));
-    });
-
-    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<w:body>
-${bodyParts.join('\n')}
-<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>
-</w:body>
-</w:document>`;
-    fs.writeFileSync(path.join(tmp, 'word', 'document.xml'), documentXml, 'utf8');
-
-    fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    if (fs.existsSync(destPath)) fs.rmSync(destPath);
-    const zip = runPowerShell([
-        '-NoProfile',
-        '-Command',
-        `Compress-Archive -Path ${psQuote(tmp + '\\*')} -DestinationPath ${psQuote(destPath)} -Force`,
-    ]);
-    fs.rmSync(tmp, { recursive: true, force: true });
-    return zip.status === 0 && fs.existsSync(destPath);
-}
-
-// Win+Shift+S ile alınan bir ekran görüntüsü Windows panosuna PNG olarak
-// gelir — burada onu doğrudan diske yazıyoruz (System.Windows.Forms.Clipboard
-// üzerinden, Windows'ta hazır gelen bir .NET API, ek kurulum gerekmiyor).
-function grabClipboardImage(destPath) {
-    const psCode = [
-        'Add-Type -AssemblyName System.Windows.Forms',
-        'Add-Type -AssemblyName System.Drawing',
-        'if ([System.Windows.Forms.Clipboard]::ContainsImage()) {',
-        '  $img = [System.Windows.Forms.Clipboard]::GetImage()',
-        `  $img.Save(${psQuote(destPath)}, [System.Drawing.Imaging.ImageFormat]::Png)`,
-        "  Write-Output 'OK'",
-        '} else {',
-        "  Write-Output 'EMPTY'",
-        '}',
-    ].join('\n');
-    const r = runPowerShell(['-NoProfile', '-Command', psCode]);
-    return r.status === 0 && (r.stdout || '').includes('OK') && fs.existsSync(destPath);
-}
-
-async function captureScreenshotsInteractive(maxCount) {
-    const shots = [];
-    console.log(`\nLinkedIn Word dosyasına ekran görüntüsü ekleyebilirsin (en fazla ${maxCount} adet, opsiyonel).`);
-    console.log('Win+Shift+S ile ilgili alanı seç (kopyalanır), sonra buraya dönüp soruyu yanıtla.');
-    for (let i = 0; i < maxCount; i++) {
-        const add = await confirm(`${i === 0 ? 'İlk' : 'Bir sonraki'} ekran görüntüsünü eklemek istiyor musun?`);
-        if (!add) break;
-        await ask("Görüntüyü Win+Shift+S ile alıp kopyaladıktan sonra Enter'a bas...");
-        fs.mkdirSync(ASSETS_DIR, { recursive: true });
-        const dest = path.join(ASSETS_DIR, `screenshot_${Date.now()}_${i + 1}.png`);
-        if (grabClipboardImage(dest)) {
-            console.log(`Kaydedildi: ${path.relative(ROOT, dest)}`);
-            shots.push(dest);
-        } else {
-            console.log('[uyarı] Panoda görsel bulunamadı, atlanıyor.');
-        }
-    }
-    return shots;
-}
-
 async function main() {
     const pkg = JSON.parse(fs.readFileSync(PKG_PATH, 'utf8'));
 
@@ -587,15 +414,14 @@ async function main() {
     }
 
     // ============================
-    // Sadece kurulum mu, yoksa devam edip bir sürüm mü yayınlanacak? — bu
-    // betik artık eski NeRoBoT_Kurulum.sh'in yerine de geçtiği için, repo'yu
-    // yeni klonlayıp sadece "npm start" ile geliştirmeye başlamak isteyen
-    // biri burada temiz bir şekilde durabilmeli; version/commit/push
+    // Sadece kurulum mu, yoksa devam edip bir sürüm mü yayınlanacak? —
+    // repo'yu yeni klonlayıp sadece "npm start" ile geliştirmeye başlamak
+    // isteyen biri burada temiz bir şekilde durabilmeli; version/commit/push
     // adımlarından hiçbiri onu ilgilendirmiyor.
     // ============================
     console.log('\nKurulum tamam — "npm start" ile uygulamayı açabilirsin.');
     if (!(await confirm('\nDevam edip yeni bir sürüm derleyip GitHub\'a yayınlamak ister misin?'))) {
-        console.log('Tamam, burada duruyorum. İstediğin zaman bu betiği (npm run release / NeRoBoT_Kurulum) tekrar çalıştırabilirsin.');
+        console.log('Tamam, burada duruyorum. İstediğin zaman "npm run release" ile tekrar çalıştırabilirsin.');
         return;
     }
 
@@ -749,78 +575,10 @@ async function main() {
     console.log(`Release: ${releaseUrl}`);
 
     // ============================
-    // 6) LinkedIn duyuru metni — Claude API (varsa), yoksa Ollama; sonra
-    // istersen panodan 1-2 ekran görüntüsü alıp hepsini bir Word (.docx)
-    // dosyasına gömer. Word oluşturulamazsa (ör. PowerShell/Compress-Archive
-    // bir sorun çıkarırsa) düz .txt'ye düşer — bu adım hiçbir zaman
-    // bloklamaz, en kötü ihtimalle metin dosyada kalır.
-    // ============================
-    console.log('\nLinkedIn duyuru metni hazırlanıyor...');
-    const linkedinPrompt = [
-        `Aşağıdaki changelog'a dayanarak "NeRoBoT" projesinin ${tag} sürümü için`,
-        'LinkedIn\'de paylaşılabilecek, TÜRKÇE, samimi ama profesyonel, 80-150 kelimelik bir duyuru',
-        'metni yaz. Emoji kullanabilirsin (aşırıya kaçma). Sonunda 3-5 ilgili hashtag ekle',
-        '(örn. #yazılım #opensource #whatsapp #ai). Ekran görüntüsü ekleneceğinden bahsetme,',
-        'metin tek başına yeterli olsun.',
-        `\nChangelog:\n${changelogBody.slice(0, 4000)}`,
-    ].join('\n');
-
-    let linkedinPost;
-    try {
-        linkedinPost = await generateText(linkedinPrompt, { maxTokens: 1000, timeoutMs: 90000 });
-        if (!linkedinPost) throw new Error('boş yanıt');
-    } catch (err) {
-        console.log(`[uyarı] AI'dan LinkedIn metni alınamadı (${err.message}). Basit şablon kullanıldı.`);
-        linkedinPost = `NeRoBoT ${tag} yayında! 🚀\n\nBu sürümde neler değişti:\n${commitLog}\n\n#yazılım #gelistirme #nerobot`;
-    }
-
-    // Ekran görüntüsü yakalama (pano) ve .docx paketleme PowerShell'e
-    // (System.Windows.Forms.Clipboard, Compress-Archive) dayanıyor — sadece
-    // Windows'ta var. Linux/mac'te bu adım atlanır, duyuru metni düz .txt
-    // olarak kaydedilir (metnin kendisi zaten platformdan bağımsız üretildi).
-    let linkedinFile;
-    if (IS_WIN) {
-        const screenshots = await captureScreenshotsInteractive(2);
-        const images = screenshots.map((p, i) => {
-            const buf = fs.readFileSync(p);
-            const dim = pngDimensions(buf);
-            const maxCx = 5486400; // ~6 inç genişlik sınırı (EMU cinsinden)
-            let cx = dim.width * 9525; // px → EMU (96 DPI varsayımıyla)
-            let cy = dim.height * 9525;
-            if (cx > maxCx) {
-                const scale = maxCx / cx;
-                cx = Math.round(cx * scale);
-                cy = Math.round(cy * scale);
-            }
-            return { path: p, mediaName: `image${i + 1}.png`, cx, cy };
-        });
-
-        const docxPath = path.join(ROOT, `linkedin_post_${tag}.docx`);
-        const built = buildDocx(docxPath, {
-            title: `NeRoBoT ${tag} - LinkedIn Duyurusu`,
-            bodyLines: linkedinPost.split('\n'),
-            images,
-        });
-
-        if (built) {
-            linkedinFile = docxPath;
-            console.log(`LinkedIn Word dosyası hazır: ${path.basename(docxPath)}`);
-        } else {
-            linkedinFile = path.join(ROOT, `linkedin_post_${tag}.txt`);
-            fs.writeFileSync(linkedinFile, linkedinPost + '\n', 'utf8');
-            console.log('[uyarı] Word dosyası oluşturulamadı, metin .txt olarak kaydedildi.');
-        }
-    } else {
-        linkedinFile = path.join(ROOT, `linkedin_post_${tag}.txt`);
-        fs.writeFileSync(linkedinFile, linkedinPost + '\n', 'utf8');
-        console.log('[bilgi] Ekran görüntülü Word dosyası yalnızca Windows\'ta destekleniyor (PowerShell gerekiyor) — metin .txt olarak kaydedildi.');
-    }
-
-    // ============================
-    // 7) Arch PKGBUILD — CI'nın AppImage'i release'e yüklemesini bekleyip
+    // 6) Arch PKGBUILD — CI'nın AppImage'i release'e yüklemesini bekleyip
     // packaging/arch/PKGBUILD'i bu sürüme göre günceller (bkz. fonksiyonun
-    // kendi yorumu). LinkedIn adımından SONRA çalışıyor çünkü bu adım CI'yı
-    // bekleyeceğinden (birkaç dakika) o adımı geciktirmemiş oluyor.
+    // kendi yorumu). CI'nın derlemesini beklediğinden birkaç dakika
+    // sürebilir, o yüzden en sona bırakıldı.
     // ============================
     await updateArchPkgbuild({ owner: parsedRemote.owner, repo: parsedRemote.repo, tag, version, branch });
 
@@ -831,7 +589,6 @@ async function main() {
     console.log(`Tag: ${tag}`);
     console.log(`Release: ${releaseUrl}`);
     console.log(`Changelog: ${path.basename(changelogFile)}`);
-    console.log(`LinkedIn metni: ${path.basename(linkedinFile)}`);
 }
 
 main().catch((err) => {

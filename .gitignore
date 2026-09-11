@@ -140,14 +140,10 @@ NeRoBoT_db/
 # commit'lenmemeli.
 .claude-api-key
 
-# release.js'in her sürümde ürettiği tek-seferlik dosyalar — CHANGELOG.md'ye
-# (bilerek repo'da kalır) ve GitHub Release notuna zaten işlendiler,
-# LinkedIn duyurusu (metin + varsa ekran görüntüleri) da tek kullanımlık;
-# hiçbirinin repo'da tekrar tekrar değişen ayrı kopyaları olmasına gerek yok.
+# release.js'in her sürümde ürettiği tek-seferlik changelog dosyası —
+# içeriği zaten CHANGELOG.md'ye (bilerek repo'da kalır) ve GitHub Release
+# notuna işleniyor; ayrı bir kopyasının repo'da durmasına gerek yok.
 changelog_v*.md
-linkedin_post_*.txt
-linkedin_post_*.docx
-release-assets/
 
 # ===================================
 # 💻 IDE & Editor
