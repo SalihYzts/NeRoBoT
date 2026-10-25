@@ -39,7 +39,7 @@ import {
 } from '../src/ai.js';
 import { createTelegramBot } from '../src/telegram-bot.js';
 import {
-    parseRecipients, applyTemplate, nextDelayMs, DEFAULT_PACING, MAX_RECIPIENTS,
+    parseRecipients, applyTemplate, nextDelayMs, chatIdForSend, DEFAULT_PACING, MAX_RECIPIENTS,
 } from '../src/broadcast.js';
 import { getEmbeddedTelegramCredentials } from '../src/telegram-default-app.js';
 import { createAiClient, probeConnection } from '../src/ai-client.js';
@@ -3895,9 +3895,11 @@ async function runBroadcast(session, run) {
         // Numara WhatsApp'ta kayıtlı mı? Kayıtlı değilse göndermeye çalışmak
         // boş bir sohbet açıp hata almak demek; ayrıca art arda "olmayan
         // numaraya gönderim denemesi" WhatsApp'ın spam sinyallerinden biri.
-        // getNumberId aynı zamanda doğru sohbet id'sini veriyor (@lid/@c.us
-        // ayrımını kendisi çözüyor), o yüzden elimizdeki tahmini id'yi değil
-        // onun döndürdüğünü kullanıyoruz.
+        //
+        // DİKKAT: getNumberId'nin sonucu adres olarak KULLANILMAZ, yalnızca
+        // "var mı yok mu" cevabı olarak kullanılır. Sebebi broadcast.js'teki
+        // chatIdForSend'in başında yazıyor: döndürdüğü @lid id'si hiç
+        // yazılmamış bir kişide sohbet oluşturamıyor ve gönderim patlıyordu.
         let chatId = recipient.chatId;
         if (verifyNumbers) {
             try {
@@ -3913,7 +3915,7 @@ async function runBroadcast(session, run) {
                     if (i < recipients.length - 1 && !run.stopRequested) await waitOrWake(1500, run);
                     continue;
                 }
-                chatId = numberId._serialized;
+                chatId = chatIdForSend(recipient, numberId._serialized);
             } catch (err) {
                 // Sorgu başarısız oldu (bağlantı dalgalanması vb.) — numarayı
                 // tamamen atlamak yerine elimizdeki id ile denemeye devam et.

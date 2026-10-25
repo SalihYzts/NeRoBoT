@@ -9,6 +9,7 @@ import {
     parseRecipients,
     applyTemplate,
     nextDelayMs,
+    chatIdForSend,
     MIN_DELAY_FLOOR_MS,
     MAX_RECIPIENTS,
 } from '../src/broadcast.js';
@@ -184,6 +185,42 @@ describe('applyTemplate — mesaj kişiselleştirme', () => {
 
     test('yer tutucu yoksa mesaj aynen kalır', () => {
         assert.equal(applyTemplate('Düz mesaj', { label: 'Ahmet' }), 'Düz mesaj');
+    });
+});
+
+describe('chatIdForSend — hangi sohbet id\'sine gönderilir', () => {
+    // GERİLEME TESTİ. Gerçek bir hatanın kaydı:
+    // Numara doğrulandıktan sonra gönderim hedefi olarak client.getNumberId()
+    // sonucu (modern WhatsApp'ta bir @lid id'si) kullanılıyordu. @lid yalnızca
+    // o sohbet YEREL OLARAK ZATEN VARSA çalışıyor; ilk kez yazılan birinde
+    // WhatsApp Web sadece LID'den sohbet oluşturamıyor ve şu hatayı veriyor:
+    //   "Data passed to getter must include an id property
+    //    (it's how we memoize) but got undefined"
+    // Yani araç tam da asıl işinde — hiç yazılmamış kişilere ilk mesajda —
+    // çöküyordu. Telefon formu (@c.us) verildiğinde WhatsApp eşlemeyi kendisi
+    // yapıyor ve var olan @lid sohbetini buluyor.
+    const alici = normalizePhone('05551234567');
+
+    test('doğrulama @lid döndürse bile telefon formuna gönderilir', () => {
+        assert.equal(chatIdForSend(alici, '276746905587891@lid'), '905551234567@c.us');
+    });
+
+    test('doğrulama yapılmadıysa yine telefon formu', () => {
+        assert.equal(chatIdForSend(alici, null), '905551234567@c.us');
+        assert.equal(chatIdForSend(alici, undefined), '905551234567@c.us');
+    });
+
+    test('doğrulama kendi telefon formunu döndürürse o kullanılır', () => {
+        // WhatsApp numarayı kendi kanonik telefon biçiminde döndürürse ona
+        // uymak doğru — ama yalnızca @c.us olduğunda.
+        assert.equal(chatIdForSend(alici, '905551234567@c.us'), '905551234567@c.us');
+        assert.equal(chatIdForSend(alici, '905551239999@c.us'), '905551239999@c.us');
+    });
+
+    test('anlamsız doğrulama sonuçları yok sayılır', () => {
+        assert.equal(chatIdForSend(alici, ''), '905551234567@c.us');
+        assert.equal(chatIdForSend(alici, 'abc'), '905551234567@c.us');
+        assert.equal(chatIdForSend(alici, '905551234567@g.us'), '905551234567@c.us');
     });
 });
 

@@ -227,6 +227,30 @@ export function applyTemplate(message, recipient = {}) {
         .trim();
 }
 
+// Gönderim hangi sohbet id'sine yapılacak?
+//
+// GERÇEK BİR HATANIN DERSİ — bu fonksiyonun tek varlık sebebi:
+// client.getNumberId() modern WhatsApp'ta bir @lid id'si döndürüyor
+// (ör. 276746905587891@lid). Gönderim adresi olarak ONU kullanmak yalnızca
+// o sohbet YEREL OLARAK ZATEN VARSA çalışıyor. Hiç yazılmamış bir kişide
+// WhatsApp Web sadece LID'den sohbet oluşturamıyor ve şunu fırlatıyor:
+//   "Data passed to getter must include an id property
+//    (it's how we memoize) but got undefined"
+// Yani araç tam da asıl işinde — ilk kez yazılan kişilerde — çöküyordu.
+//
+// Telefon formu (@c.us) verildiğinde WhatsApp eşlemeyi kendisi yapıyor:
+// var olan @lid sohbetini buluyor, yoksa oluşturuyor. Bu yüzden doğrulama
+// sonucu YALNIZCA "numara WhatsApp'ta var mı" sorusunu cevaplamak için
+// kullanılır, adres olarak değil.
+//
+// Tek istisna: WhatsApp kendi kanonik TELEFON biçimini döndürürse (@c.us)
+// ona uymak doğru — numarayı bizden iyi bilir.
+export function chatIdForSend(recipient, verifiedId) {
+    const v = typeof verifiedId === 'string' ? verifiedId.trim() : '';
+    if (/^\d+@c\.us$/.test(v)) return v;
+    return recipient.chatId;
+}
+
 // Sıradaki mesaj için beklenecek süre. index = kaçıncı mesaj gönderildi
 // (0'dan başlar).
 export function nextDelayMs(index, pacing = {}) {
