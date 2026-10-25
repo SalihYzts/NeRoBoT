@@ -54,6 +54,7 @@ NeRoBoT is a Windows desktop app that runs local-AI-powered bots on top of **Wha
 - [Installation](#installation)
 - [Building & Releasing](#building--releasing)
 - [Commands](#commands)
+- [Invite (Bulk Send)](#invite-bulk-send)
 - [Default Configuration](#default-configuration)
 - [Troubleshooting](#troubleshooting)
 - [Security Notes](#security-notes)
@@ -69,6 +70,7 @@ NeRoBoT is a Windows desktop app that runs local-AI-powered bots on top of **Wha
 - NeRoChAt — a full, general-purpose AI chat tab (separate from any WhatsApp/Telegram bot), with saved conversations, image attachments, and AI image generation
 - NeRoChAt Quick Popup — a configurable global keyboard shortcut (default `Ctrl+Shift+K`) opens a small floating AI chat on top of whatever you're doing; "Ask about this chat" lets you pick a start/end message range from that WhatsApp chat's recent history to pull in as context
 - Fix-Text Shortcut — a configurable global keyboard shortcut (default `Ctrl+Shift+J`) while composing a WhatsApp message suggests spelling-corrected, formal, and casual rewrites right under the compose box; an optional "Otomatik Düzeltme" mode suggests them automatically after a typing pause, with no shortcut needed
+- Invite (Bulk Send) — a one-time invitation message to people who signed up via a form; reduces a messily-written number list (`5xx`, `05xx`, `+90 5xx`, spaces/dashes) to one form, personalizes with `{name}`, sends at randomized intervals, and records who was reached so nobody gets a second message — see [Invite](#invite-bulk-send)
 - Auto-Update — checks GitHub Releases on every launch and updates itself silently (download → install → relaunch) before the window even opens
 - Persistent Sessions — scan each profile's QR code once; logins survive restarts
 
@@ -129,6 +131,7 @@ nerobot/
 │   ├── config.js                   # Per-profile state/settings persistence
 │   ├── profiles.js                 # Multi-profile registry (create/rename/delete/export/import)
 │   ├── commands.js                 # All !commands
+│   ├── broadcast.js                # Invite tab core — number normalization, personalization, pacing
 │   ├── ratelimit.js                # Token-bucket rate limiter
 │   ├── utils.js / telegram-utils.js
 │   ├── file-extract.js             # PDF/Word/text extraction for the AI to read
@@ -361,6 +364,46 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 </details>
 
 > 💡 Run any command with no arguments to see its usage, e.g. `!admin`, `!prefix`, `!ratelimit`.
+
+---
+
+## Invite (Bulk Send)
+
+The **Settings → Invite** tab sends **one invitation message** to people who gave you their number and asked to join. Each person gets their own one-to-one message — no group is created, nobody sees anyone else's number.
+
+> ⚠️ **This tool is for opted-in lists.** Bulk-messaging numbers that never opted in violates WhatsApp's terms and gets the account **permanently banned**. If the content is commercial or promotional it also falls under consent and marketing law in most jurisdictions (in Turkey: KVKK and the İYS message-management system), carrying administrative fines. For larger or recurring sends this is the wrong tool — use Meta's official **WhatsApp Business Platform** with approved template messages.
+
+**Number list** — formatting does not have to be consistent. All of these are accepted and reduced to one form:
+
+```
+5551234567              →  +905551234567
+05551234567             →  +905551234567
++90 555 123 45 67       →  +905551234567
+90 555 123 45 67        →  +905551234567
+0090 (555) 123-45-67    →  +905551234567
+Jane Doe, 05551234568       →  +905551234568  (name is picked up too)
+# this line is skipped
+```
+
+International numbers are preserved as long as they are written with `+` (`+49 170 1234567`). Landlines, too-short/too-long entries and unreadable lines are filtered out and reported with the reason. A number appearing several times in different spellings still gets exactly one message.
+
+**The flow is two-step:** *Check List* sends nothing — it only shows how many people will be messaged, who is skipped, and why. *Send* unlocks only after that report, and asks for confirmation.
+
+**Write `{name}` in the message** and it is replaced with the name from your list; when there is none, the sentence tidies itself (`"Hi {name}, welcome"` → `"Hi, welcome"`).
+
+**Safeguards:**
+
+| | |
+|---|---|
+| Pacing | **Randomized** 8–20 s (or 20–45 s) per message, with a pause every 20 messages. A fixed interval is the easiest bot pattern to detect, so this cannot be sped up — the floor is hard-coded in `src/broadcast.js`. |
+| Number verification | Numbers without WhatsApp are filtered out up front via `getNumberId`; failed send attempts are both an error and a spam signal. |
+| Duplicate protection | Who has been invited is written to `davet-gonderilenler.json` in the profile folder. Even if a run is interrupted or the app restarts, nobody gets a second message on the next run. |
+| Upper limit | At most 1000 recipients per run. |
+| Interruptible | *Stop* exits immediately, even mid-pause; everything sent up to that point is already recorded. |
+
+Sending runs in the background (in the main process) — you can switch tabs or close settings, and progress keeps showing where it left off. But **the app must stay open.**
+
+Only shown for WhatsApp profiles. The parsing and pacing logic lives in `src/broadcast.js` with tests in `test/broadcast.test.js` — runnable without opening the app via `node --test test/broadcast.test.js`.
 
 ---
 

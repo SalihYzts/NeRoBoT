@@ -44,6 +44,7 @@ Geliştirici: **Salih Yazıtaş**
 - [Kurulum](#kurulum)
 - [Derleme ve Yayınlama](#derleme-ve-yayınlama)
 - [Komutlar](#komutlar)
+- [Davet (Toplu Gönderim)](#davet-toplu-gönderim)
 - [Varsayılan Yapılandırma](#varsayılan-yapılandırma)
 - [Sık Karşılaşılan Sorunlar](#sık-karşılaşılan-sorunlar)
 - [Güvenlik Notları](#güvenlik-notları)
@@ -59,6 +60,7 @@ Geliştirici: **Salih Yazıtaş**
 - NeRoChAt — herhangi bir WhatsApp/Telegram botuna bağlı olmayan, tam kapsamlı, genel amaçlı bir AI sohbet sekmesi; kayıtlı konuşmalar, görsel ekleme ve AI görsel üretimi ile
 - NeRoChAt Hızlı Popup — ayarlanabilir bir global klavye kısayolu (varsayılan `Ctrl+Shift+K`) ne yapıyor olursanız olun üzerine küçük, yüzen bir AI sohbeti açıyor; "Bu sohbeti sor" o WhatsApp sohbetinin geçmişinden bir başlangıç/bitiş mesajı aralığı seçip bağlam olarak çekmeni sağlıyor
 - Yazı Düzeltme Kısayolu — ayarlanabilir bir global klavye kısayolu (varsayılan `Ctrl+Shift+J`) bir WhatsApp mesajı yazarken, yazı kutusunun hemen altında imla düzeltmeli/resmi/samimi varyantlar öneriyor; isteğe bağlı "Otomatik Düzeltme" modu kısayola basmana gerek kalmadan bir süre durakladığında önerileri kendiliğinden çıkarıyor
+- Davet (Toplu Gönderim) — forma numarasını yazıp katılmak istediğini söylemiş kişilere tek seferlik davet mesajı; karışık yazılmış numara listesini (`5xx`, `05xx`, `+90 5xx`, boşluklu/tireli) tek biçime indiriyor, `{isim}` ile kişiselleştiriyor, rastgele aralıklarla gönderiyor ve kime gittiğini kaydederek aynı kişiye ikinci mesajı engelliyor — bkz. [Davet](#davet-toplu-gönderim)
 - Otomatik Güncelleme — her açılışta GitHub Releases'i kontrol edip kendini sessizce güncelliyor (indir → kur → yeniden aç), pencere açılmadan önce
 - Kalıcı Oturumlar — her profilin QR kodunu bir kez okutun; girişler yeniden başlatmalarda korunur
 
@@ -119,6 +121,7 @@ nerobot/
 │   ├── config.js                   # Profil bazlı durum/ayar kalıcılığı
 │   ├── profiles.js                 # Çoklu profil kayıt defteri (oluştur/yeniden adlandır/sil/dışa-içe aktar)
 │   ├── commands.js                 # Tüm !komutlar
+│   ├── broadcast.js                # Davet sekmesinin çekirdeği — numara normalleştirme, kişiselleştirme, hız
 │   ├── ratelimit.js                # Token-bucket hız sınırlayıcı
 │   ├── utils.js / telegram-utils.js
 │   ├── file-extract.js             # AI'ın okuyabilmesi için PDF/Word/metin çıkarımı
@@ -351,6 +354,46 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 </details>
 
 > 💡 Herhangi bir komutu argümansız çalıştırarak kullanım talimatını görebilirsiniz, örn. `!admin`, `!prefix`, `!ratelimit`.
+
+---
+
+## Davet (Toplu Gönderim)
+
+**Ayarlar → Davet** sekmesi, bir forma kendi numarasını yazıp katılmak istediğini söylemiş kişilere **tek bir davet mesajı** göndermek için. Mesaj her kişiye birebir sohbette ayrı ayrı gider — grup kurulmaz, kimse diğerlerinin numarasını görmez.
+
+> ⚠️ **Bu araç izin verilmiş listeler için.** İzin vermemiş numaralara toplu mesaj atmak WhatsApp'ın kullanım şartlarını ihlal eder ve hesabın **kalıcı olarak kapatılmasıyla** sonuçlanır. İçerik ticari/tanıtım niteliğindeyse Türkiye'de ayrıca **KVKK** ve **İYS** (İleti Yönetim Sistemi) kapsamına girer ve idari para cezası doğurur. Çok daha büyük ya da düzenli gönderimler için doğru araç bu değil, Meta'nın resmi **WhatsApp Business Platform**'u ve onaylı şablon mesajlarıdır.
+
+**Numara listesi** — düzenin tutarlı olması gerekmiyor. Hepsi kabul edilir ve tek biçime indirilir:
+
+```
+5551234567              →  +905551234567
+05551234567             →  +905551234567
++90 555 123 45 67       →  +905551234567
+90 555 123 45 67        →  +905551234567
+0090 (555) 123-45-67    →  +905551234567
+Ahmet Yılmaz, 05551234568   →  +905551234568  (isim de alınır)
+# bu satır atlanır
+```
+
+Yurt dışı numaraları `+` ile yazıldığı sürece korunur (`+49 170 1234567`). Sabit hatlar, çok kısa/uzun girdiler ve okunamayan satırlar ayıklanıp sebebiyle birlikte raporlanır. Aynı numara farklı yazımlarla birden fazla geçse bile tek mesaj gider.
+
+**Akış iki adımlı:** *Listeyi Kontrol Et* hiçbir şey göndermez — yalnızca kaç kişiye gideceğini, kimin atlandığını ve neden atlandığını gösterir. *Gönder* ancak bu rapor görüldükten sonra açılır ve onay ister.
+
+**Mesajda `{isim}`** yazarsan listedeki isimle değişir; isim yoksa cümle kendini toparlar (`"Merhaba {isim}, hoş geldin"` → `"Merhaba, hoş geldin"`).
+
+**Korumalar:**
+
+| | |
+|---|---|
+| Hız | Mesaj başına 8–20 sn (ya da 20–45 sn) **rastgele** bekleme, her 20 mesajda mola. Sabit aralık botun en kolay yakalandığı desen olduğu için hızlandırılamıyor — taban `src/broadcast.js`'te koda gömülü. |
+| Numara doğrulama | WhatsApp'ı olmayan numaralar `getNumberId` ile önceden ayıklanır; boşa gönderim denemesi hem hata hem spam sinyalidir. |
+| Tekrar koruması | Kime davet gittiği profil klasöründeki `davet-gonderilenler.json`'a yazılır. Gönderim yarıda kesilse, uygulama kapanıp açılsa bile ikinci turda aynı kişiye ikinci mesaj gitmez. |
+| Üst sınır | Tek seferde en fazla 1000 alıcı. |
+| Durdurulabilir | *Durdur* molanın ortasında bile anında çıkar; o ana kadar gönderilenler kayda yazılmış olur. |
+
+Gönderim arka planda (ana süreçte) koşar — sekmeyi değiştirebilir, ayarları kapatabilirsin, ilerleme kaldığı yerden görünmeye devam eder. Ama **uygulama açık kalmalı.**
+
+Yalnızca WhatsApp profillerinde görünür. Numara ayrıştırma ve hız mantığı `src/broadcast.js`'te ve testleri `test/broadcast.test.js`'te — uygulamayı hiç açmadan `node --test test/broadcast.test.js` ile koşturulabilir.
 
 ---
 

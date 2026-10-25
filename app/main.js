@@ -38,6 +38,9 @@ import {
     pickClassifierModel, modelHasVision, pickVisionFallbackModel, resolveVisionModel,
 } from '../src/ai.js';
 import { createTelegramBot } from '../src/telegram-bot.js';
+import {
+    parseRecipients, applyTemplate, nextDelayMs, DEFAULT_PACING, MAX_RECIPIENTS,
+} from '../src/broadcast.js';
 import { getEmbeddedTelegramCredentials } from '../src/telegram-default-app.js';
 import { createAiClient, probeConnection } from '../src/ai-client.js';
 import { LOCAL_RUNTIMES, CLOUD_PROVIDERS, resolveConnection, findLocalRuntime,
@@ -1624,6 +1627,16 @@ async function closeProfile(id) {
     const session = sessions.get(id);
     if (!session) return;
     session.botGeneration++; // invalidate any in-flight attempt/watchdog for this session
+
+    // Süren bir davet gönderimi varsa durdur — profil kapanırken client ve
+    // utils yok oluyor, döngü devam ederse her alıcıda hata yazar. Kayıt
+    // dosyasına kadar gönderilenler yazılmış durumda, yani profil yeniden
+    // açıldığında kaldığı yerden devam edilebilir (skipAlreadySent).
+    const run = broadcastRuns.get(id);
+    if (run && !run.finished) {
+        run.stopRequested = true;
+        run.wake?.();
+    }
 
     if (session.flushInterval) {
         clearInterval(session.flushInterval);
@@ -3758,6 +3771,312 @@ ipcMain.handle('lists:clear', (_e, profileId, name) => {
 ipcMain.handle('chat:idVariants', (_e, profileId, chatId) => {
     const session = requireSession(profileId);
     return chatIdForms(session, chatId);
+});
+
+// ============================
+// IPC — Davet (toplu gönderim)
+//
+// Ne için var: bir forma kendi numarasını yazıp "katılmak istiyorum" demiş
+// insanlara TEK bir davet mesajı göndermek. İzinsiz listelere gönderim
+// WhatsApp hesabının kalıcı olarak kapatılmasına yol açar, ticari içerikte
+// ayrıca KVKK/İYS kapsamına girer — bu yüzden hız tabanı ve alıcı üst sınırı
+// (src/broadcast.js'teki MIN_DELAY_FLOOR_MS / MAX_RECIPIENTS) ayar değil,
+// kod seviyesinde sabit.
+//
+// Ayrıştırma, kişiselleştirme ve hız hesabı src/broadcast.js'te — saf ve
+// testli (test/broadcast.test.js). Burada yalnızca oturuma dokunan kısım var.
+//
+// Gönderim session.utils.sendText üzerinden gidiyor: ! komutlarının ve AI
+// yanıtlarının kullandığı YOLUN AYNISI. Bu şart — sendText gönderdiği mesajın
+// id'sini işaretlediği için bot kendi davet mesajını "yeni mesaj" sanıp
+// cevaplamaya kalkmıyor (bkz. utils.js'teki isBotSentMessage/pendingSends).
+// ============================
+
+// profileId → süren gönderimin durumu. Aynı profilde iki gönderim birlikte
+// koşamaz (tek WhatsApp hattı var, ikisi birbirinin hızını bozar).
+const broadcastRuns = new Map();
+
+// Kime davet gittiğinin kalıcı kaydı — profil klasöründe. Uygulama kapanıp
+// açılsa, gönderim yarıda kesilse bile ikinci turda aynı kişiye ikinci mesaj
+// gitmiyor (bkz. skipAlreadySent).
+const INVITE_LOG_FILE = 'davet-gonderilenler.json';
+
+function inviteLogPath(session) {
+    return path.join(session.dir, INVITE_LOG_FILE);
+}
+
+function readInviteLog(session) {
+    try {
+        return JSON.parse(fs.readFileSync(inviteLogPath(session), 'utf8')) || {};
+    } catch (_) {
+        return {}; // dosya yok ya da bozuk — boş kayıtla başla
+    }
+}
+
+function writeInviteLog(session, log) {
+    try {
+        fs.writeFileSync(inviteLogPath(session), JSON.stringify(log, null, 2), 'utf8');
+    } catch (err) {
+        console.error(`[${session.name}] Davet kaydı yazılamadı:`, err.message || err);
+    }
+}
+
+function broadcastSnapshot(run) {
+    return {
+        profileId: run.profileId,
+        total: run.total,
+        index: run.index,
+        sent: run.sent,
+        failed: run.failed,
+        skipped: run.skipped,
+        noWhatsapp: run.noWhatsapp,
+        current: run.current,
+        running: !run.finished,
+        stopped: run.stopRequested,
+        // null | 'connection' | 'failures' — gönderim kendi kendine kesildiyse
+        // nedeni; arayüz bunu ayrı bir uyarı olarak gösteriyor, yoksa kullanıcı
+        // yarım kalmış bir listeyi "bitti" sanır.
+        aborted: run.aborted,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
+        // Yalnızca son hatalar — yüzlerce alıcıda bütün listeyi her ilerleme
+        // olayında renderer'a taşımanın anlamı yok.
+        errors: run.errors.slice(-20),
+    };
+}
+
+function emitBroadcastProgress(run) {
+    if (win && !win.isDestroyed()) {
+        win.webContents.send('broadcast:progress', broadcastSnapshot(run));
+    }
+}
+
+// Beklemeyi bölünebilir yapar: Durdur'a basıldığında 20 saniyelik molanın
+// bitmesini beklemeden çıkılsın.
+function waitOrWake(ms, run) {
+    return new Promise(resolve => {
+        const timer = setTimeout(() => { run.wake = null; resolve(); }, ms);
+        run.wake = () => { clearTimeout(timer); run.wake = null; resolve(); };
+    });
+}
+
+async function runBroadcast(session, run) {
+    const { recipients, message, pacing, verifyNumbers, skipAlreadySent } = run.options;
+    const log = readInviteLog(session);
+
+    // Bağlantı ortada koparsa kalan HER alıcı saniyeler içinde "hata" olarak
+    // işaretlenir ve liste boşa yanar (başarısızlar bir sonraki turda yine
+    // denenir, ama kullanıcı yüzlerce hata satırı görür ve neyin gittiğini
+    // anlamaz). Üst üste bu kadar hata = ortam bozuk, gönderimi kes.
+    const MAX_CONSECUTIVE_FAILURES = 5;
+    let consecutiveFailures = 0;
+
+    for (let i = 0; i < recipients.length; i++) {
+        if (run.stopRequested) break;
+
+        // Profil kapandı ya da WhatsApp bağlantısı düştü — devam etmenin
+        // anlamı yok.
+        if (!session.client || !session.utils || !session.botReady) {
+            run.aborted = 'connection';
+            break;
+        }
+
+        const recipient = recipients[i];
+        run.index = i + 1;
+        run.current = recipient.label ? `${recipient.label} (${recipient.display})` : recipient.display;
+
+        // Daha önce davet edilmiş — atla.
+        if (skipAlreadySent && log[recipient.e164]?.status === 'sent') {
+            run.skipped++;
+            emitBroadcastProgress(run);
+            continue;
+        }
+
+        // Numara WhatsApp'ta kayıtlı mı? Kayıtlı değilse göndermeye çalışmak
+        // boş bir sohbet açıp hata almak demek; ayrıca art arda "olmayan
+        // numaraya gönderim denemesi" WhatsApp'ın spam sinyallerinden biri.
+        // getNumberId aynı zamanda doğru sohbet id'sini veriyor (@lid/@c.us
+        // ayrımını kendisi çözüyor), o yüzden elimizdeki tahmini id'yi değil
+        // onun döndürdüğünü kullanıyoruz.
+        let chatId = recipient.chatId;
+        if (verifyNumbers) {
+            try {
+                const numberId = await session.client.getNumberId(recipient.e164);
+                if (!numberId) {
+                    run.noWhatsapp++;
+                    log[recipient.e164] = { at: Date.now(), status: 'no_whatsapp', label: recipient.label || undefined };
+                    run.errors.push({ display: recipient.display, error: 'WhatsApp kaydı yok' });
+                    writeInviteLog(session, log);
+                    emitBroadcastProgress(run);
+                    // Sorgu gönderim değil — tam molayı beklemeye gerek yok,
+                    // ama art arda sorgu da yağdırmayalım.
+                    if (i < recipients.length - 1 && !run.stopRequested) await waitOrWake(1500, run);
+                    continue;
+                }
+                chatId = numberId._serialized;
+            } catch (err) {
+                // Sorgu başarısız oldu (bağlantı dalgalanması vb.) — numarayı
+                // tamamen atlamak yerine elimizdeki id ile denemeye devam et.
+                console.error(`[${session.name}] Numara doğrulanamadı (${recipient.display}):`, err.message || err);
+            }
+        }
+
+        try {
+            await session.utils.sendText(chatId, applyTemplate(message, recipient));
+            run.sent++;
+            consecutiveFailures = 0;
+            log[recipient.e164] = { at: Date.now(), status: 'sent', label: recipient.label || undefined };
+        } catch (err) {
+            run.failed++;
+            consecutiveFailures++;
+            const reason = err.message || String(err);
+            log[recipient.e164] = { at: Date.now(), status: 'failed', error: reason, label: recipient.label || undefined };
+            run.errors.push({ display: recipient.display, error: reason });
+            console.error(`[${session.name}] Davet gönderilemedi (${recipient.display}):`, reason);
+        }
+
+        writeInviteLog(session, log);
+        emitBroadcastProgress(run);
+
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            run.aborted = 'failures';
+            console.error(`[${session.name}] Üst üste ${consecutiveFailures} hata — davet gönderimi kesildi`);
+            break;
+        }
+
+        if (i < recipients.length - 1 && !run.stopRequested) {
+            await waitOrWake(nextDelayMs(i, pacing), run);
+        }
+    }
+
+    run.finished = true;
+    run.finishedAt = Date.now();
+    run.current = '';
+    emitBroadcastProgress(run);
+    console.log(
+        `[${session.name}] Davet bitti — ${run.sent} gönderildi, ${run.failed} hata, ` +
+        `${run.skipped} zaten davetli, ${run.noWhatsapp} WhatsApp'ta yok` +
+        (run.stopRequested ? ' (kullanıcı durdurdu)'
+            : run.aborted === 'connection' ? ' (bağlantı koptu, kesildi)'
+            : run.aborted === 'failures' ? ' (üst üste hata, kesildi)'
+            : '')
+    );
+}
+
+// Listeyi ayrıştırır ama HİÇBİR ŞEY GÖNDERMEZ. Gönderimden önce kullanıcının
+// ne göndereceğini görmesi için — kaç kişi, hangi numaralar atlandı, kim
+// zaten davet edilmiş.
+ipcMain.handle('broadcast:preview', (_e, profileId, rawList, defaultCountry) => {
+    const result = parseRecipients(rawList, defaultCountry ? { defaultCountry } : undefined);
+    const session = sessions.get(profileId);
+    const log = session ? readInviteLog(session) : {};
+    return {
+        ...result,
+        max: MAX_RECIPIENTS,
+        recipients: result.recipients.map(r => ({
+            ...r,
+            alreadySent: log[r.e164]?.status === 'sent',
+        })),
+    };
+});
+
+ipcMain.handle('broadcast:start', async (_e, profileId, options = {}) => {
+    const session = sessions.get(profileId);
+    if (!session) return { ok: false, error: 'Profil açık değil.' };
+    if (session.platform !== 'whatsapp') {
+        return { ok: false, error: 'Davet gönderimi şimdilik yalnızca WhatsApp profillerinde çalışıyor.' };
+    }
+    if (!session.client || !session.utils || !session.botReady) {
+        return { ok: false, error: 'WhatsApp bağlantısı hazır değil — bağlanmasını bekle.' };
+    }
+
+    const existing = broadcastRuns.get(profileId);
+    if (existing && !existing.finished) {
+        return { ok: false, error: 'Bu profilde zaten bir gönderim sürüyor.' };
+    }
+
+    const message = String(options.message ?? '').trim();
+    if (!message) return { ok: false, error: 'Gönderilecek mesaj boş.' };
+
+    const parsed = parseRecipients(options.rawList, options.defaultCountry ? { defaultCountry: options.defaultCountry } : undefined);
+    if (!parsed.recipients.length) {
+        return { ok: false, error: 'Listede geçerli numara yok.' };
+    }
+
+    const run = {
+        profileId,
+        options: {
+            recipients: parsed.recipients,
+            message,
+            pacing: { ...DEFAULT_PACING, ...(options.pacing || {}) },
+            // İkisi de varsayılan olarak açık: doğrulama hem hata hem spam
+            // sinyali azaltıyor, atlama da aynı kişiye ikinci mesajı önlüyor.
+            verifyNumbers: options.verifyNumbers !== false,
+            skipAlreadySent: options.skipAlreadySent !== false,
+        },
+        total: parsed.recipients.length,
+        index: 0,
+        sent: 0,
+        failed: 0,
+        skipped: 0,
+        noWhatsapp: 0,
+        current: '',
+        errors: [],
+        stopRequested: false,
+        aborted: null,
+        finished: false,
+        startedAt: Date.now(),
+        finishedAt: null,
+        wake: null,
+    };
+    broadcastRuns.set(profileId, run);
+
+    console.log(`[${session.name}] Davet gönderimi başlıyor — ${run.total} alıcı`);
+    // Beklenmiyor: döngü dakikalar sürebilir, IPC çağrısı hemen dönüyor.
+    // İlerleme 'broadcast:progress' olaylarıyla akıyor.
+    runBroadcast(session, run).catch(err => {
+        run.finished = true;
+        run.finishedAt = Date.now();
+        run.errors.push({ display: '—', error: err.message || String(err) });
+        console.error(`[${session.name}] Davet gönderimi çöktü:`, err);
+        emitBroadcastProgress(run);
+    });
+
+    return { ok: true, snapshot: broadcastSnapshot(run), parsed: { invalid: parsed.invalid, duplicates: parsed.duplicates, truncated: parsed.truncated } };
+});
+
+ipcMain.handle('broadcast:stop', (_e, profileId) => {
+    const run = broadcastRuns.get(profileId);
+    if (!run || run.finished) return { ok: false, error: 'Süren bir gönderim yok.' };
+    run.stopRequested = true;
+    // Molanın ortasındaysa hemen uyandır — 2 dakikalık parti molasının
+    // bitmesini beklemesin.
+    run.wake?.();
+    return { ok: true };
+});
+
+ipcMain.handle('broadcast:status', (_e, profileId) => {
+    const run = broadcastRuns.get(profileId);
+    return run ? broadcastSnapshot(run) : null;
+});
+
+// Davet kaydını sıfırlar — "listeyi baştan davet edeceğim" durumu için.
+// Kasıtlı olarak ayrı bir düğme: yoksa skipAlreadySent'in koruması sessizce
+// devre dışı kalırdı.
+ipcMain.handle('broadcast:clearLog', (_e, profileId) => {
+    const session = requireSession(profileId);
+    writeInviteLog(session, {});
+    console.log(`[${session.name}] Davet kaydı temizlendi`);
+    return { ok: true };
+});
+
+ipcMain.handle('broadcast:log', (_e, profileId) => {
+    const session = sessions.get(profileId);
+    if (!session) return [];
+    const log = readInviteLog(session);
+    return Object.entries(log)
+        .map(([e164, info]) => ({ e164, display: `+${e164}`, ...info }))
+        .sort((a, b) => (b.at || 0) - (a.at || 0));
 });
 
 // ============================

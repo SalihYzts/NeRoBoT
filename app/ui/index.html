@@ -1819,6 +1819,9 @@
                             <button class="tabBtn active" data-tab="general" id="tabBtnGeneral">Genel</button>
                             <button class="tabBtn" data-tab="chat" id="tabBtnChat">Sohbet</button>
                             <button class="tabBtn" data-tab="lists" id="tabBtnLists">Listeler</button>
+                            <!-- Yalnızca WhatsApp profillerinde — getNumberId ile numara
+                                 doğrulaması WhatsApp'a özgü (bkz. updatePlatformTabVisibility). -->
+                            <button class="tabBtn" data-tab="davet" id="tabBtnDavet">Davet</button>
                             <button class="tabBtn" data-tab="services" id="tabBtnServices">Hizmetler</button>
                             <!-- Only shown while AI Bot is on for this profile — see
                                  syncAiSectionsVisibility. -->
@@ -1990,6 +1993,76 @@
                                 <div id="listEntries"></div>
                                 <div class="field">
                                     <button id="listClearBtn" class="miniBtn danger" style="margin-top:10px; width:100%">Tümünü Sil</button>
+                                </div>
+                            </div>
+
+                            <!-- Davet — bir forma numarasını yazıp katılmak istediğini
+                                 söylemiş kişilere tek seferlik davet mesajı. Akış
+                                 bilinçli olarak iki adımlı: önce "Listeyi Kontrol Et"
+                                 (hiçbir şey göndermez, sadece raporlar), sonra Gönder.
+                                 Bkz. main.js'teki runBroadcast ve src/broadcast.js. -->
+                            <div id="tab-davet" class="tabContent">
+                                <div class="hint warn" id="bcConsentHint" style="margin-bottom:14px"></div>
+
+                                <div class="section">
+                                    <div class="sectionTitle" id="bcListTitle">1. Numara listesi</div>
+                                    <div class="field">
+                                        <textarea id="bcListInput" rows="8" placeholder="0555 123 45 67&#10;+90 555 123 45 68&#10;5551234569&#10;Ahmet Yılmaz, 05551234570"></textarea>
+                                        <div class="hint" id="bcListHint"></div>
+                                    </div>
+                                    <div class="field">
+                                        <button id="bcCheckBtn" class="miniBtn" style="width:100%">Listeyi Kontrol Et</button>
+                                    </div>
+                                    <div id="bcReport"></div>
+                                </div>
+
+                                <div class="section">
+                                    <div class="sectionTitle" id="bcMessageTitle">2. Mesaj</div>
+                                    <div class="field">
+                                        <textarea id="bcMessageInput" rows="6"></textarea>
+                                        <div class="hint" id="bcMessageHint"></div>
+                                    </div>
+                                </div>
+
+                                <div class="section">
+                                    <div class="sectionTitle" id="bcOptionsTitle">3. Gönderim</div>
+                                    <div class="field">
+                                        <label class="name" id="bcPaceLabel">Hız</label>
+                                        <select id="bcPaceSelect">
+                                            <option value="safe" id="bcPaceSafe">Güvenli — mesaj başına 8-20 sn</option>
+                                            <option value="slow" id="bcPaceSlow">Yavaş — mesaj başına 20-45 sn</option>
+                                        </select>
+                                        <div class="hint" id="bcPaceHint"></div>
+                                    </div>
+                                    <label class="toggleRow">
+                                        <span id="bcVerifyLabel">Numaraları WhatsApp'ta doğrula</span>
+                                        <span class="switch"><input type="checkbox" id="bcVerifyToggle" checked><span class="track"></span></span>
+                                    </label>
+                                    <div class="hint" id="bcVerifyHint"></div>
+                                    <label class="toggleRow">
+                                        <span id="bcSkipSentLabel">Daha önce davet edilenleri atla</span>
+                                        <span class="switch"><input type="checkbox" id="bcSkipSentToggle" checked><span class="track"></span></span>
+                                    </label>
+                                    <div class="hint" id="bcSkipSentHint"></div>
+                                    <div class="field" style="margin-top:12px">
+                                        <div class="btnRow">
+                                            <button id="bcSendBtn" class="miniBtn" style="flex:1" disabled>Gönder</button>
+                                            <button id="bcStopBtn" class="miniBtn danger" style="flex:1" disabled>Durdur</button>
+                                        </div>
+                                    </div>
+                                    <div id="bcProgress"></div>
+                                </div>
+
+                                <div class="section">
+                                    <div class="sectionTitle" id="bcLogTitle">Davet kaydı</div>
+                                    <div class="hint" id="bcLogHint"></div>
+                                    <div id="bcLogBody"></div>
+                                    <div class="field" style="margin-top:10px">
+                                        <div class="btnRow">
+                                            <button id="bcLogRefreshBtn" class="miniBtn" style="flex:1">Yenile</button>
+                                            <button id="bcClearLogBtn" class="miniBtn danger" style="flex:1">Kaydı Sıfırla</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -2348,6 +2421,60 @@
             clearMemoryConfirm: 'Bu sohbetin AI hafızası silinecek. Emin misin?',
             listClearBtn: 'Tümünü Sil',
             listClearConfirm: name => `"${name}" listesindeki TÜM kayıtlar silinecek. Emin misin?`,
+            // Davet sekmesi
+            tabDavet: 'Davet',
+            bcConsentHint: 'Bu araç, numarasını kendisi verip katılmak istediğini söylemiş kişilere TEK bir davet mesajı göndermek için. İzin vermemiş numaralara gönderim WhatsApp hesabının kalıcı olarak kapatılmasına yol açar; ticari/tanıtım içerikte ayrıca KVKK ve İYS kapsamına girer.',
+            bcListTitle: '1. Numara listesi',
+            bcListHint: 'Her satıra bir numara. Düzen karışık olabilir — 5xx, 05xx, +90 5xx, boşluklu/tireli hepsi olur. "Ad, numara" biçimindeki satırlardan isim de alınır. # ile başlayan satırlar atlanır.',
+            bcCheckBtn: 'Listeyi Kontrol Et',
+            bcChecking: 'Kontrol ediliyor…',
+            bcMessageTitle: '2. Mesaj',
+            bcMessageHint: '{isim} yazarsan listedeki isimle değişir (isim yoksa cümle kendini toparlar). Mesaj her kişiye ayrı ayrı, birebir sohbette gider — grup kurulmaz, kimse diğerlerinin numarasını görmez.',
+            bcMessageDefault: 'Merhaba {isim}! Formda belirttiğin üzere kulübümüze katılmak istemişsin. Topluluğumuza hoş geldin — detaylar ve ilk etkinliğimiz için bu mesaja yazabilirsin.\n\nDavet almak istemiyorsan "çıkar" yazman yeterli, listeden silerim.',
+            bcOptionsTitle: '3. Gönderim',
+            bcPaceLabel: 'Hız',
+            bcPaceSafe: 'Güvenli — mesaj başına 8-20 sn',
+            bcPaceSlow: 'Yavaş — mesaj başına 20-45 sn',
+            bcPaceHint: 'Araya rastgele bekleme konur ve her 20 mesajda mola verilir. Sabit aralıkla art arda gönderim WhatsApp\'ın en kolay yakaladığı bot desenidir — bu yüzden hızlandırılamıyor.',
+            bcVerifyLabel: 'Numaraları WhatsApp\'ta doğrula',
+            bcVerifyHint: 'WhatsApp\'ı olmayan numaralar atlanır. Hem boşa gönderim denemesini hem de spam şüphesini azaltır.',
+            bcSkipSentLabel: 'Daha önce davet edilenleri atla',
+            bcSkipSentHint: 'Aynı kişiye ikinci mesaj gitmesini engeller. Gönderim yarıda kesilirse kaldığı yerden devam eder.',
+            bcSendBtn: 'Gönder',
+            bcStopBtn: 'Durdur',
+            bcSendConfirm: (n, dakika) => `${n} kişiye davet mesajı gönderilecek. Tahmini süre ${dakika} dakika — bu sürede uygulama açık kalmalı.\n\nYalnızca katılmak istediğini kendisi belirtmiş kişilere gönderdiğini onayla.`,
+            bcNeedCheck: 'Önce "Listeyi Kontrol Et"e bas.',
+            bcReportValid: n => `${n} kişiye gönderilecek`,
+            bcReportAlreadySent: n => `${n} kişi zaten davet edilmiş (atlanacak)`,
+            bcReportDuplicates: n => `${n} tekrar eden numara temizlendi`,
+            bcReportTruncated: (n, max) => `${n} numara üst sınır (${max}) aşıldığı için listeden çıkarıldı`,
+            bcReportInvalid: n => `${n} satır okunamadı:`,
+            bcReportEmpty: 'Listede geçerli numara bulunamadı.',
+            bcReasons: {
+                empty: 'boş',
+                invalid_chars: 'numara değil',
+                too_short: 'çok kısa',
+                too_long: 'çok uzun',
+                not_mobile: 'mobil hat değil (WhatsApp yok)',
+            },
+            bcProgressLine: (i, total) => `${i} / ${total}`,
+            bcProgressStats: (sent, failed, skipped, noWa) =>
+                `${sent} gönderildi · ${failed} hata · ${skipped} zaten davetli · ${noWa} WhatsApp\'ta yok`,
+            bcProgressCurrent: who => `Şu an: ${who}`,
+            bcProgressDone: 'Gönderim tamamlandı.',
+            bcProgressStopped: 'Gönderim durduruldu.',
+            bcProgressAbortedConn: kalan => `WhatsApp bağlantısı koptuğu için gönderim kesildi — ${kalan} kişiye gönderilemedi. Bağlantı gelince tekrar "Gönder"e bas, gönderilenler atlanır.`,
+            bcProgressAbortedFail: kalan => `Üst üste hata alındığı için gönderim kesildi — ${kalan} kişiye gönderilemedi. Yukarıdaki hata satırlarına bak, sonra tekrar "Gönder"e bas.`,
+            bcProgressWaiting: 'Sıradaki mesaj için bekleniyor…',
+            bcLogTitle: 'Davet kaydı',
+            bcLogHint: 'Bu profilden kime davet gittiğinin kaydı. Profil klasöründe tutulur.',
+            bcLogEmpty: 'Henüz kimseye davet gönderilmedi.',
+            bcLogRefreshBtn: 'Yenile',
+            bcClearLogBtn: 'Kaydı Sıfırla',
+            bcClearLogConfirm: 'Davet kaydı silinecek — bundan sonra daha önce davet edilenler de yeniden davet edilebilir hale gelir. Emin misin?',
+            bcStatusSent: 'gönderildi',
+            bcStatusFailed: 'hata',
+            bcStatusNoWhatsapp: 'WhatsApp yok',
             svcAiLabel: 'AI Bot',
             svcAiHintOff: 'AI Bot kapalı — açtığında ayarlarını Genel ve Sohbet sekmelerinin altında göreceksin.',
             svcAiHintOn: 'AI Bot açık.',
@@ -2488,6 +2615,60 @@
             clearMemoryConfirm: "This chat's AI memory will be deleted. Are you sure?",
             listClearBtn: 'Clear All',
             listClearConfirm: name => `ALL entries in "${name}" will be deleted. Are you sure?`,
+            // Invite tab
+            tabDavet: 'Invite',
+            bcConsentHint: 'This tool is for sending ONE invitation message to people who gave you their number and asked to join. Messaging numbers that never opted in gets your WhatsApp account permanently banned, and for commercial content it also falls under consent/marketing law.',
+            bcListTitle: '1. Phone numbers',
+            bcListHint: 'One number per line. Formatting can be messy — 5xx, 05xx, +90 5xx, spaces and dashes all work. Lines like "Name, number" also yield the name. Lines starting with # are skipped.',
+            bcCheckBtn: 'Check List',
+            bcChecking: 'Checking…',
+            bcMessageTitle: '2. Message',
+            bcMessageHint: '{name} is replaced with the name from your list (the sentence tidies itself when there is none). Each person gets their own one-to-one message — no group is created, nobody sees anyone else\'s number.',
+            bcMessageDefault: 'Hi {name}! You signed up to join our club. Welcome aboard — reply here for details and our first event.\n\nIf you would rather not get these, just reply "remove" and I will take you off the list.',
+            bcOptionsTitle: '3. Sending',
+            bcPaceLabel: 'Pace',
+            bcPaceSafe: 'Safe — 8-20 s per message',
+            bcPaceSlow: 'Slow — 20-45 s per message',
+            bcPaceHint: 'Waits are randomized and there is a pause every 20 messages. A fixed interval is the easiest bot pattern for WhatsApp to spot — that is why this cannot be sped up.',
+            bcVerifyLabel: 'Verify numbers on WhatsApp',
+            bcVerifyHint: 'Numbers without WhatsApp are skipped. Avoids pointless send attempts and reduces spam suspicion.',
+            bcSkipSentLabel: 'Skip already invited',
+            bcSkipSentHint: 'Stops anyone getting a second message. If a run is interrupted it picks up where it left off.',
+            bcSendBtn: 'Send',
+            bcStopBtn: 'Stop',
+            bcSendConfirm: (n, minutes) => `An invitation will be sent to ${n} people. Estimated time ${minutes} minutes — the app must stay open.\n\nConfirm that you are only messaging people who asked to join.`,
+            bcNeedCheck: 'Press "Check List" first.',
+            bcReportValid: n => `${n} people will be messaged`,
+            bcReportAlreadySent: n => `${n} already invited (will be skipped)`,
+            bcReportDuplicates: n => `${n} duplicate numbers removed`,
+            bcReportTruncated: (n, max) => `${n} numbers dropped — over the ${max} limit`,
+            bcReportInvalid: n => `${n} lines could not be read:`,
+            bcReportEmpty: 'No valid numbers found in the list.',
+            bcReasons: {
+                empty: 'empty',
+                invalid_chars: 'not a number',
+                too_short: 'too short',
+                too_long: 'too long',
+                not_mobile: 'not a mobile line (no WhatsApp)',
+            },
+            bcProgressLine: (i, total) => `${i} / ${total}`,
+            bcProgressStats: (sent, failed, skipped, noWa) =>
+                `${sent} sent · ${failed} failed · ${skipped} already invited · ${noWa} no WhatsApp`,
+            bcProgressCurrent: who => `Now: ${who}`,
+            bcProgressDone: 'Sending finished.',
+            bcProgressStopped: 'Sending stopped.',
+            bcProgressAbortedConn: left => `Sending was cut short because the WhatsApp connection dropped — ${left} people were not reached. Press "Send" again once it is back; anyone already messaged is skipped.`,
+            bcProgressAbortedFail: left => `Sending was cut short after repeated failures — ${left} people were not reached. Check the error lines above, then press "Send" again.`,
+            bcProgressWaiting: 'Waiting before the next message…',
+            bcLogTitle: 'Invite record',
+            bcLogHint: 'Who has been invited from this profile. Kept in the profile folder.',
+            bcLogEmpty: 'Nobody has been invited yet.',
+            bcLogRefreshBtn: 'Refresh',
+            bcClearLogBtn: 'Reset Record',
+            bcClearLogConfirm: 'The invite record will be deleted — people already invited become invitable again. Are you sure?',
+            bcStatusSent: 'sent',
+            bcStatusFailed: 'failed',
+            bcStatusNoWhatsapp: 'no WhatsApp',
             svcAiLabel: 'AI Bot',
             svcAiHintOff: "AI Bot is off — turn it on to see its settings under the General and Chat tabs.",
             svcAiHintOn: 'AI Bot is on.',
@@ -2699,7 +2880,9 @@
         document.getElementById('tabBtnGeneral').textContent = t('tabGeneral');
         document.getElementById('tabBtnChat').textContent = t('tabChat');
         document.getElementById('tabBtnLists').textContent = t('tabLists');
+        document.getElementById('tabBtnDavet').textContent = t('tabDavet');
         document.getElementById('tabBtnServices').textContent = t('tabServices');
+        applyBroadcastLanguage();
         document.getElementById('tabBtnHelp').textContent = t('tabAiHelp');
         document.getElementById('generalAiSectionTitle').textContent = t('generalAiSectionTitle');
         document.getElementById('chatAiSectionTitle').textContent = t('chatAiSectionTitle');
@@ -3069,9 +3252,268 @@
             if (aiSectionsEnabled) updateAiChatContext(currentChatId);
         }
         if (tab === 'lists') loadList();
+        if (tab === 'davet') loadBroadcastTab();
         if (tab === 'services' && typeof loadServicesTab === 'function') loadServicesTab();
         if (tab === 'help' && aiSectionsEnabled) loadAiHelpTab();
     }
+
+    // ============================
+    // Davet sekmesi (toplu gönderim)
+    //
+    // Akış bilinçli olarak iki adımlı: "Listeyi Kontrol Et" hiçbir şey
+    // göndermez, yalnızca ayrıştırma raporunu gösterir; Gönder düğmesi o
+    // rapor görülene kadar kapalı kalır. Kullanıcı ne göndereceğini görmeden
+    // yüzlerce mesaj gönderememeli.
+    //
+    // Gerçek iş main.js'te (runBroadcast) koşuyor — buradaki sekme kapatılsa
+    // ya da başka sekmeye geçilse bile gönderim devam eder, ilerleme
+    // onBroadcastProgress ile geri gelir.
+    // ============================
+    const bcListInput = document.getElementById('bcListInput');
+    const bcMessageInput = document.getElementById('bcMessageInput');
+    const bcCheckBtn = document.getElementById('bcCheckBtn');
+    const bcSendBtn = document.getElementById('bcSendBtn');
+    const bcStopBtn = document.getElementById('bcStopBtn');
+    const bcReportEl = document.getElementById('bcReport');
+    const bcProgressEl = document.getElementById('bcProgress');
+    const bcLogBodyEl = document.getElementById('bcLogBody');
+    const bcPaceSelect = document.getElementById('bcPaceSelect');
+    const bcVerifyToggle = document.getElementById('bcVerifyToggle');
+    const bcSkipSentToggle = document.getElementById('bcSkipSentToggle');
+
+    // Hız seçenekleri. Tabanın altına inemez — main.js/broadcast.js zaten
+    // MIN_DELAY_FLOOR_MS ile kırpıyor, burada da zaten daha yavaşı var.
+    const BC_PACING = {
+        safe: { minMs: 8_000, maxMs: 20_000, batchSize: 20, batchPauseMs: 120_000 },
+        slow: { minMs: 20_000, maxMs: 45_000, batchSize: 20, batchPauseMs: 180_000 },
+    };
+
+    // En son kontrol edilen listenin ayrıştırma sonucu. Gönder düğmesi buna
+    // bakıyor; liste metni değişince sıfırlanır ki kullanıcı eski raporla
+    // yeni listeyi göndermesin. bcPreviewProfileId raporun HANGİ profil için
+    // alındığını tutuyor — "zaten davet edildi" işaretleri profile özel, o
+    // yüzden profil değişince rapor geçersiz.
+    let bcLastPreview = null;
+    let bcPreviewProfileId = null;
+    let bcRunning = false;
+
+    function bcInvalidatePreview() {
+        bcLastPreview = null;
+        bcPreviewProfileId = null;
+        bcReportEl.innerHTML = '';
+        if (!bcRunning) bcSendBtn.disabled = true;
+    }
+
+    function applyBroadcastLanguage() {
+        const metin = {
+            bcConsentHint: 'bcConsentHint', bcListTitle: 'bcListTitle', bcListHint: 'bcListHint',
+            bcCheckBtn: 'bcCheckBtn', bcMessageTitle: 'bcMessageTitle', bcMessageHint: 'bcMessageHint',
+            bcOptionsTitle: 'bcOptionsTitle', bcPaceLabel: 'bcPaceLabel', bcPaceHint: 'bcPaceHint',
+            bcPaceSafe: 'bcPaceSafe', bcPaceSlow: 'bcPaceSlow',
+            bcVerifyLabel: 'bcVerifyLabel', bcVerifyHint: 'bcVerifyHint',
+            bcSkipSentLabel: 'bcSkipSentLabel', bcSkipSentHint: 'bcSkipSentHint',
+            bcSendBtn: 'bcSendBtn', bcStopBtn: 'bcStopBtn',
+            bcLogTitle: 'bcLogTitle', bcLogHint: 'bcLogHint',
+            bcLogRefreshBtn: 'bcLogRefreshBtn', bcClearLogBtn: 'bcClearLogBtn',
+        };
+        for (const [id, key] of Object.entries(metin)) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = t(key);
+        }
+        // Kullanıcı kendi mesajını yazmışsa dil değişikliği onu EZMEMELİ —
+        // yalnızca henüz dokunulmamış (varsayılan ya da boş) alanı güncelle.
+        if (!bcMessageInput.value.trim() || bcMessageInput.dataset.pristine === '1') {
+            bcMessageInput.value = t('bcMessageDefault');
+            bcMessageInput.dataset.pristine = '1';
+        }
+    }
+
+    bcMessageInput.addEventListener('input', () => { bcMessageInput.dataset.pristine = '0'; });
+
+    // Liste değişti — eski rapor artık geçerli değil.
+    bcListInput.addEventListener('input', bcInvalidatePreview);
+
+    // "Zaten davet edilenleri atla" kaç kişiye gideceğini değiştiriyor, yani
+    // rapordaki sayıyı da. Bayat sayı göstermek yerine raporu tazele.
+    bcSkipSentToggle.addEventListener('change', () => {
+        if (!bcLastPreview) return;
+        renderBroadcastReport(bcLastPreview);
+        const gonderilecek = bcLastPreview.recipients
+            .filter(r => !(bcSkipSentToggle.checked && r.alreadySent)).length;
+        bcSendBtn.disabled = bcRunning || gonderilecek === 0;
+    });
+
+    function bcRow(text, cls) {
+        const div = document.createElement('div');
+        div.className = cls || 'hint';
+        div.textContent = text;
+        return div;
+    }
+
+    async function loadBroadcastTab() {
+        if (!activeProfileId) return;
+        // Profil değiştiyse eski raporu at — başka hesabın davet kaydına göre
+        // hesaplanmıştı.
+        if (bcPreviewProfileId && bcPreviewProfileId !== activeProfileId) bcInvalidatePreview();
+        applyBroadcastLanguage();
+        // Başka sekmedeyken başlamış/bitmiş bir gönderim olabilir — durumu
+        // main'den tazele.
+        const snapshot = await window.nerobot.getBroadcastStatus(activeProfileId);
+        if (snapshot) renderBroadcastProgress(snapshot);
+        loadBroadcastLog();
+    }
+
+    bcCheckBtn.addEventListener('click', async () => {
+        if (!activeProfileId) return;
+        bcCheckBtn.disabled = true;
+        bcCheckBtn.textContent = t('bcChecking');
+        try {
+            const preview = await window.nerobot.previewBroadcast(activeProfileId, bcListInput.value);
+            bcLastPreview = preview;
+            bcPreviewProfileId = activeProfileId;
+            renderBroadcastReport(preview);
+            // Gönderilecek kimse yoksa (hepsi zaten davetli ya da liste bozuk)
+            // Gönder açılmıyor.
+            const gonderilecek = preview.recipients.filter(r => !(bcSkipSentToggle.checked && r.alreadySent)).length;
+            bcSendBtn.disabled = bcRunning || gonderilecek === 0;
+        } finally {
+            bcCheckBtn.disabled = false;
+            bcCheckBtn.textContent = t('bcCheckBtn');
+        }
+    });
+
+    function renderBroadcastReport(preview) {
+        bcReportEl.innerHTML = '';
+        const { recipients, invalid, duplicates, truncated, max } = preview;
+
+        if (!recipients.length) {
+            bcReportEl.appendChild(bcRow(t('bcReportEmpty'), 'hint warn'));
+        } else {
+            const alreadySent = recipients.filter(r => r.alreadySent).length;
+            const gonderilecek = bcSkipSentToggle.checked ? recipients.length - alreadySent : recipients.length;
+            bcReportEl.appendChild(bcRow(t('bcReportValid')(gonderilecek)));
+            if (alreadySent) bcReportEl.appendChild(bcRow(t('bcReportAlreadySent')(alreadySent)));
+        }
+
+        if (duplicates.length) bcReportEl.appendChild(bcRow(t('bcReportDuplicates')(duplicates.length)));
+        if (truncated) bcReportEl.appendChild(bcRow(t('bcReportTruncated')(truncated, max), 'hint warn'));
+
+        if (invalid.length) {
+            bcReportEl.appendChild(bcRow(t('bcReportInvalid')(invalid.length), 'hint warn'));
+            // Atlanan satırları sebebiyle göster — kullanıcı listesinde
+            // düzeltebilsin. Uzun listede ilk 15 yeter.
+            const reasons = t('bcReasons');
+            for (const row of invalid.slice(0, 15)) {
+                bcReportEl.appendChild(bcRow(`· ${row.raw} — ${reasons[row.reason] || row.reason}`, 'hint'));
+            }
+            if (invalid.length > 15) bcReportEl.appendChild(bcRow(`· …+${invalid.length - 15}`, 'hint'));
+        }
+    }
+
+    bcSendBtn.addEventListener('click', async () => {
+        if (!activeProfileId) return;
+        // Rapor başka bir profil için alınmışsa gönderme — "zaten davetli"
+        // işaretleri o profilin kaydından geliyordu.
+        if (!bcLastPreview || bcPreviewProfileId !== activeProfileId) {
+            await showAlertPanel(t('bcNeedCheck'));
+            return;
+        }
+
+        const pacing = BC_PACING[bcPaceSelect.value] || BC_PACING.safe;
+        const hedef = bcLastPreview.recipients.filter(r => !(bcSkipSentToggle.checked && r.alreadySent)).length;
+        // Kaba tahmin: ortalama bekleme + parti molaları. Kullanıcı
+        // "uygulamayı ne kadar açık tutmam gerek" sorusunun cevabını
+        // başlamadan görsün.
+        const ortalama = (pacing.minMs + pacing.maxMs) / 2;
+        const molalar = Math.floor(hedef / pacing.batchSize) * pacing.batchPauseMs;
+        const dakika = Math.max(1, Math.round((hedef * ortalama + molalar) / 60000));
+
+        if (!(await showConfirmPanel(t('bcSendConfirm')(hedef, dakika)))) return;
+
+        const result = await window.nerobot.startBroadcast(activeProfileId, {
+            rawList: bcListInput.value,
+            message: bcMessageInput.value,
+            pacing,
+            verifyNumbers: bcVerifyToggle.checked,
+            skipAlreadySent: bcSkipSentToggle.checked,
+        });
+        if (!result.ok) { await showAlertPanel(result.error); return; }
+        renderBroadcastProgress(result.snapshot);
+    });
+
+    bcStopBtn.addEventListener('click', async () => {
+        if (!activeProfileId) return;
+        bcStopBtn.disabled = true;
+        const result = await window.nerobot.stopBroadcast(activeProfileId);
+        if (!result.ok) bcStopBtn.disabled = false;
+    });
+
+    function renderBroadcastProgress(s) {
+        // Başka profilin gönderimi bu sekmeyi etkilemesin.
+        if (s.profileId !== activeProfileId) return;
+
+        bcRunning = s.running;
+        bcSendBtn.disabled = s.running || !bcLastPreview || bcPreviewProfileId !== activeProfileId;
+        bcStopBtn.disabled = !s.running;
+        bcListInput.disabled = s.running;
+        bcMessageInput.disabled = s.running;
+
+        bcProgressEl.innerHTML = '';
+        bcProgressEl.appendChild(bcRow(t('bcProgressLine')(s.index, s.total)));
+        bcProgressEl.appendChild(bcRow(t('bcProgressStats')(s.sent, s.failed, s.skipped, s.noWhatsapp)));
+        if (s.running) {
+            bcProgressEl.appendChild(bcRow(s.current ? t('bcProgressCurrent')(s.current) : t('bcProgressWaiting')));
+        } else if (s.aborted) {
+            // Yarım kalmış bir liste "bitti" gibi görünmemeli — kalanlar
+            // sonraki turda devam eder (zaten gönderilenler atlanır).
+            const kalan = s.total - s.index;
+            bcProgressEl.appendChild(bcRow(
+                t(s.aborted === 'connection' ? 'bcProgressAbortedConn' : 'bcProgressAbortedFail')(kalan),
+                'hint warn'));
+        } else {
+            bcProgressEl.appendChild(bcRow(s.stopped ? t('bcProgressStopped') : t('bcProgressDone')));
+        }
+        for (const err of s.errors) {
+            bcProgressEl.appendChild(bcRow(`· ${err.display} — ${err.error}`, 'hint warn'));
+        }
+        if (!s.running) loadBroadcastLog();
+    }
+
+    window.nerobot.onBroadcastProgress(renderBroadcastProgress);
+
+    async function loadBroadcastLog() {
+        if (!activeProfileId) return;
+        const entries = await window.nerobot.getBroadcastLog(activeProfileId);
+        bcLogBodyEl.innerHTML = '';
+        if (!entries.length) {
+            bcLogBodyEl.appendChild(bcRow(t('bcLogEmpty')));
+            return;
+        }
+        const etiket = {
+            sent: t('bcStatusSent'),
+            failed: t('bcStatusFailed'),
+            no_whatsapp: t('bcStatusNoWhatsapp'),
+        };
+        for (const entry of entries.slice(0, 100)) {
+            const who = entry.label ? `${entry.label} ${entry.display}` : entry.display;
+            const row = bcRow(`· ${who} — ${etiket[entry.status] || entry.status}`,
+                entry.status === 'sent' ? 'hint' : 'hint warn');
+            bcLogBodyEl.appendChild(row);
+        }
+        if (entries.length > 100) bcLogBodyEl.appendChild(bcRow(`· …+${entries.length - 100}`, 'hint'));
+    }
+
+    document.getElementById('bcLogRefreshBtn').addEventListener('click', loadBroadcastLog);
+
+    document.getElementById('bcClearLogBtn').addEventListener('click', async () => {
+        if (!activeProfileId) return;
+        if (!(await showConfirmPanel(t('bcClearLogConfirm'), { danger: true }))) return;
+        await window.nerobot.clearBroadcastLog(activeProfileId);
+        bcLastPreview = null;
+        bcReportEl.innerHTML = '';
+        bcSendBtn.disabled = true;
+        loadBroadcastLog();
+    });
 
     // NeRoChAt's own Genel/Sohbet sub-tabs — unchanged, now living inside
     // #gsSection-ollama.
@@ -4763,6 +5205,15 @@
         }
     }
 
+    // Davet yalnızca WhatsApp profillerinde — numara doğrulaması
+    // (client.getNumberId) ve @c.us sohbet id'leri WhatsApp'a özgü. Mode'a
+    // bakmıyor: 'web' modunda bot koşmasa da bağlantı var, davet gönderilir.
+    function updatePlatformTabVisibility(platform) {
+        const isWhatsapp = (platform || 'whatsapp') === 'whatsapp';
+        document.getElementById('tabBtnDavet').style.display = isWhatsapp ? '' : 'none';
+        if (!isWhatsapp && activeTab === 'davet') switchTab('general');
+    }
+
     // Nudges (outline + hint text) rather than blocking — matches the rest
     // of the app's non-blocking style for "you probably want to do this too".
     function updateDebugChatHint(selectedId) {
@@ -6319,6 +6770,7 @@
         }
 
         updateModeTabVisibility(entry?.mode);
+        updatePlatformTabVisibility(entry?.platform);
 
         const values = await window.nerobot.getSettings(activeProfileId);
         syncAiSectionsVisibility(!!values.aiChatEnabled && entry?.mode !== 'web');
