@@ -369,7 +369,7 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 
 ## Bulk Message
 
-**Settings → Services → Bulk Message** sends **one message** to people who gave you their number and agreed to be contacted. Each person gets their own one-to-one message — no group is created, nobody sees anyone else's number.
+**Settings → Services → Bulk Message** sends **one message** to people who gave you their number and agreed to be contacted. It lives as a collapsible panel in the Services tab. Each person gets their own one-to-one message — no group is created, nobody sees anyone else's number.
 
 > ⚠️ **This tool is for opted-in lists.** Bulk-messaging numbers that never opted in violates WhatsApp's terms and gets the account **permanently banned**. If the content is commercial or promotional it also falls under consent and marketing law in most jurisdictions (in Turkey: KVKK and the İYS message-management system), carrying administrative fines. For larger or recurring sends this is the wrong tool — use Meta's official **WhatsApp Business Platform** with approved template messages.
 
@@ -398,7 +398,9 @@ Two modes:
 | **Copy the text** (default) | The message text is taken and goes out as a *fresh* message to everyone. `{name}` works and no "forwarded" label appears. The recommended route for plain-text announcements. |
 | **Forward as-is** | The original is forwarded verbatim. Recipients see a "forwarded" label and no personalization is possible. If the message carries media (image/video/file) this mode is **required** and gets locked on, since text alone cannot reproduce it. |
 
-> ℹ️ The list comes from whatever WhatsApp Web currently holds in memory. For an older message, open the chat in the pane and scroll up a little, then press **Fetch** again.
+The list is pulled via `fetchMessages`, so history is genuinely loaded (it runs a `loadEarlierMsgs` loop) even for a chat never opened in the pane. For a very old message, opening the chat and scrolling up a little is still the surest route.
+
+**Photo** — you can attach a photo. Your text goes out as its **caption** in a single message, and `{name}` works in the caption too. The caption limit is 1024 characters and the UI counts it live. A photo cannot be combined with *forward as-is* — forwarding means a verbatim copy, and slipping a separate photo in would break that promise; picking both is rejected.
 
 **Write `{name}` in the message** and it is replaced with the name from your list; when there is none, the sentence tidies itself (`"Hi {name}, welcome"` → `"Hi, welcome"`).
 

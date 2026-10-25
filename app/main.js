@@ -3861,7 +3861,7 @@ function waitOrWake(ms, run) {
 }
 
 async function runBroadcast(session, run) {
-    const { recipients, message, forwardSource, pacing, verifyNumbers, skipAlreadySent } = run.options;
+    const { recipients, message, forwardSource, image, pacing, verifyNumbers, skipAlreadySent } = run.options;
     const log = readInviteLog(session);
 
     // Bağlantı ortada koparsa kalan HER alıcı saniyeler içinde "hata" olarak
@@ -3928,6 +3928,11 @@ async function runBroadcast(session, run) {
                 // geçiyor, yani bot kendi ilettiği mesaja cevap vermiyor
                 // (bkz. utils.js).
                 await session.utils.forwardMessage(chatId, forwardSource);
+            } else if (image) {
+                // Fotoğraf + alt yazı TEK mesaj olarak gidiyor. Alt yazı da
+                // {isim} ile kişiselleştiriliyor; boşsa sendImage alt yazıyı
+                // hiç eklemiyor.
+                await session.utils.sendImage(chatId, image.buffer, image.mime, applyTemplate(message, recipient));
             } else {
                 await session.utils.sendText(chatId, applyTemplate(message, recipient));
             }
@@ -4007,34 +4012,92 @@ ipcMain.handle('broadcast:sentMessages', async (_e, profileId, chatId, limit) =>
     }
     if (!chatId) return { ok: false, error: 'Sohbet seçilmedi.' };
 
-    const n = Math.max(1, Math.min(200, Number(limit) || 40));
+    const n = Math.max(1, Math.min(100, Number(limit) || 30));
     try {
-        return await session.client.pupPage.evaluate(async (chatId, limit) => {
-            const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
-            if (!chat) return { ok: false, error: 'Sohbet bulunamadı.' };
+        const chat = await session.client.getChatById(chatId);
+        if (!chat) return { ok: false, error: 'Sohbet bulunamadı.' };
 
-            const msgs = chat.msgs.getModelsArray()
-                .filter(m => !m.isNotification && m.id?.fromMe)
-                .sort((a, b) => (b.t || 0) - (a.t || 0)) // en yeni üstte
-                .slice(0, limit);
+        // chat.fetchMessages kullanılıyor çünkü GEÇMİŞİ GERÇEKTEN YÜKLÜYOR:
+        // içinde loadEarlierMsgs döngüsü var, limit dolana ya da sohbetin
+        // başına gelene kadar geriye gidiyor. Elle chat.msgs okumak (ilk
+        // uygulamadaki hata) yalnızca WhatsApp Web'in o an hafızasında
+        // tuttuğunu veriyordu — panelde hiç açılmamış bir sohbette bu
+        // genelde tek bir mesaj, hatta sıfır demek. "Mesaj çekme tam
+        // çalışmıyor"un sebebi buydu.
+        const msgs = await chat.fetchMessages({ limit: n, fromMe: true });
 
-            return {
-                ok: true,
-                messages: msgs.map(m => ({
+        return {
+            ok: true,
+            messages: msgs
+                // fromMe filtresi sayfa tarafında uygulanıyor; yine de
+                // burada teyit et — gelen mesaj şablon olarak sunulmamalı.
+                .filter(m => m.fromMe)
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)) // en yeni üstte
+                .map(m => ({
                     id: m.id._serialized,
-                    body: m.body || m.caption || '',
+                    // Medyalı mesajda Message.body zaten alt yazıyı veriyor.
+                    body: m.body || '',
                     type: m.type || 'chat',
-                    // Medyalı mesajın metni iletmeden taşınamaz — arayüz bu
-                    // bayrağa bakıp "aynen ilet" anahtarını çıkarıyor.
-                    hasMedia: !!(m.mediaData || (m.type && m.type !== 'chat')),
-                    t: m.t || 0,
+                    // Message.hasMedia = Boolean(directPath), yani gerçek
+                    // medya varlığı — ilk uygulamadaki "type !== chat"
+                    // tahmininden çok daha doğru.
+                    hasMedia: !!m.hasMedia,
+                    t: m.timestamp || 0,
                 })),
-            };
-        }, chatId, n);
+        };
     } catch (err) {
         console.error(`[${session.name}] Gönderilmiş mesajlar okunamadı:`, err.message || err);
         return { ok: false, error: err.message || String(err) };
     }
+});
+
+// Çoklu Mesaj'ın fotoğrafı. Dosya ana süreçte tutuluyor; renderer'a yalnızca
+// adı/boyutu ve küçük bir önizleme gidiyor. Böylece 3 MB'lık bir fotoğraf
+// IPC üzerinden iki kez (seçerken + gönderirken) taşınmıyor.
+const broadcastImages = new Map(); // profileId → { buffer, mime, filename }
+
+// WhatsApp alt yazı sınırı — bunun üstü sessizce kırpılır, o yüzden önceden
+// uyarmak daha iyi.
+const WA_CAPTION_MAX = 1024;
+
+ipcMain.handle('broadcast:pickImage', async (_e, profileId) => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+        title: 'Fotoğraf Ekle',
+        properties: ['openFile'],
+        filters: [{ name: 'Görseller', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
+    });
+    if (canceled || !filePaths[0]) return { ok: false, canceled: true };
+
+    const filePath = filePaths[0];
+    const ext = path.extname(filePath).toLowerCase();
+    if (!isImageExt(ext)) return { ok: false, error: 'Bu bir görsel dosyası değil.' };
+
+    let buffer;
+    try {
+        buffer = fs.readFileSync(filePath);
+    } catch (err) {
+        return { ok: false, error: err.message || String(err) };
+    }
+
+    const IMAGE_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.bmp': 'image/bmp' };
+    const mime = IMAGE_MIME[ext] || 'image/png';
+    const filename = path.basename(filePath);
+    broadcastImages.set(profileId, { buffer, mime, filename });
+
+    return {
+        ok: true,
+        filename,
+        bytes: buffer.length,
+        captionMax: WA_CAPTION_MAX,
+        // Önizleme için — küçük bir fotoğrafta bu zaten ucuz, büyüğünde de
+        // tek seferlik.
+        dataUrl: `data:${mime};base64,${buffer.toString('base64')}`,
+    };
+});
+
+ipcMain.handle('broadcast:clearImage', (_e, profileId) => {
+    broadcastImages.delete(profileId);
+    return { ok: true };
 });
 
 ipcMain.handle('broadcast:start', async (_e, profileId, options = {}) => {
@@ -4058,7 +4121,24 @@ ipcMain.handle('broadcast:start', async (_e, profileId, options = {}) => {
     // yapılamaz, iletilen şey orijinalin birebir kopyası.
     const forwardMessageId = options.forwardMessageId ? String(options.forwardMessageId) : null;
     const message = String(options.message ?? '').trim();
-    if (!forwardMessageId && !message) return { ok: false, error: 'Gönderilecek mesaj boş.' };
+
+    // Fotoğraf eklendiyse mesaj metni onun ALT YAZISI olarak gidiyor — tek
+    // mesaj, iki ayrı parça değil.
+    const image = options.useImage ? (broadcastImages.get(profileId) || null) : null;
+    if (options.useImage && !image) {
+        return { ok: false, error: 'Fotoğraf bulunamadı — tekrar ekle.' };
+    }
+    if (forwardMessageId && image) {
+        // İletme birebir kopya demek; araya ayrı bir fotoğraf sıkıştırmak o
+        // sözü bozar. Sessizce birini yutmak yerine açıkça söyle.
+        return { ok: false, error: 'Aynen iletme ile fotoğraf birlikte kullanılamaz — birini kapat.' };
+    }
+    if (!forwardMessageId && !message && !image) {
+        return { ok: false, error: 'Gönderilecek mesaj boş.' };
+    }
+    if (image && message.length > WA_CAPTION_MAX) {
+        return { ok: false, error: `Fotoğraf alt yazısı en fazla ${WA_CAPTION_MAX} karakter olabilir (şu an ${message.length}).` };
+    }
 
     // Kaynak mesajı listenin ORTASINDA değil, başlamadan çöz — yoksa 200
     // kişilik bir gönderim ilk alıcıda "mesaj bulunamadı" ile patlardı.
@@ -4084,9 +4164,10 @@ ipcMain.handle('broadcast:start', async (_e, profileId, options = {}) => {
         options: {
             recipients: parsed.recipients,
             message,
-            // Message nesnesi — yalnızca ana süreçte yaşıyor, snapshot'a
-            // girmiyor, renderer'a hiç geçmiyor.
+            // Message nesnesi ve fotoğraf arabelleği — yalnızca ana süreçte
+            // yaşıyor, snapshot'a girmiyor, renderer'a hiç geçmiyor.
             forwardSource,
+            image,
             pacing: { ...DEFAULT_PACING, ...(options.pacing || {}) },
             // İkisi de varsayılan olarak açık: doğrulama hem hata hem spam
             // sinyali azaltıyor, atlama da aynı kişiye ikinci mesajı önlüyor.

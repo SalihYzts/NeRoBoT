@@ -1059,6 +1059,48 @@
         padding-bottom: 4px;
         border-bottom: 1px solid var(--border);
     }
+    /* Hizmetler sekmesindeki açılıp kapanan panel (bugün Çoklu Mesaj).
+       Yüksekliği grid-template-rows 0fr→1fr ile animasyonlu: max-height
+       numarasının aksine içeriğin GERÇEK yüksekliğine kayıyor, yani uzun
+       bir rapor listesi açıldığında da kesilmiyor. */
+    .svcPanel {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg3);
+        margin-top: 18px;
+        overflow: hidden;
+    }
+    .svcPanelHead {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 11px 13px;
+        background: none;
+        border: none;
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        text-align: left;
+        cursor: pointer;
+    }
+    .svcPanelHead:hover { color: var(--accent); }
+    .svcPanelHead .chev {
+        color: var(--muted);
+        transition: transform .22s ease;
+        flex: none;
+    }
+    .svcPanel.open .svcPanelHead .chev { transform: rotate(90deg); }
+    .svcPanelHead .svcPanelName { flex: 1; }
+    .svcPanelBody {
+        display: grid;
+        grid-template-rows: 0fr;
+        transition: grid-template-rows .26s ease;
+    }
+    .svcPanel.open .svcPanelBody { grid-template-rows: 1fr; }
+    .svcPanelBody > .svcPanelInner { overflow: hidden; }
+    .svcPanelBody > .svcPanelInner > .svcPanelPad { padding: 2px 13px 13px; }
+
     .field { margin-bottom: 10px; }
     .field label.name {
         display: block;
@@ -2011,8 +2053,14 @@
                                      profillerinde görünür (bkz.
                                      updatePlatformTabVisibility). Bkz. main.js'teki
                                      runBroadcast ve src/broadcast.js. -->
-                                <div id="svcBroadcast" style="margin-top:22px">
-                                    <div class="sectionTitle" id="bcSectionTitle">Çoklu Mesaj</div>
+                                <div id="svcBroadcast" class="svcPanel">
+                                    <button type="button" class="svcPanelHead" id="bcPanelHead" aria-expanded="false" aria-controls="bcPanelBody">
+                                        <svg class="chev" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                        <span class="svcPanelName" id="bcSectionTitle">Çoklu Mesaj</span>
+                                    </button>
+                                    <div class="svcPanelBody" id="bcPanelBody">
+                                      <div class="svcPanelInner">
+                                       <div class="svcPanelPad">
                                     <div class="hint warn" id="bcConsentHint" style="margin-bottom:14px"></div>
 
                                     <div class="section">
@@ -2050,6 +2098,22 @@
                                         <div class="field">
                                             <textarea id="bcMessageInput" rows="6"></textarea>
                                             <div class="hint" id="bcMessageHint"></div>
+                                        </div>
+
+                                        <!-- Fotoğraf — eklenirse mesaj metni fotoğrafın
+                                             ALT YAZISI olarak gider (tek mesaj, iki
+                                             parça değil). {isim} alt yazıda da
+                                             çalışıyor. -->
+                                        <div class="field">
+                                            <label class="name" id="bcPhotoLabel">Fotoğraf</label>
+                                            <div class="btnRow">
+                                                <button id="bcPhotoPickBtn" class="miniBtn" style="flex:1">Fotoğraf Ekle</button>
+                                                <button id="bcPhotoClearBtn" class="miniBtn danger" style="flex:1" disabled>Kaldır</button>
+                                            </div>
+                                            <div id="bcPhotoPreview" style="display:none; margin-top:8px">
+                                                <img id="bcPhotoThumb" alt="" style="max-width:100%; max-height:180px; border-radius:8px; border:1px solid var(--border); display:block">
+                                            </div>
+                                            <div class="hint" id="bcPhotoHint"></div>
                                         </div>
 
                                         <div id="bcForwardWrap" style="display:none">
@@ -2100,6 +2164,9 @@
                                                 <button id="bcClearLogBtn" class="miniBtn danger" style="flex:1">Kaydı Sıfırla</button>
                                             </div>
                                         </div>
+                                    </div>
+                                       </div>
+                                      </div>
                                     </div>
                                 </div>
                             </div>
@@ -2467,6 +2534,12 @@
             bcPickEmpty: 'Bu sohbette senin gönderdiğin bir mesaj bulunamadı. Sohbeti sağdaki panelde açıp biraz yukarı kaydır, sonra tekrar dene.',
             bcPickFound: n => `${n} gönderilmiş mesaj — birine tıkla.`,
             bcPickNoText: '(metin yok)',
+            bcPhotoLabel: 'Fotoğraf',
+            bcPhotoPickBtn: 'Fotoğraf Ekle',
+            bcPhotoClearBtn: 'Kaldır',
+            bcPhotoHint: 'İstersen bir fotoğraf ekle. Yukarıdaki mesaj, fotoğrafın alt yazısı olarak TEK mesajda gider — {isim} alt yazıda da çalışır. Fotoğraf ile "aynen ilet" birlikte kullanılamaz.',
+            bcPhotoAttached: (ad, kb, uzunluk, sinir) =>
+                `Eklendi: ${ad} (${kb} KB). Alt yazı ${uzunluk}/${sinir} karakter.`,
             bcForwardLabel: 'Seçilen mesajı aynen ilet',
             bcForwardHint: 'Kapalıyken mesajın metni kopyalanır ve herkese yeni bir mesaj olarak gider (önerilen). Açıkken orijinal mesaj birebir iletilir — alıcıda "iletildi" etiketiyle görünür.',
             bcForwardHintMedia: 'Bu mesajda medya var (görsel/video/dosya); metin olarak kopyalanamaz, bu yüzden iletme zorunlu.',
@@ -2483,6 +2556,7 @@
             bcSendBtn: 'Gönder',
             bcStopBtn: 'Durdur',
             bcSendConfirm: (n, dakika) => `${n} kişiye mesaj gönderilecek. Tahmini süre ${dakika} dakika — bu sürede uygulama açık kalmalı.\n\nYalnızca mesaj almayı kendisi kabul etmiş kişilere gönderdiğini onayla.`,
+            bcSendConfirmPhoto: (n, dakika, ad) => `${n} kişiye fotoğraf gönderilecek (${ad}), mesaj metni alt yazı olarak. Tahmini süre ${dakika} dakika — bu sürede uygulama açık kalmalı.\n\nYalnızca mesaj almayı kendisi kabul etmiş kişilere gönderdiğini onayla.`,
             bcSendConfirmForward: (n, dakika) => `Seçtiğin mesaj ${n} kişiye AYNEN İLETİLECEK (metin kutusundaki hali değil, orijinalin birebir kopyası). Tahmini süre ${dakika} dakika — bu sürede uygulama açık kalmalı.\n\nYalnızca mesaj almayı kendisi kabul etmiş kişilere gönderdiğini onayla.`,
             bcNeedCheck: 'Önce "Listeyi Kontrol Et"e bas.',
             bcReportValid: n => `${n} kişiye gönderilecek`,
@@ -2675,6 +2749,12 @@
             bcPickEmpty: 'No messages sent by you were found in this chat. Open the chat in the pane and scroll up a little, then try again.',
             bcPickFound: n => `${n} sent messages — click one.`,
             bcPickNoText: '(no text)',
+            bcPhotoLabel: 'Photo',
+            bcPhotoPickBtn: 'Add Photo',
+            bcPhotoClearBtn: 'Remove',
+            bcPhotoHint: 'Optionally attach a photo. The message above goes out as its caption in ONE message — {name} works in the caption too. A photo cannot be combined with "forward as-is".',
+            bcPhotoAttached: (name, kb, len, max) =>
+                `Attached: ${name} (${kb} KB). Caption ${len}/${max} characters.`,
             bcForwardLabel: 'Forward the picked message as-is',
             bcForwardHint: 'When off, the message text is copied and goes out as a fresh message to everyone (recommended). When on, the original is forwarded verbatim — recipients see a "forwarded" label.',
             bcForwardHintMedia: 'This message contains media (image/video/file); it cannot be copied as text, so forwarding is required.',
@@ -2691,6 +2771,7 @@
             bcSendBtn: 'Send',
             bcStopBtn: 'Stop',
             bcSendConfirm: (n, minutes) => `A message will be sent to ${n} people. Estimated time ${minutes} minutes — the app must stay open.\n\nConfirm that you are only messaging people who agreed to be contacted.`,
+            bcSendConfirmPhoto: (n, minutes, name) => `A photo (${name}) will be sent to ${n} people, with the message text as its caption. Estimated time ${minutes} minutes — the app must stay open.\n\nConfirm that you are only messaging people who agreed to be contacted.`,
             bcSendConfirmForward: (n, minutes) => `The message you picked will be FORWARDED VERBATIM to ${n} people (an exact copy of the original, not what the text box shows). Estimated time ${minutes} minutes — the app must stay open.\n\nConfirm that you are only messaging people who agreed to be contacted.`,
             bcNeedCheck: 'Press "Check List" first.',
             bcReportValid: n => `${n} people will be messaged`,
@@ -3365,6 +3446,7 @@
             bcConsentHint: 'bcConsentHint', bcListTitle: 'bcListTitle', bcListHint: 'bcListHint',
             bcCheckBtn: 'bcCheckBtn', bcMessageTitle: 'bcMessageTitle', bcMessageHint: 'bcMessageHint',
             bcPickLabel: 'bcPickLabel', bcPickLoadBtn: 'bcPickLoadBtn', bcPickHint: 'bcPickHint',
+            bcPhotoLabel: 'bcPhotoLabel', bcPhotoPickBtn: 'bcPhotoPickBtn', bcPhotoClearBtn: 'bcPhotoClearBtn',
             bcForwardLabel: 'bcForwardLabel', bcForwardHint: 'bcForwardHint',
             bcOptionsTitle: 'bcOptionsTitle', bcPaceLabel: 'bcPaceLabel', bcPaceHint: 'bcPaceHint',
             bcPaceSafe: 'bcPaceSafe', bcPaceSlow: 'bcPaceSlow',
@@ -3384,9 +3466,10 @@
             bcMessageInput.value = t('bcMessageDefault');
             bcMessageInput.dataset.pristine = '1';
         }
-        // Bir mesaj seçilmişse ipuçlarının iletme moduna göre olanı kazanır —
-        // yukarıdaki toplu atama onları genel haline çevirdi.
+        // Yukarıdaki toplu atama ipuçlarını genel hallerine çevirdi; duruma
+        // özel olanlar (iletme modu, eklenmiş fotoğraf) burada geri kazanır.
         if (bcPickedMessage) syncBroadcastForwardMode();
+        syncBroadcastPhotoHint();
     }
 
     bcMessageInput.addEventListener('input', () => { bcMessageInput.dataset.pristine = '0'; });
@@ -3507,7 +3590,86 @@
             t(forwarding ? 'bcMessageHintForward' : 'bcMessageHint');
     }
 
-    bcForwardToggle.addEventListener('change', syncBroadcastForwardMode);
+    bcForwardToggle.addEventListener('change', () => {
+        // İletme ile fotoğraf birlikte olmaz (main.js de reddediyor) —
+        // iletme açılırsa eklenmiş fotoğrafı düşür.
+        if (bcForwardToggle.checked && bcPhoto) clearBroadcastPhoto();
+        syncBroadcastForwardMode();
+    });
+
+    // ---- Açılıp kapanan panel ----
+    const bcPanel = document.getElementById('svcBroadcast');
+    const bcPanelHead = document.getElementById('bcPanelHead');
+    bcPanelHead.addEventListener('click', () => {
+        const open = bcPanel.classList.toggle('open');
+        bcPanelHead.setAttribute('aria-expanded', open ? 'true' : 'false');
+        // Açılırken veriyi tazele — kapalıyken boşuna sorgu atmanın anlamı yok.
+        if (open) loadBroadcastTab();
+    });
+
+    // ---- Fotoğraf ----
+    const bcPhotoPickBtn = document.getElementById('bcPhotoPickBtn');
+    const bcPhotoClearBtn = document.getElementById('bcPhotoClearBtn');
+    const bcPhotoPreview = document.getElementById('bcPhotoPreview');
+    const bcPhotoThumb = document.getElementById('bcPhotoThumb');
+    const bcPhotoHint = document.getElementById('bcPhotoHint');
+
+    // Dosyanın kendisi ana süreçte; burada yalnızca adı/boyutu tutuluyor.
+    let bcPhoto = null;
+
+    bcPhotoPickBtn.addEventListener('click', async () => {
+        if (!activeProfileId) return;
+        const result = await window.nerobot.pickBroadcastImage(activeProfileId);
+        if (result.canceled) return;
+        if (!result.ok) {
+            bcPhotoHint.textContent = result.error;
+            bcPhotoHint.classList.add('warn');
+            return;
+        }
+        bcPhoto = { filename: result.filename, bytes: result.bytes, captionMax: result.captionMax };
+        bcPhotoThumb.src = result.dataUrl;
+        bcPhotoPreview.style.display = '';
+        bcPhotoClearBtn.disabled = false;
+        // Fotoğraf eklendiğinde iletme modu anlamsız — kapat ve gizle.
+        if (bcForwardToggle.checked) {
+            bcForwardToggle.checked = false;
+            bcForwardToggle.disabled = false;
+        }
+        bcForwardWrap.style.display = 'none';
+        syncBroadcastPhotoHint();
+        syncBroadcastForwardMode();
+    });
+
+    bcPhotoClearBtn.addEventListener('click', async () => {
+        if (!activeProfileId) return;
+        await window.nerobot.clearBroadcastImage(activeProfileId);
+        clearBroadcastPhoto();
+    });
+
+    function clearBroadcastPhoto() {
+        bcPhoto = null;
+        bcPhotoThumb.removeAttribute('src');
+        bcPhotoPreview.style.display = 'none';
+        bcPhotoClearBtn.disabled = true;
+        // Bir mesaj seçiliyse iletme anahtarı geri gelsin.
+        if (bcPickedMessage) bcForwardWrap.style.display = '';
+        syncBroadcastPhotoHint();
+    }
+
+    function syncBroadcastPhotoHint() {
+        bcPhotoHint.classList.remove('warn');
+        if (!bcPhoto) {
+            bcPhotoHint.textContent = t('bcPhotoHint');
+            return;
+        }
+        const kb = Math.max(1, Math.round(bcPhoto.bytes / 1024));
+        const uzunluk = bcMessageInput.value.length;
+        bcPhotoHint.textContent = t('bcPhotoAttached')(bcPhoto.filename, kb, uzunluk, bcPhoto.captionMax);
+        if (uzunluk > bcPhoto.captionMax) bcPhotoHint.classList.add('warn');
+    }
+
+    // Alt yazı sınırı canlı takip edilsin — gönderime basınca sürpriz olmasın.
+    bcMessageInput.addEventListener('input', () => { if (bcPhoto) syncBroadcastPhotoHint(); });
 
     // Liste değişti — eski rapor artık geçerli değil.
     bcListInput.addEventListener('input', bcInvalidatePreview);
@@ -3616,13 +3778,16 @@
         const forwarding = !!bcPickedMessage && bcForwardToggle.checked;
         const onay = forwarding
             ? t('bcSendConfirmForward')(hedef, dakika)
-            : t('bcSendConfirm')(hedef, dakika);
+            : bcPhoto
+                ? t('bcSendConfirmPhoto')(hedef, dakika, bcPhoto.filename)
+                : t('bcSendConfirm')(hedef, dakika);
         if (!(await showConfirmPanel(onay))) return;
 
         const result = await window.nerobot.startBroadcast(activeProfileId, {
             rawList: bcListInput.value,
             message: bcMessageInput.value,
             forwardMessageId: forwarding ? bcPickedMessage.id : null,
+            useImage: !!bcPhoto,
             pacing,
             verifyNumbers: bcVerifyToggle.checked,
             skipAlreadySent: bcSkipSentToggle.checked,
@@ -3649,6 +3814,8 @@
         // Gönderim bitince kutuyu geri açarken iletme modunu ezme — o modda
         // metin kutusu kilitli kalmalı (bkz. syncBroadcastForwardMode).
         bcMessageInput.disabled = s.running || (!!bcPickedMessage && bcForwardToggle.checked);
+        bcPhotoPickBtn.disabled = s.running;
+        bcPhotoClearBtn.disabled = s.running || !bcPhoto;
 
         bcProgressEl.innerHTML = '';
         bcProgressEl.appendChild(bcRow(t('bcProgressLine')(s.index, s.total)));

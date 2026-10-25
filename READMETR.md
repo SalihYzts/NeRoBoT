@@ -359,7 +359,7 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 
 ## Çoklu Mesaj
 
-**Ayarlar → Hizmetler → Çoklu Mesaj**, numarasını kendisi verip mesaj almayı kabul etmiş kişilere **tek bir mesaj** göndermek için. Mesaj her kişiye birebir sohbette ayrı ayrı gider — grup kurulmaz, kimse diğerlerinin numarasını görmez.
+**Ayarlar → Hizmetler → Çoklu Mesaj**, numarasını kendisi verip mesaj almayı kabul etmiş kişilere **tek bir mesaj** göndermek için. Hizmetler sekmesinde açılıp kapanan bir panel olarak duruyor. Mesaj her kişiye birebir sohbette ayrı ayrı gider — grup kurulmaz, kimse diğerlerinin numarasını görmez.
 
 > ⚠️ **Bu araç izin verilmiş listeler için.** İzin vermemiş numaralara toplu mesaj atmak WhatsApp'ın kullanım şartlarını ihlal eder ve hesabın **kalıcı olarak kapatılmasıyla** sonuçlanır. İçerik ticari/tanıtım niteliğindeyse Türkiye'de ayrıca **KVKK** ve **İYS** (İleti Yönetim Sistemi) kapsamına girer ve idari para cezası doğurur. Çok daha büyük ya da düzenli gönderimler için doğru araç bu değil, Meta'nın resmi **WhatsApp Business Platform**'u ve onaylı şablon mesajlarıdır.
 
@@ -388,7 +388,9 @@ Yurt dışı numaraları `+` ile yazıldığı sürece korunur (`+49 170 1234567
 | **Metni kopyala** (varsayılan) | Mesajın metni alınır, herkese *yeni* bir mesaj olarak gider. `{isim}` çalışır, "iletildi" etiketi görünmez. Düz metin duyurular için önerilen yol. |
 | **Aynen ilet** | Orijinal mesaj birebir iletilir. Alıcıda "iletildi" etiketiyle görünür ve kişiselleştirme yapılamaz. Mesajda medya (görsel/video/dosya) varsa metne sığmadığı için bu mod **zorunlu** olur ve kilitlenir. |
 
-> ℹ️ Liste, WhatsApp Web'in o an hafızasında tuttuğu mesajlardan gelir. Çok eski bir mesajı arıyorsan sohbeti panelde açıp biraz yukarı kaydır, sonra **Getir**'e tekrar bas.
+Liste `fetchMessages` ile çekilir, yani sohbet panelde hiç açılmamış olsa bile geçmişe doğru gerçekten yüklenir (içinde `loadEarlierMsgs` döngüsü var). Yine de çok eski bir mesaj için sohbeti panelde açıp biraz yukarı kaydırmak en garantisi.
+
+**Fotoğraf** — mesaja bir fotoğraf ekleyebilirsin. Yazdığın metin fotoğrafın **alt yazısı** olarak, tek mesajda gider; `{isim}` alt yazıda da çalışır. Alt yazı sınırı 1024 karakter ve arayüz bunu canlı sayar. Fotoğraf ile *aynen ilet* birlikte kullanılamaz — iletme birebir kopya demek, araya ayrı bir fotoğraf sıkıştırmak o sözü bozar; ikisi birlikte seçilirse gönderim reddedilir.
 
 **Mesajda `{isim}`** yazarsan listedeki isimle değişir; isim yoksa cümle kendini toparlar (`"Merhaba {isim}, hoş geldin"` → `"Merhaba, hoş geldin"`).
 

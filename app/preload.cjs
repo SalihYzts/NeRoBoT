@@ -109,6 +109,10 @@ contextBridge.exposeInMainWorld('nerobot', {
     // "Gönderilmiş bir mesajı kullan" seçicisi — bir sohbette kullanıcının
     // KENDİ gönderdiği mesajlar (id'leriyle, iletme için gerekli).
     getBroadcastSentMessages: (profileId, chatId, limit) => ipcRenderer.invoke('broadcast:sentMessages', profileId, chatId, limit),
+    // Fotoğraf — dosya ana süreçte tutuluyor, buradan yalnızca adı/boyutu ve
+    // önizleme dönüyor (bkz. main.js'teki broadcastImages).
+    pickBroadcastImage: (profileId) => ipcRenderer.invoke('broadcast:pickImage', profileId),
+    clearBroadcastImage: (profileId) => ipcRenderer.invoke('broadcast:clearImage', profileId),
     startBroadcast: (profileId, options) => ipcRenderer.invoke('broadcast:start', profileId, options),
     stopBroadcast: (profileId) => ipcRenderer.invoke('broadcast:stop', profileId),
     getBroadcastStatus: (profileId) => ipcRenderer.invoke('broadcast:status', profileId),
