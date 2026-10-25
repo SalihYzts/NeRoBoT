@@ -3861,7 +3861,7 @@ function waitOrWake(ms, run) {
 }
 
 async function runBroadcast(session, run) {
-    const { recipients, message, pacing, verifyNumbers, skipAlreadySent } = run.options;
+    const { recipients, message, forwardSource, pacing, verifyNumbers, skipAlreadySent } = run.options;
     const log = readInviteLog(session);
 
     // Bağlantı ortada koparsa kalan HER alıcı saniyeler içinde "hata" olarak
@@ -3922,7 +3922,15 @@ async function runBroadcast(session, run) {
         }
 
         try {
-            await session.utils.sendText(chatId, applyTemplate(message, recipient));
+            if (forwardSource) {
+                // Aynen iletme — orijinalin birebir kopyası, kişiselleştirme
+                // yok. forwardMessage da sendText ile aynı dedup yolundan
+                // geçiyor, yani bot kendi ilettiği mesaja cevap vermiyor
+                // (bkz. utils.js).
+                await session.utils.forwardMessage(chatId, forwardSource);
+            } else {
+                await session.utils.sendText(chatId, applyTemplate(message, recipient));
+            }
             run.sent++;
             consecutiveFailures = 0;
             log[recipient.e164] = { at: Date.now(), status: 'sent', label: recipient.label || undefined };
@@ -3980,6 +3988,55 @@ ipcMain.handle('broadcast:preview', (_e, profileId, rawList, defaultCountry) => 
     };
 });
 
+// Belirtilen sohbette KULLANICININ KENDİ gönderdiği mesajları döndürür —
+// Çoklu Mesaj'ın "gönderilmiş bir mesajı kullan" seçicisi için. Gelen
+// mesajlar bilinçli olarak dışarıda: şablon olarak alınacak şey kendi
+// yazdığın mesaj, karşı tarafın yazdığı değil.
+//
+// chat:recentMessages'tan ayrı bir handler, çünkü o yalnızca panelde AÇIK
+// olan sohbeti okuyor ve mesaj id'si döndürmüyor; iletme (forward) için id
+// şart. Altta yine "WhatsApp Web'in hafızasında ne varsa" o tek parti var —
+// çok eski mesajlar için sohbeti panelde açıp aşağı kaydırmak gerekir.
+ipcMain.handle('broadcast:sentMessages', async (_e, profileId, chatId, limit) => {
+    const session = sessions.get(profileId);
+    if (!session || !session.client || !session.botReady) {
+        return { ok: false, error: 'WhatsApp bağlantısı hazır değil — bağlanmasını bekle.' };
+    }
+    if (session.platform !== 'whatsapp') {
+        return { ok: false, error: 'Bu özellik yalnızca WhatsApp profillerinde çalışıyor.' };
+    }
+    if (!chatId) return { ok: false, error: 'Sohbet seçilmedi.' };
+
+    const n = Math.max(1, Math.min(200, Number(limit) || 40));
+    try {
+        return await session.client.pupPage.evaluate(async (chatId, limit) => {
+            const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
+            if (!chat) return { ok: false, error: 'Sohbet bulunamadı.' };
+
+            const msgs = chat.msgs.getModelsArray()
+                .filter(m => !m.isNotification && m.id?.fromMe)
+                .sort((a, b) => (b.t || 0) - (a.t || 0)) // en yeni üstte
+                .slice(0, limit);
+
+            return {
+                ok: true,
+                messages: msgs.map(m => ({
+                    id: m.id._serialized,
+                    body: m.body || m.caption || '',
+                    type: m.type || 'chat',
+                    // Medyalı mesajın metni iletmeden taşınamaz — arayüz bu
+                    // bayrağa bakıp "aynen ilet" anahtarını çıkarıyor.
+                    hasMedia: !!(m.mediaData || (m.type && m.type !== 'chat')),
+                    t: m.t || 0,
+                })),
+            };
+        }, chatId, n);
+    } catch (err) {
+        console.error(`[${session.name}] Gönderilmiş mesajlar okunamadı:`, err.message || err);
+        return { ok: false, error: err.message || String(err) };
+    }
+});
+
 ipcMain.handle('broadcast:start', async (_e, profileId, options = {}) => {
     const session = sessions.get(profileId);
     if (!session) return { ok: false, error: 'Profil açık değil.' };
@@ -3995,8 +4052,27 @@ ipcMain.handle('broadcast:start', async (_e, profileId, options = {}) => {
         return { ok: false, error: 'Bu profilde zaten bir gönderim sürüyor.' };
     }
 
+    // İletme modu: kullanıcı daha önce kendi gönderdiği bir mesajı seçti ve
+    // onu aynen ilet dedi (medyalı mesaj metne sığmadığı için tek yol bu).
+    // O modda mesaj kutusu boş olabilir — {isim} kişiselleştirmesi de
+    // yapılamaz, iletilen şey orijinalin birebir kopyası.
+    const forwardMessageId = options.forwardMessageId ? String(options.forwardMessageId) : null;
     const message = String(options.message ?? '').trim();
-    if (!message) return { ok: false, error: 'Gönderilecek mesaj boş.' };
+    if (!forwardMessageId && !message) return { ok: false, error: 'Gönderilecek mesaj boş.' };
+
+    // Kaynak mesajı listenin ORTASINDA değil, başlamadan çöz — yoksa 200
+    // kişilik bir gönderim ilk alıcıda "mesaj bulunamadı" ile patlardı.
+    let forwardSource = null;
+    if (forwardMessageId) {
+        try {
+            forwardSource = await session.client.getMessageById(forwardMessageId);
+        } catch (err) {
+            console.error(`[${session.name}] İletilecek mesaj çözülemedi:`, err.message || err);
+        }
+        if (!forwardSource) {
+            return { ok: false, error: 'İletilecek mesaj bulunamadı — sohbeti panelde açıp mesajı tekrar seç.' };
+        }
+    }
 
     const parsed = parseRecipients(options.rawList, options.defaultCountry ? { defaultCountry: options.defaultCountry } : undefined);
     if (!parsed.recipients.length) {
@@ -4008,6 +4084,9 @@ ipcMain.handle('broadcast:start', async (_e, profileId, options = {}) => {
         options: {
             recipients: parsed.recipients,
             message,
+            // Message nesnesi — yalnızca ana süreçte yaşıyor, snapshot'a
+            // girmiyor, renderer'a hiç geçmiyor.
+            forwardSource,
             pacing: { ...DEFAULT_PACING, ...(options.pacing || {}) },
             // İkisi de varsayılan olarak açık: doğrulama hem hata hem spam
             // sinyali azaltıyor, atlama da aynı kişiye ikinci mesajı önlüyor.

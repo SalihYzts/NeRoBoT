@@ -106,6 +106,9 @@ contextBridge.exposeInMainWorld('nerobot', {
     // hiçbir şey göndermez; gönderim yalnızca startBroadcast ile başlar ve
     // ilerleme onBroadcastProgress ile akar. Bkz. main.js'teki runBroadcast.
     previewBroadcast: (profileId, rawList, defaultCountry) => ipcRenderer.invoke('broadcast:preview', profileId, rawList, defaultCountry),
+    // "Gönderilmiş bir mesajı kullan" seçicisi — bir sohbette kullanıcının
+    // KENDİ gönderdiği mesajlar (id'leriyle, iletme için gerekli).
+    getBroadcastSentMessages: (profileId, chatId, limit) => ipcRenderer.invoke('broadcast:sentMessages', profileId, chatId, limit),
     startBroadcast: (profileId, options) => ipcRenderer.invoke('broadcast:start', profileId, options),
     stopBroadcast: (profileId) => ipcRenderer.invoke('broadcast:stop', profileId),
     getBroadcastStatus: (profileId) => ipcRenderer.invoke('broadcast:status', profileId),

@@ -247,6 +247,35 @@ export function createUtils(store) {
         }
     }
 
+    // Forwards an already-existing message into `chatId` — used by Çoklu
+    // Mesaj when the user picks a message they previously sent and it carries
+    // media that plain text can't reproduce (see main.js's runBroadcast).
+    //
+    // NOTE: whatsapp-web.js's Message.forward() resolves without handing back
+    // the newly created message, so there's no id for trackSentMessage here.
+    // The pending-send counter is what stops the bot replying to its own
+    // forward: message_create fires while the forward is still in flight, and
+    // isBotSentMessage() answers true for any chat with a pending send (see
+    // its fallback branch below). That's the same race-closing mechanism
+    // sendText relies on, just without the id belt-and-braces.
+    async function forwardMessage(chatId, message) {
+        markPending(chatId);
+        try {
+            await message.forward(chatId);
+        } catch (err) {
+            if (state.debugChatId && state.debugChatId !== chatId) {
+                try {
+                    const errMsg = `[NeRoBoT Error - forwardMessage]\nTarget: ${chatId}\nReason: ${err.message || err}`;
+                    const debugMsg = await client.sendMessage(state.debugChatId, errMsg);
+                    trackSentMessage(debugMsg);
+                } catch (_) {}
+            }
+            throw err;
+        } finally {
+            unmarkPending(chatId);
+        }
+    }
+
     function isBotSentMessage(msg) {
         if (msg.id && msg.id._serialized && sentMessageIds.has(msg.id._serialized)) {
             return true;
@@ -257,5 +286,5 @@ export function createUtils(store) {
         return isPending(chatId);
     }
 
-    return { setClient, sendText, replyText, sendImage, isBotSentMessage, idVariants, setHasAny, mapGetAny };
+    return { setClient, sendText, replyText, sendImage, forwardMessage, isBotSentMessage, idVariants, setHasAny, mapGetAny };
 }

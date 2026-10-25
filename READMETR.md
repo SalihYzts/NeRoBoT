@@ -44,7 +44,7 @@ Geliştirici: **Salih Yazıtaş**
 - [Kurulum](#kurulum)
 - [Derleme ve Yayınlama](#derleme-ve-yayınlama)
 - [Komutlar](#komutlar)
-- [Davet (Toplu Gönderim)](#davet-toplu-gönderim)
+- [Çoklu Mesaj](#çoklu-mesaj)
 - [Varsayılan Yapılandırma](#varsayılan-yapılandırma)
 - [Sık Karşılaşılan Sorunlar](#sık-karşılaşılan-sorunlar)
 - [Güvenlik Notları](#güvenlik-notları)
@@ -60,7 +60,7 @@ Geliştirici: **Salih Yazıtaş**
 - NeRoChAt — herhangi bir WhatsApp/Telegram botuna bağlı olmayan, tam kapsamlı, genel amaçlı bir AI sohbet sekmesi; kayıtlı konuşmalar, görsel ekleme ve AI görsel üretimi ile
 - NeRoChAt Hızlı Popup — ayarlanabilir bir global klavye kısayolu (varsayılan `Ctrl+Shift+K`) ne yapıyor olursanız olun üzerine küçük, yüzen bir AI sohbeti açıyor; "Bu sohbeti sor" o WhatsApp sohbetinin geçmişinden bir başlangıç/bitiş mesajı aralığı seçip bağlam olarak çekmeni sağlıyor
 - Yazı Düzeltme Kısayolu — ayarlanabilir bir global klavye kısayolu (varsayılan `Ctrl+Shift+J`) bir WhatsApp mesajı yazarken, yazı kutusunun hemen altında imla düzeltmeli/resmi/samimi varyantlar öneriyor; isteğe bağlı "Otomatik Düzeltme" modu kısayola basmana gerek kalmadan bir süre durakladığında önerileri kendiliğinden çıkarıyor
-- Davet (Toplu Gönderim) — forma numarasını yazıp katılmak istediğini söylemiş kişilere tek seferlik davet mesajı; karışık yazılmış numara listesini (`5xx`, `05xx`, `+90 5xx`, boşluklu/tireli) tek biçime indiriyor, `{isim}` ile kişiselleştiriyor, rastgele aralıklarla gönderiyor ve kime gittiğini kaydederek aynı kişiye ikinci mesajı engelliyor — bkz. [Davet](#davet-toplu-gönderim)
+- Çoklu Mesaj — numarasını kendisi verip mesaj almayı kabul etmiş kişilere tek seferlik mesaj (Hizmetler sekmesi altında); karışık yazılmış numara listesini (`5xx`, `05xx`, `+90 5xx`, boşluklu/tireli) tek biçime indiriyor, `{isim}` ile kişiselleştiriyor, daha önce WhatsApp'tan gönderdiğin bir mesajı şablon olarak alabiliyor, rastgele aralıklarla gönderiyor ve kime gittiğini kaydederek aynı kişiye ikinci mesajı engelliyor — bkz. [Çoklu Mesaj](#çoklu-mesaj)
 - Otomatik Güncelleme — her açılışta GitHub Releases'i kontrol edip kendini sessizce güncelliyor (indir → kur → yeniden aç), pencere açılmadan önce
 - Kalıcı Oturumlar — her profilin QR kodunu bir kez okutun; girişler yeniden başlatmalarda korunur
 
@@ -121,7 +121,7 @@ nerobot/
 │   ├── config.js                   # Profil bazlı durum/ayar kalıcılığı
 │   ├── profiles.js                 # Çoklu profil kayıt defteri (oluştur/yeniden adlandır/sil/dışa-içe aktar)
 │   ├── commands.js                 # Tüm !komutlar
-│   ├── broadcast.js                # Davet sekmesinin çekirdeği — numara normalleştirme, kişiselleştirme, hız
+│   ├── broadcast.js                # Çoklu Mesaj çekirdeği — numara normalleştirme, kişiselleştirme, hız
 │   ├── ratelimit.js                # Token-bucket hız sınırlayıcı
 │   ├── utils.js / telegram-utils.js
 │   ├── file-extract.js             # AI'ın okuyabilmesi için PDF/Word/metin çıkarımı
@@ -357,9 +357,9 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 
 ---
 
-## Davet (Toplu Gönderim)
+## Çoklu Mesaj
 
-**Ayarlar → Davet** sekmesi, bir forma kendi numarasını yazıp katılmak istediğini söylemiş kişilere **tek bir davet mesajı** göndermek için. Mesaj her kişiye birebir sohbette ayrı ayrı gider — grup kurulmaz, kimse diğerlerinin numarasını görmez.
+**Ayarlar → Hizmetler → Çoklu Mesaj**, numarasını kendisi verip mesaj almayı kabul etmiş kişilere **tek bir mesaj** göndermek için. Mesaj her kişiye birebir sohbette ayrı ayrı gider — grup kurulmaz, kimse diğerlerinin numarasını görmez.
 
 > ⚠️ **Bu araç izin verilmiş listeler için.** İzin vermemiş numaralara toplu mesaj atmak WhatsApp'ın kullanım şartlarını ihlal eder ve hesabın **kalıcı olarak kapatılmasıyla** sonuçlanır. İçerik ticari/tanıtım niteliğindeyse Türkiye'de ayrıca **KVKK** ve **İYS** (İleti Yönetim Sistemi) kapsamına girer ve idari para cezası doğurur. Çok daha büyük ya da düzenli gönderimler için doğru araç bu değil, Meta'nın resmi **WhatsApp Business Platform**'u ve onaylı şablon mesajlarıdır.
 
@@ -379,6 +379,17 @@ Yurt dışı numaraları `+` ile yazıldığı sürece korunur (`+49 170 1234567
 
 **Akış iki adımlı:** *Listeyi Kontrol Et* hiçbir şey göndermez — yalnızca kaç kişiye gideceğini, kimin atlandığını ve neden atlandığını gösterir. *Gönder* ancak bu rapor görüldükten sonra açılır ve onay ister.
 
+**Gönderilmiş bir mesajı şablon alma** — mesajı sıfırdan yazmak zorunda değilsin. *Gönderilmiş bir mesajı kullan* bölümünde sohbeti seç, **Getir**'e bas, o sohbette **kendi gönderdiğin** mesajlar listelenir; birine tıkla, metni mesaj kutusuna düşer ve düzenlenebilir kalır (`{isim}` yine çalışır). Gelen mesajlar listelenmez — şablon olarak alınacak şey senin yazdığındır.
+
+İki mod var:
+
+| Mod | Ne yapar |
+|---|---|
+| **Metni kopyala** (varsayılan) | Mesajın metni alınır, herkese *yeni* bir mesaj olarak gider. `{isim}` çalışır, "iletildi" etiketi görünmez. Düz metin duyurular için önerilen yol. |
+| **Aynen ilet** | Orijinal mesaj birebir iletilir. Alıcıda "iletildi" etiketiyle görünür ve kişiselleştirme yapılamaz. Mesajda medya (görsel/video/dosya) varsa metne sığmadığı için bu mod **zorunlu** olur ve kilitlenir. |
+
+> ℹ️ Liste, WhatsApp Web'in o an hafızasında tuttuğu mesajlardan gelir. Çok eski bir mesajı arıyorsan sohbeti panelde açıp biraz yukarı kaydır, sonra **Getir**'e tekrar bas.
+
 **Mesajda `{isim}`** yazarsan listedeki isimle değişir; isim yoksa cümle kendini toparlar (`"Merhaba {isim}, hoş geldin"` → `"Merhaba, hoş geldin"`).
 
 **Korumalar:**
@@ -387,7 +398,7 @@ Yurt dışı numaraları `+` ile yazıldığı sürece korunur (`+49 170 1234567
 |---|---|
 | Hız | Mesaj başına 8–20 sn (ya da 20–45 sn) **rastgele** bekleme, her 20 mesajda mola. Sabit aralık botun en kolay yakalandığı desen olduğu için hızlandırılamıyor — taban `src/broadcast.js`'te koda gömülü. |
 | Numara doğrulama | WhatsApp'ı olmayan numaralar `getNumberId` ile önceden ayıklanır; boşa gönderim denemesi hem hata hem spam sinyalidir. |
-| Tekrar koruması | Kime davet gittiği profil klasöründeki `davet-gonderilenler.json`'a yazılır. Gönderim yarıda kesilse, uygulama kapanıp açılsa bile ikinci turda aynı kişiye ikinci mesaj gitmez. |
+| Tekrar koruması | Kime gönderildiği profil klasöründeki `davet-gonderilenler.json`'a yazılır. Gönderim yarıda kesilse, uygulama kapanıp açılsa bile ikinci turda aynı kişiye ikinci mesaj gitmez. |
 | Üst sınır | Tek seferde en fazla 1000 alıcı. |
 | Durdurulabilir | *Durdur* molanın ortasında bile anında çıkar; o ana kadar gönderilenler kayda yazılmış olur. |
 
