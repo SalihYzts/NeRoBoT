@@ -1,3 +1,60 @@
+## v4.4.32 - 2026-10-31
+
+### Yeni Özellikler
+
+- **Çoklu Mesaj (TCek81'in katkısı, #2).** Ayarlar → Hizmetler → Çoklu Mesaj:
+  numarasını verip mesaj almayı kabul etmiş kişilere tek seferlik mesaj.
+  Karışık yazılmış numara listeleri tek biçime iniyor, tekrarlar ayıklanıyor,
+  `{isim}` ile kişiselleştirme, fotoğraf + alt yazı, daha önce gönderdiğin bir
+  mesajı şablon alma ya da aynen iletme. Rastgele bekleme, parti molaları,
+  WhatsApp'ta numara doğrulama ve "aynı kişiye ikinci mesaj gitmesin" kaydı var.
+- **Çoklu Mesaj Telegram'da da çalışıyor.** Listeye numaranın yanında
+  `@kullanıcı_adı` / `t.me/ad` yazılabiliyor. Numaralar gönderimden önce hesaba
+  çözülüyor; bu iş için eklenen kişiler gönderimden hemen sonra rehberden geri
+  siliniyor (zaten kişin olanlara dokunulmuyor). Telegram bekleme isterse
+  (FLOOD_WAIT) gönderim bekliyor.
+- **Telegram'a gelen diğer özellikler:** "Bu sohbeti sor" (Bot + Web modunda
+  paneldeki açık sohbeti okur), `!upload` komutu, Listeler sekmesinde isimler
+  ve açık sohbetin otomatik seçilmesi, tercih edilen mikrofon/kamera Telegram
+  Web aramalarında da geçerli.
+
+### İyileştirmeler
+
+- **Pencere boyutlandırma düzeltildi.** Pencere küçültülüp en-boy oranı
+  değişince, büyütülüp küçültülünce ya da tam ekrana geçince WhatsApp/Telegram
+  ekranı üst/alt çubuklarla hizasını kaybediyordu. Artık yerini arayüzün
+  kendisi ölçüp bildiriyor; Linux/Wayland'deki gecikmeli boyut bilgisi de
+  yakalanıyor.
+- **Arada açılan beyaz tema giderildi.** Uygulama koyu temaya sabitlendi;
+  WhatsApp Web sistemin temasını takip edip zaman zaman açık temada
+  açılıyordu. Yüklenen ya da büyüyen ekranlar da artık beyaz parlamıyor.
+- Küçük pencerede ana ekranın ve açılır pencerelerin üstü ekran dışında
+  kalmıyor, içerik kayıyor.
+- Ctrl+- / Ctrl+= ana arayüzü yakınlaştırıp ekranları kaydırıyordu, Ctrl+R
+  bütün arayüzü yeniden yüklüyordu — ikisi de kapatıldı.
+
+### Hata Düzeltmeleri
+
+- Telegram: botun ürettiği görseller fotoğraf yerine "unnamed" adlı dosya
+  olarak gidiyordu.
+- Telegram: kendi yazdığın `!admin add` gibi komutlar seni değil karşıdaki
+  kişiyi ya da grubu ekliyordu.
+- Telegram: önek gerektirmeyen sohbetlerde bot kendi cevabına cevap
+  verebiliyordu.
+- Telegram: bildirimlerde isim yerine numara/ID, fotoğraf/ses mesajlarında boş
+  içerik, gruplarda yazan kişi yerine grup adı görünüyordu; takip edilen
+  kanalların her gönderisi bildirim oluyordu.
+- Telegram: yanlış 2FA şifresi girişi tamamen iptal ediyordu — artık "şifre
+  yanlış, tekrar dene" diye yeniden soruyor.
+- Telegram: yeniden başlatmadan sonra rehberinde olmayan sohbetlere (hata
+  ayıklama sohbeti, sabit sohbet, bildirimden hızlı cevap) gönderim
+  başarısız olabiliyordu.
+- Telegram: Listeler'e yazılan sayısal ID'ye yanlışlıkla WhatsApp eki
+  ekleniyor, kayıt hiç eşleşmiyordu.
+- Telegram "yalnızca Web" modunda ayarlar kaydedilemiyordu.
+- "Bot" modundaki profil açıkken gelen mesajların bildirimi hiç
+  görünmüyordu (WhatsApp ve Telegram).
+
 ## v4.4.30 - 2026-09-11
 
 ### Hata Düzeltmeleri
