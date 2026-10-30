@@ -416,7 +416,9 @@ The list is pulled via `fetchMessages`, so history is genuinely loaded (it runs 
 
 Sending runs in the background (in the main process) — you can switch tabs or close settings, and progress keeps showing where it left off. But **the app must stay open.**
 
-Only shown for WhatsApp profiles. The parsing and pacing logic lives in `src/broadcast.js` with tests in `test/broadcast.test.js` — runnable without opening the app via `node --test test/broadcast.test.js`.
+Works on **Telegram profiles** too: the list can mix phone numbers with Telegram usernames (`@name`, `t.me/name`, `Jane @jane_d`). Numbers are resolved to accounts before sending (imported as a contact and removed from your contact list right after — existing contacts are left alone); people whose privacy settings hide them from phone lookup are skipped as "not found on Telegram". If Telegram asks for a `FLOOD_WAIT`, the send pauses for it, or stops if the wait is too long.
+
+The parsing and pacing logic lives in `src/broadcast.js` with tests in `test/broadcast.test.js` — runnable without opening the app via `node --test test/broadcast.test.js`.
 
 ---
 

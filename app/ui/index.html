@@ -5,6 +5,7 @@
 <title>NeRoBoT</title>
 <style>
     :root {
+        color-scheme: dark;
         --topbar-h: 36px;    /* must match TOPBAR_H in main.js */
         --statusbar-h: 26px; /* must match STATUSBAR_H in main.js */
         --log-h: 240px;      /* must match LOG_H in main.js */
@@ -336,7 +337,10 @@
         display: none;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
+        /* "safe": when a short/narrow window makes the content taller than
+           the screen, plain `center` pushed the top (ASCII logo, first tile
+           row) above the scroll origin where it could never be scrolled to. */
+        justify-content: safe center;
         gap: 24px;
         overflow-y: auto;
         padding: 40px 20px 44px;
@@ -493,18 +497,27 @@
         inset: 0;
         background: rgba(0,0,0,.55);
         display: none;
-        align-items: center;
-        justify-content: center;
+        align-items: safe center;
+        justify-content: safe center;
+        padding: 12px;
         z-index: 50;
     }
     .modalOverlay.open { display: flex; }
+    /* Never larger than the window: in a short or narrow window the panel
+       used to run off-screen (header or buttons unreachable). The header
+       stays put and the body scrolls instead. */
     .modalPanel {
         width: 300px;
+        max-width: calc(100vw - 24px);
+        max-height: calc(100vh - 24px);
+        display: flex;
+        flex-direction: column;
         background: var(--bg2);
         border: 1px solid var(--border);
         border-radius: 10px;
         overflow: hidden;
     }
+    .modalPanel > .modalHeader { flex: 0 0 auto; }
     .modalHeader {
         display: flex;
         align-items: center;
@@ -571,7 +584,7 @@
         text-overflow: ellipsis;
         white-space: nowrap;
     }
-    .modalBody { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .modalBody { padding: 14px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
     /* Unified global settings popup — replaces the old sliding #settingsPanel
        drawer, the separate NeRoChAt-only #ollamaSettingsOverlay modal, and
        the gated-only #telegramCredsOverlay with one real popup: sidebar nav
@@ -2590,6 +2603,14 @@
             bcStatusSent: 'gönderildi',
             bcStatusFailed: 'hata',
             bcStatusNoWhatsapp: 'WhatsApp yok',
+            // Telegram profilinde değişen metinler
+            bcConsentHintTg: 'Bu araç, sana numarasını/kullanıcı adını kendisi verip mesaj almayı kabul etmiş kişilere TEK bir mesaj göndermek için. İzinsiz toplu mesaj Telegram\'da hesabın kısıtlanmasına (spam bloğu) ya da kapatılmasına yol açar; ticari içerikte ayrıca KVKK ve İYS kapsamına girer.',
+            bcListHintTg: 'Her satıra bir alıcı: telefon numarası (5xx, 05xx, +90 5xx…) ya da Telegram kullanıcı adı (@ad, t.me/ad). "Ad, numara" / "Ad @kullanici" satırlarından isim de alınır. Numarayla bulunmayı gizlilik ayarından kapatmış kişiler atlanır. # ile başlayan satırlar atlanır.',
+            bcListPlaceholderTg: '@kullanici_adi\n0555 123 45 67\nt.me/baska_biri\nAhmet Yılmaz, @ahmet_y',
+            bcVerifyHintTg: 'Telegram\'da her alıcı gönderimden önce zaten çözülüyor (numara → hesap). Numarayla eklenen kişiler gönderimden sonra kişi listenden geri silinir.',
+            bcProgressStatsTg: (sent, failed, skipped, noAcc) =>
+                `${sent} gönderildi · ${failed} hata · ${skipped} zaten gönderilmiş · ${noAcc} Telegram'da bulunamadı`,
+            bcStatusNoTelegram: 'Telegram\'da yok',
             svcAiLabel: 'AI Bot',
             svcAiHintOff: 'AI Bot kapalı — açtığında ayarlarını Genel ve Sohbet sekmelerinin altında göreceksin.',
             svcAiHintOn: 'AI Bot açık.',
@@ -2805,6 +2826,13 @@
             bcStatusSent: 'sent',
             bcStatusFailed: 'failed',
             bcStatusNoWhatsapp: 'no WhatsApp',
+            bcConsentHintTg: 'This tool is for sending ONE message to people who gave you their number/username and agreed to be contacted. Unsolicited bulk messages get a Telegram account limited (spam block) or banned, and for commercial content they also fall under consent/marketing law.',
+            bcListHintTg: 'One recipient per line: a phone number (any format) or a Telegram username (@name, t.me/name). Lines like "Name, number" / "Name @user" also yield the name. People whose privacy settings hide them from phone lookup are skipped. Lines starting with # are skipped.',
+            bcListPlaceholderTg: '@username\n+90 555 123 45 67\nt.me/someone_else\nJane Doe, @jane_d',
+            bcVerifyHintTg: 'On Telegram every recipient is resolved before sending anyway (number → account). Contacts added by number are removed from your contact list again right after the send.',
+            bcProgressStatsTg: (sent, failed, skipped, noAcc) =>
+                `${sent} sent · ${failed} failed · ${skipped} already sent · ${noAcc} not found on Telegram`,
+            bcStatusNoTelegram: 'not on Telegram',
             svcAiLabel: 'AI Bot',
             svcAiHintOff: "AI Bot is off — turn it on to see its settings under the General and Chat tabs.",
             svcAiHintOn: 'AI Bot is on.',
@@ -3295,6 +3323,29 @@
     }
     statusLogBtn.addEventListener('click', toggleLogPanel);
 
+    // Tell main exactly where #middle is, so the native WhatsApp/Telegram/
+    // NeRoChAt views line up with the HTML bars at every window size and
+    // aspect ratio (log drawer open or not, any display scale) instead of
+    // main guessing from hard-coded bar heights. rAF-coalesced: a drag-resize
+    // fires many observations per frame.
+    const contentHostEl = document.getElementById('middle');
+    let contentRectFrame = 0;
+    function reportContentRect() {
+        if (contentRectFrame) return;
+        contentRectFrame = requestAnimationFrame(() => {
+            contentRectFrame = 0;
+            const r = contentHostEl.getBoundingClientRect();
+            window.nerobot.reportContentRect({
+                top: r.top,
+                bottom: r.bottom,
+                viewportHeight: window.innerHeight,
+            });
+        });
+    }
+    new ResizeObserver(reportContentRect).observe(contentHostEl);
+    window.addEventListener('resize', reportContentRect);
+    reportContentRect();
+
     window.nerobot.onLog(addLine);
     window.nerobot.onStatus(handleStatusEvent);
 
@@ -3429,6 +3480,8 @@
     // yeni listeyi göndermesin. bcPreviewProfileId raporun HANGİ profil için
     // alındığını tutuyor — "zaten davet edildi" işaretleri profile özel, o
     // yüzden profil değişince rapor geçersiz.
+    // Active profile's platform — see updatePlatformTabVisibility.
+    let bcPlatform = 'whatsapp';
     let bcLastPreview = null;
     let bcPreviewProfileId = null;
     let bcRunning = false;
@@ -3470,6 +3523,7 @@
         // özel olanlar (iletme modu, eklenmiş fotoğraf) burada geri kazanır.
         if (bcPickedMessage) syncBroadcastForwardMode();
         syncBroadcastPhotoHint();
+        applyBroadcastPlatformTexts();
     }
 
     bcMessageInput.addEventListener('input', () => { bcMessageInput.dataset.pristine = '0'; });
@@ -3819,7 +3873,7 @@
 
         bcProgressEl.innerHTML = '';
         bcProgressEl.appendChild(bcRow(t('bcProgressLine')(s.index, s.total)));
-        bcProgressEl.appendChild(bcRow(t('bcProgressStats')(s.sent, s.failed, s.skipped, s.noWhatsapp)));
+        bcProgressEl.appendChild(bcRow(bcT('bcProgressStats')(s.sent, s.failed, s.skipped, s.noWhatsapp)));
         if (s.running) {
             bcProgressEl.appendChild(bcRow(s.current ? t('bcProgressCurrent')(s.current) : t('bcProgressWaiting')));
         } else if (s.aborted) {
@@ -3851,7 +3905,7 @@
         const etiket = {
             sent: t('bcStatusSent'),
             failed: t('bcStatusFailed'),
-            no_whatsapp: t('bcStatusNoWhatsapp'),
+            no_whatsapp: t(bcPlatform === 'telegram' ? 'bcStatusNoTelegram' : 'bcStatusNoWhatsapp'),
         };
         for (const entry of entries.slice(0, 100)) {
             const who = entry.label ? `${entry.label} ${entry.display}` : entry.display;
@@ -4433,7 +4487,9 @@
         neroChatMessagesCache = null; // re-fetch fresh next time the range bar opens
         neroPopupChatRangeBar.classList.remove('open');
         const activeEntry = allProfiles.find(p => p.id === activeProfileId);
-        neroPopupAskChatBtn.style.display = activeEntry?.platform === 'whatsapp' ? '' : 'none';
+        // Telegram too (reads the chat open in the web.telegram.org pane —
+        // main.js's telegramActivePeer); just not for a profile with no bot.
+        neroPopupAskChatBtn.style.display = activeEntry && activeEntry.mode !== 'web' ? '' : 'none';
         openModal('neroPopupOverlay');
         await loadNeroModels();
         neroPopupInput.focus();
@@ -5568,9 +5624,28 @@
     // (client.getNumberId), mesaj iletme ve @c.us sohbet id'leri WhatsApp'a
     // özgü. Hizmetler sekmesinin kendisi Telegram'da da duruyor (AI Bot
     // anahtarı orada), sadece bu bölüm gizleniyor.
+    // Çoklu Mesaj both platforms now; on Telegram a few texts change
+    // (usernames accepted, verification is implicit — see main.js's
+    // resolveTelegramRecipient) and the verify toggle is hidden.
     function updatePlatformTabVisibility(platform) {
-        const isWhatsapp = (platform || 'whatsapp') === 'whatsapp';
-        document.getElementById('svcBroadcast').style.display = isWhatsapp ? '' : 'none';
+        bcPlatform = platform || 'whatsapp';
+        document.getElementById('svcBroadcast').style.display = '';
+        applyBroadcastPlatformTexts();
+    }
+    function bcT(key) {
+        if (bcPlatform === 'telegram') {
+            const tg = STR[lang]?.[key + 'Tg'];
+            if (tg !== undefined) return tg;
+        }
+        return t(key);
+    }
+    function applyBroadcastPlatformTexts() {
+        const tg = bcPlatform === 'telegram';
+        document.getElementById('bcConsentHint').textContent = bcT('bcConsentHint');
+        document.getElementById('bcListHint').textContent = bcT('bcListHint');
+        document.getElementById('bcListInput').placeholder = tg ? bcT('bcListPlaceholder') : '0555 123 45 67\n+90 555 123 45 68\n5551234569\nAhmet Yılmaz, 05551234570';
+        bcVerifyToggle.closest('.toggleRow').style.display = tg ? 'none' : '';
+        document.getElementById('bcVerifyHint').textContent = tg ? bcT('bcVerifyHint') : t('bcVerifyHint');
     }
 
     // Nudges (outline + hint text) rather than blocking — matches the rest

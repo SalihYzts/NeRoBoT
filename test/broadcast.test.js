@@ -6,6 +6,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     normalizePhone,
+    normalizeUsername,
     parseRecipients,
     applyTemplate,
     nextDelayMs,
@@ -250,5 +251,41 @@ describe('nextDelayMs — gönderim hızı', () => {
         const mola = nextDelayMs(19, { minMs: 8000, maxMs: 9000, batchSize: 20, batchPauseMs: 120000 });
         assert.ok(normal <= 9000);
         assert.ok(mola >= 120000, `mola kısa: ${mola}`);
+    });
+});
+
+describe('Telegram — kullanıcı adları', () => {
+    test('@ad, t.me/ad ve isimli satırlar alıcı olur (yalnızca allowUsernames ile)', () => {
+        const liste = [
+            '@Ahmet_Yilmaz',
+            'https://t.me/ayse_demir',
+            'Mehmet Kaya, @mehmetk',
+            'Zeynep @zeynep_k',
+            '05551234567',
+            '@ahmet_yilmaz',
+        ].join('\n');
+        const { recipients, duplicates, invalid } = parseRecipients(liste, { allowUsernames: true });
+        assert.equal(invalid.length, 0);
+        assert.deepEqual(recipients.map(r => r.e164), [
+            '@ahmet_yilmaz', '@ayse_demir', '@mehmetk', '@zeynep_k', '905551234567',
+        ]);
+        assert.equal(recipients[0].display, '@Ahmet_Yilmaz');
+        assert.equal(recipients[0].username, true);
+        assert.equal(recipients[2].label, 'Mehmet Kaya');
+        assert.equal(recipients[3].label, 'Zeynep');
+        // Büyük/küçük harf farkı aynı kişi.
+        assert.equal(duplicates.length, 1);
+    });
+
+    test('WhatsApp listesinde kullanıcı adı alıcı sayılmaz', () => {
+        const { recipients } = parseRecipients('@ahmet_yilmaz\n05551234567');
+        assert.deepEqual(recipients.map(r => r.e164), ['905551234567']);
+    });
+
+    test('geçersiz kullanıcı adları reddedilir', () => {
+        assert.equal(normalizeUsername('@ab').ok, false);       // çok kısa
+        assert.equal(normalizeUsername('@1abcde').ok, false);   // rakamla başlıyor
+        assert.equal(normalizeUsername('ahmet').ok, false);     // @ yok
+        assert.equal(normalizeUsername('@ahmet.yilmaz').ok, false);
     });
 });

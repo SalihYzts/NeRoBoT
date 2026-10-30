@@ -9,7 +9,7 @@ import { createRequire } from 'module';
 import mammoth from 'mammoth';
 
 import { createProfileStore } from './config.js';
-import { createTelegramUtils } from './telegram-utils.js';
+import { createTelegramUtils, describeMedia } from './telegram-utils.js';
 import { createRateLimiter } from './ratelimit.js';
 import { createAi } from './ai.js';
 import { generateImage } from './imagegen.js';
@@ -213,7 +213,8 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
                         await sendImage(chatId, buffer, mimetype, caption);
                     } catch (err) {
                         await reportError('imageGen', err);
-                        await sendText(chatId, state.aiErrorMessage);
+                        if (state.replyMode) await replyText(msg, state.aiErrorMessage);
+                        else await sendText(chatId, state.aiErrorMessage);
                     }
                     return;
                 }
@@ -300,6 +301,10 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             const chatId = message.chatId?.toString();
             const senderId = message.senderId?.toString() || chatId;
             if (!chatId) return;
+            // Posts in a broadcast channel the account merely follows: nobody
+            // to answer (we can't post there) and a notification per post
+            // just buried real messages.
+            if (message.isChannel && !message.isGroup) return;
 
             if (await setHasAny(blacklist, chatId)) return;
 
@@ -314,13 +319,22 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             // cache), so this needs no extra network round-trip.
             if (onIncomingMessage) {
                 try {
-                    const chatName = message.chat?.title || message.chat?.firstName || message.sender?.username || message.sender?.firstName || chatId;
+                    // .chat/.sender are only pre-filled when the update carried
+                    // the entities — plain DMs (UpdateShortMessage) usually
+                    // don't, which left the raw numeric id as the name.
+                    // getChat()/getSender() fall back to the entity cache /
+                    // one lookup.
+                    const chat = message.chat || await message.getChat().catch(() => null);
+                    const sender = message.sender || await message.getSender().catch(() => null);
+                    const personName = [sender?.firstName, sender?.lastName].filter(Boolean).join(' ') || sender?.username || sender?.title;
+                    const chatName = chat?.title || [chat?.firstName, chat?.lastName].filter(Boolean).join(' ') || chat?.username || personName || chatId;
                     scheduleAvatarFetch(chatId);
                     onIncomingMessage({
                         chatId,
                         chatName,
-                        senderName: chatName,
-                        body: text,
+                        // In a group: who wrote it, not the group's title.
+                        senderName: message.isGroup ? (personName || chatName) : chatName,
+                        body: text || describeMedia(message),
                         t: message.date ? message.date * 1000 : Date.now(),
                         avatarUrl: avatarCache.get(chatId) || null,
                     });
@@ -376,14 +390,17 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
         try {
             const message = event.message;
             if (!message.out) return;
-            if (isBotSentMessage(message.id)) return; // our own automated send, not a human typing
+            if (isBotSentMessage(message)) return; // our own automated send, not a human typing
 
             const chatId = message.chatId?.toString();
             if (!chatId) return;
             const text = (message.text || '').trim();
             const lower = text.toLowerCase();
-            // Self-typed (fromMe) message — the account owner is both sender and chat.
-            const msg = buildMsgShim(message, chatId, chatId);
+            // Self-typed (fromMe) message — the author is the account owner,
+            // NOT the chat: a bare "!admin add" typed in someone's DM used to
+            // add the other person (or the whole group) instead of yourself.
+            const selfId = message.senderId?.toString() || chatId;
+            const msg = buildMsgShim(message, chatId, selfId);
 
             if (lower.startsWith(state.debugPrefix.toLowerCase())) {
                 const command = lower.slice(state.debugPrefix.length).split(' ')[0];
@@ -419,7 +436,12 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             await client.signInUserWithQrCode(
                 { apiId, apiHash },
                 {
-                    onError: async (err) => { await reportError('telegramLogin', err); return true; },
+                    // false = keep going: a mistyped 2FA password re-prompts
+                    // instead of abandoning the whole QR login.
+                    onError: async (err) => {
+                        await reportError('telegramLogin', err);
+                        return !/PASSWORD_HASH_INVALID/.test(err?.errorMessage || err?.message || '');
+                    },
                     qrCode: async (code) => {
                         const url = `tg://login?token=${code.token.toString('base64url')}`;
                         onQr?.(url, code.expires);
@@ -432,6 +454,13 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
 
         client.addEventHandler(handleIncoming, new NewMessage({ incoming: true }));
         client.addEventHandler(handleOutgoing, new NewMessage({ outgoing: true }));
+
+        // StringSession keeps no entity cache, so after a restart a bare id
+        // (debug chat, fixed chat, a list entry, a notification quick-reply)
+        // couldn't be resolved for anyone who isn't a contact — sends failed
+        // until that chat happened to message us first. One dialogs fetch
+        // fills the cache with every chat the account has.
+        client.getDialogs({ limit: 500 }).catch(err => reportError('warmEntityCache', err));
 
         return client.session.save();
     }

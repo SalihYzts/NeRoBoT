@@ -551,16 +551,15 @@ async function Upload(msg, targetId) {
 
     const limit = Math.min(300, Math.floor(n));
 
-    // Reads WhatsApp Web's in-page chat model directly (see the comment
-    // above) — there's no Telegram equivalent, so this command simply isn't
-    // available on that platform yet.
-    if (!msg.client?.pupPage) {
-        return sendText(targetId, `${state.debugPrefix}upload isn't available on this platform yet.`);
-    }
-
     let messages;
     try {
-        messages = await msg.client.pupPage.evaluate(async (chatId, lim) => {
+        // Telegram: utils.fetchRecentMessages (client.getMessages). WhatsApp:
+        // reads WhatsApp Web's in-page chat model directly (see above).
+        if (typeof utils.fetchRecentMessages === 'function') {
+            messages = await utils.fetchRecentMessages(targetId, limit);
+        } else if (!msg.client?.pupPage) {
+            return sendText(targetId, `${state.debugPrefix}upload isn't available on this platform yet.`);
+        } else messages = await msg.client.pupPage.evaluate(async (chatId, lim) => {
             const chat = await window.WWebJS.getChat(chatId, { getAsModel: false });
             return chat.msgs.getModelsArray()
                 .filter(m => !m.isNotification)

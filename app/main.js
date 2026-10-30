@@ -17,7 +17,7 @@
 //      rides along on the puppeteer options object (see src/bot.js)
 //      so the shared patched connect() knows which profile is asking.
 // Result: each open tab's bot drives its own WhatsApp Web view, independently.
-import { app, BrowserWindow, WebContentsView, ipcMain, shell, dialog, session as electronSession, desktopCapturer, screen } from 'electron';
+import { app, BrowserWindow, WebContentsView, Menu, nativeTheme, ipcMain, shell, dialog, session as electronSession, desktopCapturer, screen } from 'electron';
 import path from 'node:path';
 import os from 'node:os';
 import util from 'node:util';
@@ -38,6 +38,10 @@ import {
     pickClassifierModel, modelHasVision, pickVisionFallbackModel, resolveVisionModel,
 } from '../src/ai.js';
 import { createTelegramBot } from '../src/telegram-bot.js';
+import { describeMedia as describeTgMedia } from '../src/telegram-utils.js';
+// TL "long" fields want teleproto's own big-integer type.
+import { returnBigInt as bigInt } from 'teleproto/Helpers.js';
+import { createProfileStore } from '../src/config.js';
 import {
     parseRecipients, applyTemplate, nextDelayMs, chatIdForSend, DEFAULT_PACING, MAX_RECIPIENTS,
 } from '../src/broadcast.js';
@@ -276,7 +280,12 @@ function pushNotification(session, { chatId, chatName, senderName, body, t, avat
     // message they can already see arrive in front of them. Doesn't apply
     // once they switch away (activeProfileId no longer matches), even if
     // this same session is still running in the background.
-    if (session.id === activeProfileId) return;
+    // Only when that pane is really visible, though: in connectionMode 'bot'
+    // the tab shows a status placeholder (WhatsApp's page is kept offscreen,
+    // Telegram has none), so the message was never on screen and the
+    // notification is the only way to see it — it used to be dropped.
+    const paneVisible = session.mode !== 'bot' && !ollamaActive;
+    if (session.id === activeProfileId && paneVisible) return;
     const entry = {
         id: `${session.id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
         profileId: session.id,
@@ -406,6 +415,22 @@ const TOPBAR_H = 36;     // must match the top bar height in ui/index.html
 const STATUSBAR_H = 26;  // must match the bottom status bar height in ui/index.html
 const LOG_H = 240;       // must match the log drawer height in ui/index.html
 
+// The app is dark-only. Every native layer (BrowserWindow, each
+// WebContentsView) gets this as its own background so a view that's still
+// loading, or a strip newly exposed by a resize before the page repaints,
+// shows the app's own background instead of Chromium's default white.
+const APP_BG = '#0b0b0d';
+
+// The renderer's real #middle rect (where profile/Ollama views must sit),
+// reported by index.html via 'layout:contentRect' whenever it changes.
+// TOPBAR_H/STATUSBAR_H/LOG_H above are only the fallback until the first
+// report arrives — trusting the page's own measurement means the native
+// views can never drift out of line with the HTML bars around them (window
+// resize/aspect change, maximize on Wayland where getContentBounds() can
+// lag a frame behind, a fractional display scale, a font that renders the
+// bars a pixel taller…).
+let measuredContentRect = null;
+
 let win = null;
 let logOpen = false;
 // True while an in-app modal (confirm/alert/profile settings/new profile)
@@ -532,15 +557,33 @@ function setStatus(session, key, text, extra) {
 // ============================
 // Window + per-profile views
 // ============================
-function layoutViews() {
-    if (!win) return;
+function computeActiveBounds() {
     const { width, height } = win.getContentBounds();
-    const activeBounds = {
+    const m = measuredContentRect;
+    if (m) {
+        // Insets (not the absolute rect) so a 'resize' that lands before the
+        // renderer's next report still stretches the view to the new size.
+        const top = Math.max(0, m.top);
+        const bottomInset = Math.max(0, m.viewportHeight - m.bottom);
+        return {
+            x: 0,
+            y: top,
+            width,
+            height: Math.max(0, height - top - bottomInset),
+        };
+    }
+    return {
         x: 0,
         y: TOPBAR_H,
         width,
         height: Math.max(0, height - TOPBAR_H - STATUSBAR_H - (logOpen ? LOG_H : 0)),
     };
+}
+
+function layoutViews() {
+    if (!win || win.isDestroyed()) return;
+    const activeBounds = computeActiveBounds();
+    const { width } = activeBounds;
     const zero = { x: 0, y: 0, width: 0, height: 0 };
     // Full-size but shifted way outside the window instead of 0×0 — used
     // ONLY for connectionMode 'bot' WhatsApp profiles below. A literal 0×0
@@ -625,6 +668,7 @@ async function showSplash(session) {
         session.splashView = new WebContentsView({
             webPreferences: { preload: path.join(__dirname, 'preload.cjs') },
         });
+        session.splashView.setBackgroundColor(APP_BG);
         win.contentView.addChildView(session.splashView);
         layoutViews();
         // The splash page needs to know which profile it belongs to (for
@@ -708,11 +752,19 @@ function buildDeviceOverrideScript(micId, camId) {
     })();`;
 }
 
+// The profile's embedded page — WhatsApp Web or web.telegram.org (calls
+// there use the same preferred mic/camera).
+function embeddedView(session) {
+    const view = session.waView || session.tgView;
+    return view && !view.webContents.isDestroyed() ? view : null;
+}
+
 async function injectMediaDevicePrefs(session) {
-    if (!session.waView || session.waView.webContents.isDestroyed()) return;
+    const view = embeddedView(session);
+    if (!view) return;
     const state = session.store?.state;
     try {
-        await session.waView.webContents.executeJavaScript(
+        await view.webContents.executeJavaScript(
             buildDeviceOverrideScript(state?.preferredMicId, state?.preferredCameraId)
         );
     } catch (_) {}
@@ -791,6 +843,7 @@ async function setupWaView(session) {
             spellcheck: false,
         },
     });
+    session.waView.setBackgroundColor(APP_BG);
 
     // Electron's default UA contains "Electron/x.y" — present a plain Chrome
     // UA so WhatsApp Web doesn't treat us as an unsupported browser.
@@ -941,6 +994,7 @@ async function setupTelegramView(session) {
             spellcheck: false,
         },
     });
+    session.tgView.setBackgroundColor(APP_BG);
 
     // Same reasoning as WA's UA override — present a plain modern Chrome UA
     // so Telegram Web doesn't flag this as an unsupported browser.
@@ -993,6 +1047,8 @@ async function setupTelegramView(session) {
     });
 
     wireGlobalShortcuts(session.tgView.webContents);
+    // Preferred mic/camera (Ayarlar) apply to Telegram Web calls too.
+    session.tgView.webContents.on('dom-ready', () => { injectMediaDevicePrefs(session); });
 
     win.contentView.addChildView(session.tgView);
     layoutViews();
@@ -1095,6 +1151,7 @@ async function setupOllamaView() {
     ollamaView = new WebContentsView({
         webPreferences: { preload: path.join(__dirname, 'preload.cjs') },
     });
+    ollamaView.setBackgroundColor(APP_BG);
     wireGlobalShortcuts(ollamaView.webContents);
 
     win.contentView.addChildView(ollamaView);
@@ -1170,7 +1227,7 @@ async function createWindow() {
         // .ico on Windows gives crisper taskbar/titlebar rendering than .png
         // (multi-resolution, picked per-context by the OS).
         icon: path.join(__dirname, 'ui', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
-        backgroundColor: '#0b0b0d',
+        backgroundColor: APP_BG,
         // No native title bar — #topbar in index.html is already its own
         // draggable region (see -webkit-app-region: drag there) with its
         // own icon/title; a native frame on top of that was just a second,
@@ -1183,11 +1240,37 @@ async function createWindow() {
         },
     });
     win.setMenuBarVisibility(false);
-    win.on('resize', () => { layoutViews(); invalidateActiveViews(); });
+
+    // The shell page must stay at 100% zoom: the native profile views are
+    // positioned in DIPs against its bars, so Ctrl+-/Ctrl+= or a pinch on
+    // this page made the bars a different size than the gap left for them
+    // (views overlapping the topbar, or a dead strip under it). Profile
+    // views keep their own zoom — only the shell is locked.
+    win.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
+    win.webContents.on('zoom-changed', () => win.webContents.setZoomFactor(1));
+    win.webContents.on('did-finish-load', () => win.webContents.setZoomFactor(1));
+
+    // Bounds change → re-lay the native views right away AND once more on the
+    // next tick: on Linux (Wayland especially) and with Windows Snap,
+    // getContentBounds() inside the 'resize' handler can still return the
+    // previous size, which left the WhatsApp/Telegram view at the old size
+    // or aspect until something else happened to trigger a layout.
+    let relayoutTimer = null;
+    const relayout = () => {
+        layoutViews();
+        invalidateActiveViews();
+        clearTimeout(relayoutTimer);
+        relayoutTimer = setTimeout(() => { layoutViews(); invalidateActiveViews(); }, 60);
+    };
+    win.on('resize', relayout);
+    win.on('resized', relayout);
+    win.on('restore', relayout);
+    win.on('enter-full-screen', relayout);
+    win.on('leave-full-screen', relayout);
     win.on('resize', scheduleClampWindowBounds);
     win.on('move', scheduleClampWindowBounds);
-    win.on('maximize', () => { layoutViews(); invalidateActiveViews(); win.webContents.send('window:maximizedChanged', true); });
-    win.on('unmaximize', () => { layoutViews(); invalidateActiveViews(); win.webContents.send('window:maximizedChanged', false); });
+    win.on('maximize', () => { relayout(); win.webContents.send('window:maximizedChanged', true); });
+    win.on('unmaximize', () => { relayout(); win.webContents.send('window:maximizedChanged', false); });
 
     // Passed as a query param (not fetched via IPC after load) so the lock
     // overlay's shown/hidden state is known from index.html's very first
@@ -1536,6 +1619,13 @@ async function openProfile(id) {
         } else {
             layoutViews(); // no tgView to create — the renderer's own placeholder covers this profile
         }
+        if (!wantsBot) {
+            // 'web' runs no bot, but the profile still has settings (help
+            // language, notifications, app-level toggles) the settings panel
+            // reads/saves — without a store every save threw "profile is not
+            // open". WhatsApp 'web' gets one from its automation-off bot.
+            session.store = createProfileStore(session.dir);
+        }
         if (wantsBot) {
             openTelegramProfile(session).catch(err => {
                 console.error(`[${session.name}] Telegram bağlanamadı:`, err);
@@ -1594,9 +1684,14 @@ async function openTelegramProfile(session) {
         // Resolved by the 'telegram:submitPassword' IPC handler below, once
         // the renderer's password prompt (shown for status key
         // 'telegram_password') gets an answer.
+        // Called again after a wrong password (telegram-bot.js keeps the
+        // login going on PASSWORD_HASH_INVALID) — say so, otherwise the
+        // prompt just silently reappears.
         onPasswordRequired: (hint) => new Promise((resolve) => {
             session.pendingPasswordResolve = resolve;
-            setStatus(session, 'telegram_password', 'İki adımlı doğrulama şifresi gerekli', hint || '');
+            const retry = (session.passwordPrompts = (session.passwordPrompts || 0) + 1) > 1;
+            const extra = [hint, retry ? 'şifre yanlış, tekrar dene' : ''].filter(Boolean).join(' — ');
+            setStatus(session, 'telegram_password', 'İki adımlı doğrulama şifresi gerekli', extra);
         }),
         onIncomingMessage: (payload) => pushNotification(session, payload),
     });
@@ -1745,6 +1840,18 @@ ipcMain.on('bot:manualRetry', (_e, profileId) => {
 
 ipcMain.on('logs:toggle', (_e, open) => {
     logOpen = !!open;
+    layoutViews();
+});
+
+// index.html's ResizeObserver on #middle (see reportContentRect there) —
+// the authoritative place for the native views. Values are CSS px of a
+// page whose zoom is locked to 1 (see createWindow), i.e. DIPs.
+ipcMain.on('layout:contentRect', (e, rect) => {
+    if (!win || e.sender !== win.webContents || !rect) return;
+    const num = v => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
+    const top = num(rect.top), bottom = num(rect.bottom), viewportHeight = num(rect.viewportHeight);
+    if (top === null || bottom === null || viewportHeight === null || bottom < top) return;
+    measuredContentRect = { top, bottom, viewportHeight };
     layoutViews();
 });
 
@@ -2133,11 +2240,12 @@ ipcMain.handle('settings:save', (_e, profileId, updates) => {
 // (see setupWaView), same as any regular browser.
 ipcMain.handle('wa:listMediaDevices', async (_e, profileId) => {
     const session = sessions.get(profileId);
-    if (!session?.waView || session.waView.webContents.isDestroyed()) {
-        return { ok: false, error: 'WhatsApp view not ready.' };
+    const view = session ? embeddedView(session) : null;
+    if (!view) {
+        return { ok: false, error: 'Web görünümü hazır değil (profil "Bot" modundaysa cihaz seçimi gerekmez).' };
     }
     try {
-        const devices = await session.waView.webContents.executeJavaScript(
+        const devices = await view.webContents.executeJavaScript(
             `navigator.mediaDevices.enumerateDevices().then(list => list.filter(d => d.kind === 'audioinput' || d.kind === 'videoinput').map(d => ({ deviceId: d.deviceId, kind: d.kind, label: d.label || '' })))`
         );
         return { ok: true, devices };
@@ -2789,12 +2897,44 @@ ipcMain.on('ollama:closeTab', () => {
 // IDs are stored exactly as WhatsApp serializes them ("123@c.us" /
 // "...@g.us"), same as the ! commands. Bare digit input gets @c.us appended
 // as a convenience.
-function normalizeId(raw) {
+function normalizeId(raw, platform = 'whatsapp') {
     const id = String(raw ?? '').trim();
     if (!id) return null;
+    // Telegram ids are bare (possibly negative) numbers — the WhatsApp
+    // "@c.us" suffix made a typed Telegram id never match anything.
+    if (platform === 'telegram') return id;
     if (id.includes('@')) return id;
     if (/^\d+$/.test(id)) return `${id}@c.us`;
     return id;
+}
+
+// The chat currently open in a Telegram profile's embedded web.telegram.org
+// pane (connectionMode 'both'/'web'), read off Web K's URL hash: "#123" (user),
+// "#-123"/"#-100123" (group/channel) or "#@username". null when no pane or no
+// chat is open (connectionMode 'bot').
+function telegramActivePeer(session) {
+    try {
+        const url = session.tgView?.webContents?.getURL?.() || '';
+        const hash = decodeURIComponent(url.split('#')[1] || '').trim();
+        if (/^-?\d+$/.test(hash)) return hash;
+        if (/^@\w{3,}$/.test(hash)) return hash;
+    } catch (_) {}
+    return null;
+}
+
+// Resolves telegramActivePeer() to the same numeric id string the bot
+// stores everything under (a "@username" hash needs one entity lookup).
+async function telegramActiveChatId(session) {
+    const peer = telegramActivePeer(session);
+    if (!peer || !session.client) return null;
+    if (!peer.startsWith('@')) return peer;
+    try {
+        const { utils: tgUtils } = await import('teleproto');
+        const entity = await session.client.getEntity(peer);
+        return tgUtils.getPeerId(entity).toString();
+    } catch (_) {
+        return null;
+    }
 }
 
 ipcMain.handle('chats:list', async (_e, profileId) => {
@@ -2805,6 +2945,10 @@ ipcMain.handle('chats:list', async (_e, profileId) => {
     if (session.platform === 'telegram') {
         try {
             const dialogs = await session.client.getDialogs({ limit: 300 });
+            // Preselect the chat open in the web.telegram.org pane, same as
+            // WhatsApp's "open chat" (connectionMode 'both' only — 'bot' has
+            // no pane).
+            const activeId = await telegramActiveChatId(session);
             return {
                 ok: true,
                 chats: dialogs
@@ -2813,7 +2957,7 @@ ipcMain.handle('chats:list', async (_e, profileId) => {
                         id: d.id.toString(),
                         name: d.name || d.title || d.id.toString(),
                         isGroup: !!(d.isGroup || d.isChannel),
-                        active: false, // Telegram has no "chat open in the pane" concept — nothing embedded to be "active" in
+                        active: activeId !== null && d.id.toString() === activeId,
                     })),
             };
         } catch (err) {
@@ -2883,9 +3027,27 @@ ipcMain.handle('chat:recentMessages', async (_e, profileId, limit) => {
     const n = Math.max(1, Math.min(300, Number(limit) || 20));
 
     if (session.platform === 'telegram') {
-        // No "chat open in the pane" concept for Telegram in this app (see
-        // chats:list's own comment above) — nothing to auto-resolve to yet.
-        return { ok: false, error: 'Telegram için bu özellik henüz desteklenmiyor.' };
+        // The chat open in the web.telegram.org pane (see telegramActivePeer).
+        const peer = telegramActivePeer(session);
+        if (!peer) {
+            return {
+                ok: false,
+                error: session.tgView
+                    ? 'Şu an açık bir sohbet yok — Telegram panelinde bir sohbet aç.'
+                    : 'Bu özellik Telegram\'da "Bot + Web" modunda çalışır (açık sohbet okunabilsin diye).',
+            };
+        }
+        try {
+            const [entity, messages] = await Promise.all([
+                session.client.getEntity(peer).catch(() => null),
+                session.utils.fetchRecentMessages(peer, n),
+            ]);
+            const chatName = entity?.title || [entity?.firstName, entity?.lastName].filter(Boolean).join(' ') || entity?.username || peer;
+            return { ok: true, chatName, messages };
+        } catch (err) {
+            console.error(`[${session.name}] Son mesajlar okunamadı:`, err.message || err);
+            return { ok: false, error: err.message || String(err) };
+        }
     }
 
     try {
@@ -3684,6 +3846,14 @@ function getListRegistry(session) {
 async function namedListEntries(session, ids) {
     const result = ids.map(id => ({ id, name: '' }));
     if (!session.client || !session.botReady) return result;
+    if (session.platform === 'telegram') {
+        try {
+            const dialogs = await session.client.getDialogs({ limit: 500 });
+            const names = Object.fromEntries(dialogs.filter(d => d.id).map(d => [d.id.toString(), d.name || d.title || '']));
+            for (const entry of result) entry.name = names[entry.id] || '';
+        } catch (_) {}
+        return result;
+    }
     try {
         const chats = await session.client.pupPage.evaluate(() =>
             window.require('WAWebCollections').Chat.getModelsArray()
@@ -3713,7 +3883,7 @@ ipcMain.handle('lists:add', async (_e, profileId, name, rawId, force) => {
     const registry = getListRegistry(session);
     const entry = registry[name];
     if (!entry) return { entries: [], conflict: null };
-    const id = normalizeId(rawId);
+    const id = normalizeId(rawId, session.platform);
     if (id) {
         // Skip if the same chat is already listed under its other ID form
         // (@lid vs @c.us) — one entry per chat is enough now that every
@@ -3860,9 +4030,84 @@ function waitOrWake(ms, run) {
     });
 }
 
+// ---- Telegram adres çözümü ----
+// WhatsApp'ta "905551234567@c.us" doğrudan bir adres; Telegram'da öyle bir
+// şey yok. Kullanıcı adı getEntity ile, telefon numarası ise ancak kişi
+// olarak içe aktarılınca (contacts.ImportContacts) bir kullanıcıya dönüşür.
+// İçe aktarılan numara kişi listende KALMASIN diye, gönderimden sonra
+// yalnızca bu turda eklenenler silinir (zaten kişin olanlara dokunulmaz).
+async function telegramContactPhones(session) {
+    const { Api } = await import('teleproto');
+    try {
+        const res = await session.client.invoke(new Api.contacts.GetContacts({ hash: bigInt(0) }));
+        return new Set((res.users || []).map(u => String(u.phone || '')).filter(Boolean));
+    } catch (_) {
+        return new Set();
+    }
+}
+
+// → { peerId, user, imported } | null (Telegram hesabı yok / gizlilik
+// ayarı numarayla bulunmayı kapatmış).
+async function resolveTelegramRecipient(session, recipient, existingPhones) {
+    const { Api, utils: tgUtils } = await import('teleproto');
+    if (recipient.username) {
+        try {
+            const entity = await session.client.getEntity(recipient.chatId);
+            if (!entity || entity.className !== 'User' || entity.bot) return null;
+            return { peerId: tgUtils.getPeerId(entity).toString(), user: entity, imported: false };
+        } catch (err) {
+            if (/USERNAME_NOT_OCCUPIED|USERNAME_INVALID|No user has|Cannot find any entity/i.test(err.errorMessage || err.message || '')) return null;
+            throw err;
+        }
+    }
+    const res = await session.client.invoke(new Api.contacts.ImportContacts({
+        contacts: [new Api.InputPhoneContact({
+            clientId: bigInt(Date.now()),
+            phone: recipient.e164,
+            firstName: recipient.label || `+${recipient.e164}`,
+            lastName: '',
+        })],
+    }));
+    const user = (res.users || [])[0];
+    if (!user) return null;
+    return { peerId: tgUtils.getPeerId(user).toString(), user, imported: !existingPhones.has(recipient.e164) };
+}
+
+async function forgetImportedTelegramContact(session, user) {
+    try {
+        const { Api } = await import('teleproto');
+        await session.client.invoke(new Api.contacts.DeleteContacts({ id: [user] }));
+    } catch (err) {
+        console.error(`[${session.name}] Geçici kişi silinemedi:`, err.message || err);
+    }
+}
+
+// Telegram FLOOD_WAIT: sunucu "N saniye bekle" diyor. Kısa ise bekleyip
+// bir kez daha dene; çok uzunsa gönderimi kesmek doğru (hesap kısıtlanıyor).
+async function withFloodWait(run, fn) {
+    try {
+        return await fn();
+    } catch (err) {
+        const secs = Number(err?.seconds);
+        if (!Number.isFinite(secs) || secs <= 0) throw err;
+        if (secs > 300) {
+            const e = new Error(`Telegram ${secs} sn bekleme istedi (FLOOD_WAIT) — gönderim kesildi.`);
+            e.fatal = true;
+            throw e;
+        }
+        run.current = `FLOOD_WAIT — ${secs} sn bekleniyor`;
+        emitBroadcastProgress(run);
+        await waitOrWake((secs + 1) * 1000, run);
+        if (run.stopRequested) throw err;
+        return fn();
+    }
+}
+
 async function runBroadcast(session, run) {
     const { recipients, message, forwardSource, image, pacing, verifyNumbers, skipAlreadySent } = run.options;
     const log = readInviteLog(session);
+    const isTelegram = session.platform === 'telegram';
+    const existingPhones = isTelegram ? await telegramContactPhones(session) : null;
 
     // Bağlantı ortada koparsa kalan HER alıcı saniyeler içinde "hata" olarak
     // işaretlenir ve liste boşa yanar (başarısızlar bir sonraki turda yine
@@ -3901,7 +4146,38 @@ async function runBroadcast(session, run) {
         // chatIdForSend'in başında yazıyor: döndürdüğü @lid id'si hiç
         // yazılmamış bir kişide sohbet oluşturamıyor ve gönderim patlıyordu.
         let chatId = recipient.chatId;
-        if (verifyNumbers) {
+        let importedUser = null;
+        if (isTelegram) {
+            // Telegram'da çözüm isteğe bağlı değil — numara/kullanıcı adı
+            // ancak bir kullanıcıya çözülünce gönderilebilir.
+            let resolved = null;
+            try {
+                resolved = await withFloodWait(run, () => resolveTelegramRecipient(session, recipient, existingPhones));
+            } catch (err) {
+                if (err.fatal) { run.aborted = 'failures'; run.errors.push({ display: recipient.display, error: err.message }); break; }
+                run.failed++;
+                consecutiveFailures++;
+                const reason = err.errorMessage || err.message || String(err);
+                log[recipient.e164] = { at: Date.now(), status: 'failed', error: reason, label: recipient.label || undefined };
+                run.errors.push({ display: recipient.display, error: reason });
+                writeInviteLog(session, log);
+                emitBroadcastProgress(run);
+                if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) { run.aborted = 'failures'; break; }
+                if (i < recipients.length - 1 && !run.stopRequested) await waitOrWake(nextDelayMs(i, pacing), run);
+                continue;
+            }
+            if (!resolved) {
+                run.noWhatsapp++;
+                log[recipient.e164] = { at: Date.now(), status: 'no_whatsapp', label: recipient.label || undefined };
+                run.errors.push({ display: recipient.display, error: 'Telegram hesabı yok (ya da gizlilik ayarı bulunmayı kapatmış)' });
+                writeInviteLog(session, log);
+                emitBroadcastProgress(run);
+                if (i < recipients.length - 1 && !run.stopRequested) await waitOrWake(1500, run);
+                continue;
+            }
+            chatId = resolved.peerId;
+            if (resolved.imported) importedUser = resolved.user;
+        } else if (verifyNumbers) {
             try {
                 const numberId = await session.client.getNumberId(recipient.e164);
                 if (!numberId) {
@@ -3924,19 +4200,27 @@ async function runBroadcast(session, run) {
         }
 
         try {
-            if (forwardSource) {
-                // Aynen iletme — orijinalin birebir kopyası, kişiselleştirme
-                // yok. forwardMessage da sendText ile aynı dedup yolundan
-                // geçiyor, yani bot kendi ilettiği mesaja cevap vermiyor
-                // (bkz. utils.js).
-                await session.utils.forwardMessage(chatId, forwardSource);
-            } else if (image) {
-                // Fotoğraf + alt yazı TEK mesaj olarak gidiyor. Alt yazı da
-                // {isim} ile kişiselleştiriliyor; boşsa sendImage alt yazıyı
-                // hiç eklemiyor.
-                await session.utils.sendImage(chatId, image.buffer, image.mime, applyTemplate(message, recipient));
-            } else {
-                await session.utils.sendText(chatId, applyTemplate(message, recipient));
+            const send = async () => {
+                if (forwardSource) {
+                    // Aynen iletme — orijinalin birebir kopyası, kişiselleştirme
+                    // yok. forwardMessage da sendText ile aynı dedup yolundan
+                    // geçiyor, yani bot kendi ilettiği mesaja cevap vermiyor
+                    // (bkz. utils.js / telegram-utils.js).
+                    await session.utils.forwardMessage(chatId, forwardSource);
+                } else if (image) {
+                    // Fotoğraf + alt yazı TEK mesaj olarak gidiyor. Alt yazı da
+                    // {isim} ile kişiselleştiriliyor; boşsa sendImage alt yazıyı
+                    // hiç eklemiyor.
+                    await session.utils.sendImage(chatId, image.buffer, image.mime, applyTemplate(message, recipient));
+                } else {
+                    await session.utils.sendText(chatId, applyTemplate(message, recipient));
+                }
+            };
+            try {
+                if (isTelegram) await withFloodWait(run, send);
+                else await send();
+            } finally {
+                if (importedUser) await forgetImportedTelegramContact(session, importedUser);
             }
             run.sent++;
             consecutiveFailures = 0;
@@ -3948,6 +4232,11 @@ async function runBroadcast(session, run) {
             log[recipient.e164] = { at: Date.now(), status: 'failed', error: reason, label: recipient.label || undefined };
             run.errors.push({ display: recipient.display, error: reason });
             console.error(`[${session.name}] Davet gönderilemedi (${recipient.display}):`, reason);
+            if (err.fatal) {
+                writeInviteLog(session, log);
+                run.aborted = 'failures';
+                break;
+            }
         }
 
         writeInviteLog(session, log);
@@ -3982,8 +4271,11 @@ async function runBroadcast(session, run) {
 // ne göndereceğini görmesi için — kaç kişi, hangi numaralar atlandı, kim
 // zaten davet edilmiş.
 ipcMain.handle('broadcast:preview', (_e, profileId, rawList, defaultCountry) => {
-    const result = parseRecipients(rawList, defaultCountry ? { defaultCountry } : undefined);
     const session = sessions.get(profileId);
+    const result = parseRecipients(rawList, {
+        ...(defaultCountry ? { defaultCountry } : {}),
+        allowUsernames: session?.platform === 'telegram',
+    });
     const log = session ? readInviteLog(session) : {};
     return {
         ...result,
@@ -4009,12 +4301,35 @@ ipcMain.handle('broadcast:sentMessages', async (_e, profileId, chatId, limit) =>
     if (!session || !session.client || !session.botReady) {
         return { ok: false, error: 'WhatsApp bağlantısı hazır değil — bağlanmasını bekle.' };
     }
-    if (session.platform !== 'whatsapp') {
-        return { ok: false, error: 'Bu özellik yalnızca WhatsApp profillerinde çalışıyor.' };
-    }
     if (!chatId) return { ok: false, error: 'Sohbet seçilmedi.' };
 
     const n = Math.max(1, Math.min(100, Number(limit) || 30));
+    if (session.platform === 'telegram') {
+        try {
+            // Mesaj id'leri sohbet başına benzersiz — iletmek için sohbet
+            // id'si de lazım, o yüzden "sohbet:mesaj" biçiminde dönüyor.
+            const msgs = await session.client.getMessages(chatId, { limit: Math.min(200, n * 4) });
+            return {
+                ok: true,
+                messages: [...msgs]
+                    .filter(m => m && m.out && (m.message || m.media))
+                    .slice(0, n)
+                    .map(m => {
+                        const hasMedia = !!m.media && m.media.className !== 'MessageMediaWebPage';
+                        return {
+                            id: `${chatId}:${m.id}`,
+                            body: m.message || '',
+                            type: hasMedia ? (describeTgMedia(m).replace(/[\[\]]/g, '') || 'media') : 'chat',
+                            hasMedia,
+                            t: m.date || 0,
+                        };
+                    }),
+            };
+        } catch (err) {
+            console.error(`[${session.name}] Gönderilmiş mesajlar okunamadı:`, err.message || err);
+            return { ok: false, error: err.message || String(err) };
+        }
+    }
     try {
         const chat = await session.client.getChatById(chatId);
         if (!chat) return { ok: false, error: 'Sohbet bulunamadı.' };
@@ -4105,11 +4420,8 @@ ipcMain.handle('broadcast:clearImage', (_e, profileId) => {
 ipcMain.handle('broadcast:start', async (_e, profileId, options = {}) => {
     const session = sessions.get(profileId);
     if (!session) return { ok: false, error: 'Profil açık değil.' };
-    if (session.platform !== 'whatsapp') {
-        return { ok: false, error: 'Davet gönderimi şimdilik yalnızca WhatsApp profillerinde çalışıyor.' };
-    }
     if (!session.client || !session.utils || !session.botReady) {
-        return { ok: false, error: 'WhatsApp bağlantısı hazır değil — bağlanmasını bekle.' };
+        return { ok: false, error: 'Bağlantı hazır değil — bağlanmasını bekle.' };
     }
 
     const existing = broadcastRuns.get(profileId);
@@ -4145,7 +4457,19 @@ ipcMain.handle('broadcast:start', async (_e, profileId, options = {}) => {
     // Kaynak mesajı listenin ORTASINDA değil, başlamadan çöz — yoksa 200
     // kişilik bir gönderim ilk alıcıda "mesaj bulunamadı" ile patlardı.
     let forwardSource = null;
-    if (forwardMessageId) {
+    if (forwardMessageId && session.platform === 'telegram') {
+        // "sohbet:mesaj" (bkz. broadcast:sentMessages). Var olduğunu şimdi
+        // doğrula — listenin ortasında "mesaj yok" ile patlamasın.
+        const sep = forwardMessageId.lastIndexOf(':');
+        const src = { chatId: forwardMessageId.slice(0, sep), id: Number(forwardMessageId.slice(sep + 1)) };
+        try {
+            const [found] = await session.client.getMessages(src.chatId, { ids: [src.id] });
+            if (found) forwardSource = src;
+        } catch (err) {
+            console.error(`[${session.name}] İletilecek mesaj çözülemedi:`, err.message || err);
+        }
+        if (!forwardSource) return { ok: false, error: 'İletilecek mesaj bulunamadı — mesajı tekrar seç.' };
+    } else if (forwardMessageId) {
         try {
             forwardSource = await session.client.getMessageById(forwardMessageId);
         } catch (err) {
@@ -4156,7 +4480,10 @@ ipcMain.handle('broadcast:start', async (_e, profileId, options = {}) => {
         }
     }
 
-    const parsed = parseRecipients(options.rawList, options.defaultCountry ? { defaultCountry: options.defaultCountry } : undefined);
+    const parsed = parseRecipients(options.rawList, {
+        ...(options.defaultCountry ? { defaultCountry: options.defaultCountry } : {}),
+        allowUsernames: session.platform === 'telegram',
+    });
     if (!parsed.recipients.length) {
         return { ok: false, error: 'Listede geçerli numara yok.' };
     }
@@ -4375,6 +4702,21 @@ app.whenReady().then(async () => {
     // this app specifically, this would need revisiting — but that's not
     // something a bot-profile-manager app's own UI has needed to support so far.
     app.setAccessibilitySupportEnabled(false);
+
+    // Dark-only app. Without this every embedded page (WhatsApp Web,
+    // web.telegram.org, the native file dialogs, scrollbars) follows the
+    // OS's prefers-color-scheme — which on Linux can flip to light when the
+    // desktop portal answers late or differently, and WhatsApp Web's default
+    // "System" theme then randomly came up white.
+    nativeTheme.themeSource = 'dark';
+
+    // The default application menu is invisible here (frameless window) but
+    // its accelerators still fired: Ctrl+R reloaded the shell page (dropping
+    // every in-memory UI state) and Ctrl+-/Ctrl+= zoomed it, misaligning the
+    // native profile views against the HTML bars. Nothing in the app relies
+    // on that menu, so drop it outside macOS (where it also carries the
+    // standard Edit shortcuts).
+    if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
 
     // Headless hook for the NSIS installer's best-effort Ollama install
     // (see build/installer.nsh's customInstall macro — Exec, not ExecWait,

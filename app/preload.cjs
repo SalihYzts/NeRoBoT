@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('nerobot', {
     notifySplashDone: () => ipcRenderer.send('ui:splashDone'),
     retryBotNow: (profileId) => ipcRenderer.send('bot:manualRetry', profileId),
     toggleLogs: (open) => ipcRenderer.send('logs:toggle', open),
+    // Where the native profile views must sit — #middle's live rect, see
+    // main.js's 'layout:contentRect' and index.html's reportContentRect.
+    reportContentRect: (rect) => ipcRenderer.send('layout:contentRect', rect),
     // Tells main to hide the active profile/NeRoChAt native view while an
     // in-app modal (confirm/alert/profile settings/new profile) is open —
     // that view stacks above this page's own DOM, so a modal here would

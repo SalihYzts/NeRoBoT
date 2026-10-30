@@ -406,7 +406,9 @@ Liste `fetchMessages` ile çekilir, yani sohbet panelde hiç açılmamış olsa 
 
 Gönderim arka planda (ana süreçte) koşar — sekmeyi değiştirebilir, ayarları kapatabilirsin, ilerleme kaldığı yerden görünmeye devam eder. Ama **uygulama açık kalmalı.**
 
-Yalnızca WhatsApp profillerinde görünür. Numara ayrıştırma ve hız mantığı `src/broadcast.js`'te ve testleri `test/broadcast.test.js`'te — uygulamayı hiç açmadan `node --test test/broadcast.test.js` ile koşturulabilir.
+**Telegram profillerinde** de çalışır: listeye numaranın yanında Telegram kullanıcı adı da yazılabilir (`@ad`, `t.me/ad`, `Ahmet @ahmet_y`). Numaralar gönderimden önce hesaba çözülür (kişi olarak eklenip gönderimden hemen sonra kişi listenden geri silinir — zaten kişin olanlara dokunulmaz); numarayla bulunmayı gizlilik ayarından kapatmış kişiler "Telegram'da bulunamadı" olarak atlanır. Telegram `FLOOD_WAIT` isterse gönderim o süre kadar bekler, çok uzunsa durur.
+
+Numara ayrıştırma ve hız mantığı `src/broadcast.js`'te ve testleri `test/broadcast.test.js`'te — uygulamayı hiç açmadan `node --test test/broadcast.test.js` ile koşturulabilir.
 
 ---
 

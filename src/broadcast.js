@@ -121,19 +121,41 @@ export function normalizePhone(raw, { defaultCountry = TR_COUNTRY } = {}) {
     return { ok: true, e164, chatId: `${e164}@c.us`, display: `+${e164}` };
 }
 
+// Telegram kullanıcı adı: "@ad", "t.me/ad" ya da "https://t.me/ad".
+// Telegram'ın kuralı: 5-32 karakter, harf ile başlar, harf/rakam/_.
+const TG_USERNAME = /^(?:@|(?:https?:\/\/)?t(?:elegram)?\.me\/)([a-z][a-z0-9_]{4,31})$/i;
+
+// Tek bir Telegram kullanıcı adını normalleştirir. Kayıt anahtarı (e164
+// alanı) küçük harfli "@ad" — Telegram kullanıcı adları büyük/küçük harf
+// duyarsız, yani "@Ahmet" ile "@ahmet" aynı kişi.
+export function normalizeUsername(raw) {
+    const m = String(raw ?? '').trim().match(TG_USERNAME);
+    if (!m) return { ok: false, reason: 'invalid_chars' };
+    const handle = `@${m[1].toLowerCase()}`;
+    return { ok: true, e164: handle, chatId: handle, display: `@${m[1]}`, username: true };
+}
+
 // Bir satırdaki alanlardan numarayı ve (varsa) ismi ayıklar.
 function parseLine(line, opts) {
+    // Telegram listelerinde numara yerine kullanıcı adı da olabilir.
+    const asAddress = f => {
+        if (opts.allowUsernames) {
+            const u = normalizeUsername(f);
+            if (u.ok) return u;
+        }
+        return normalizePhone(f, opts);
+    };
     const fields = line.split(FIELD_SPLIT).map(f => f.trim()).filter(Boolean);
 
     if (fields.length > 1) {
-        const phoneIndex = fields.findIndex(f => normalizePhone(f, opts).ok);
+        const phoneIndex = fields.findIndex(f => asAddress(f).ok);
         if (phoneIndex !== -1) {
             // İsim = numara olmayan, e-posta olmayan ilk alan. Böylece
             // "Ad,e-posta,telefon" düzeninde e-posta isim sanılmıyor.
             const label = fields.find((f, i) =>
                 i !== phoneIndex && !f.includes('@') && digitCount(f) < MIN_PHONE_DIGITS
             ) || '';
-            return { phone: normalizePhone(fields[phoneIndex], opts), raw: fields[phoneIndex], label };
+            return { phone: asAddress(fields[phoneIndex]), raw: fields[phoneIndex], label };
         }
         // Hiçbir alan numaraya dönüşmedi. Rakam içeren bir alan varsa bu bir
         // bozuk numaradır (bildir); yoksa başlık satırıdır (sessizce atla).
@@ -145,15 +167,23 @@ function parseLine(line, opts) {
 
     // Tek alan. Önce satırın bütünü denenir — "+90 555 123 45 67" boşluklu
     // tek bir numaradır.
-    const whole = normalizePhone(line, opts);
+    const whole = asAddress(line);
     if (whole.ok) return { phone: whole, raw: line, label: '' };
 
     // Olmadıysa: "05551234567 05551234568 ..." gibi tek satıra boşlukla
     // dizilmiş olabilir. Hepsi birden numaraya dönüşüyorsa öyle kabul et.
     const tokens = line.split(/\s+/).filter(Boolean);
     if (tokens.length > 1) {
-        const parsed = tokens.map(tok => ({ phone: normalizePhone(tok, opts), raw: tok, label: '' }));
+        const parsed = tokens.map(tok => ({ phone: asAddress(tok), raw: tok, label: '' }));
         if (parsed.every(p => p.phone.ok)) return parsed;
+        // "Ahmet Yılmaz @ahmet" — isim + kullanıcı adı, boşlukla.
+        if (opts.allowUsernames) {
+            const idx = parsed.findIndex(p => p.phone.ok && p.phone.username);
+            if (idx !== -1 && parsed.filter(p => p.phone.ok).length === 1) {
+                const label = tokens.filter((_, i) => i !== idx).join(' ');
+                return { phone: parsed[idx].phone, raw: tokens[idx], label: digitCount(label) < MIN_PHONE_DIGITS ? label : '' };
+            }
+        }
     }
 
     // Gerçekten bozuk. Rakam içeriyorsa bildir, içermiyorsa serbest metindir.
@@ -167,8 +197,10 @@ function parseLine(line, opts) {
 //   invalid    — atlanan satırlar ({ raw, reason })
 //   duplicates — listede birden fazla geçen numaralar ({ raw, e164 })
 //   truncated  — üst sınır yüzünden kesilen alıcı sayısı
-export function parseRecipients(text, { defaultCountry = TR_COUNTRY, max = MAX_RECIPIENTS } = {}) {
-    const opts = { defaultCountry };
+// allowUsernames: Telegram profilleri için — "@ad"/t.me/ad satırları da alıcı
+// olur (WhatsApp'ta kullanıcı adı diye bir şey yok, orada kapalı).
+export function parseRecipients(text, { defaultCountry = TR_COUNTRY, max = MAX_RECIPIENTS, allowUsernames = false } = {}) {
+    const opts = { defaultCountry, allowUsernames };
     const recipients = [];
     const invalid = [];
     const duplicates = [];
@@ -190,7 +222,7 @@ export function parseRecipients(text, { defaultCountry = TR_COUNTRY, max = MAX_R
                 continue;
             }
 
-            const { e164, chatId, display } = entry.phone;
+            const { e164, chatId, display, username } = entry.phone;
             const existing = seen.get(e164);
             if (existing) {
                 // Aynı kişiye iki mesaj gitmesin. İlk kayıtta isim yoksa
@@ -205,7 +237,7 @@ export function parseRecipients(text, { defaultCountry = TR_COUNTRY, max = MAX_R
                 continue;
             }
 
-            const record = { e164, chatId, display, label: entry.label, raw: entry.raw };
+            const record = { e164, chatId, display, label: entry.label, raw: entry.raw, ...(username ? { username: true } : {}) };
             recipients.push(record);
             seen.set(e164, record);
         }
