@@ -223,10 +223,61 @@ export function createUtils(store) {
         return lastSent;
     }
 
+    // ============================
+    // Medya gönderimi yaması — whatsapp-web.js 1.34.7 (yukarı akış hatası)
+    //
+    // Belirti: fotoğraf/video gönderimi şu hatayla düşüyor, metin sorunsuz:
+    //   "Data passed to getter must include an id property
+    //    (it's how we memoize) but got undefined"
+    //
+    // Sebep: WWebJS.processMediaData(), WhatsApp'ın medya MODEL nesnesini
+    // döndürüyor. WA modelleri iç alanlarını "kendi sayılabilir özelliği"
+    // olarak taşıyor — __x_id dahil. Kütüphane o modeli mesaja yayıyor:
+    //     const message = { ...options, id: newMsgKey, …, ...mediaOptions, … };
+    // Böylece MEDYANIN __x_id'si mesaj nesnesine giriyor. Msg modeli id'sini
+    // __x_id alanından okuduğu için gerçek MsgKey eziliyor; ardından
+    // getValidatedSender → getSender → memoize getter zinciri bozuk/boş bir
+    // id ile çağrılıp yukarıdaki hatayı fırlatıyor. Metin gönderimi
+    // processMediaData'dan geçmediği için etkilenmiyor.
+    //
+    // Yukarı akış: wwebjs #201921 / #201922, düzeltme PR #201923 — bu PR bir
+    // sürümde yayınlandığında (1.34.7'de YOK) aşağıdaki yama silinebilir.
+    //
+    // Çözüm: __x_id'yi DEĞERİNİ KORUYARAK "sayılabilir" olmaktan çıkar.
+    // Yayılım artık onu kopyalamıyor, model ise alanı doğrudan okumaya devam
+    // ettiği için bozulmuyor. Sayfa her yeniden yüklendiğinde yama kaybolur,
+    // bu yüzden Node tarafında önbelleğe ALINMIYOR — her gönderimden önce
+    // çalıştırılıyor (sayfa içinde kendi bayrağıyla tek sefer uygulanıyor,
+    // maliyeti bir megabaytlık yüklemenin yanında yok sayılır).
+    // ============================
+    async function ensureMediaIdPatch() {
+        if (!client?.pupPage) return;
+        try {
+            await client.pupPage.evaluate(() => {
+                if (window.__neroMediaIdPatch) return;
+                const asil = window.WWebJS.processMediaData;
+                if (typeof asil !== 'function') return;
+                window.WWebJS.processMediaData = async function (...args) {
+                    const medya = await asil.apply(this, args);
+                    const tanim = medya && Object.getOwnPropertyDescriptor(medya, '__x_id');
+                    if (tanim && tanim.enumerable) {
+                        Object.defineProperty(medya, '__x_id', { ...tanim, enumerable: false });
+                    }
+                    return medya;
+                };
+                window.__neroMediaIdPatch = true;
+            });
+        } catch (_) {
+            // Yama uygulanamadıysa gönderimi engelleme — asıl hata zaten
+            // aşağıda yakalanıp raporlanıyor.
+        }
+    }
+
     // Sends raw image bytes (e.g. from src/imagegen.js) as
     // WhatsApp media, with an optional text caption riding in the same
     // message — same pending/error-report conventions as sendText().
     async function sendImage(chatId, buffer, mimetype, caption) {
+        await ensureMediaIdPatch();
         const media = new MessageMedia(mimetype, buffer.toString('base64'));
         markPending(chatId);
         try {
@@ -247,6 +298,35 @@ export function createUtils(store) {
         }
     }
 
+    // Forwards an already-existing message into `chatId` — used by Çoklu
+    // Mesaj when the user picks a message they previously sent and it carries
+    // media that plain text can't reproduce (see main.js's runBroadcast).
+    //
+    // NOTE: whatsapp-web.js's Message.forward() resolves without handing back
+    // the newly created message, so there's no id for trackSentMessage here.
+    // The pending-send counter is what stops the bot replying to its own
+    // forward: message_create fires while the forward is still in flight, and
+    // isBotSentMessage() answers true for any chat with a pending send (see
+    // its fallback branch below). That's the same race-closing mechanism
+    // sendText relies on, just without the id belt-and-braces.
+    async function forwardMessage(chatId, message) {
+        markPending(chatId);
+        try {
+            await message.forward(chatId);
+        } catch (err) {
+            if (state.debugChatId && state.debugChatId !== chatId) {
+                try {
+                    const errMsg = `[NeRoBoT Error - forwardMessage]\nTarget: ${chatId}\nReason: ${err.message || err}`;
+                    const debugMsg = await client.sendMessage(state.debugChatId, errMsg);
+                    trackSentMessage(debugMsg);
+                } catch (_) {}
+            }
+            throw err;
+        } finally {
+            unmarkPending(chatId);
+        }
+    }
+
     function isBotSentMessage(msg) {
         if (msg.id && msg.id._serialized && sentMessageIds.has(msg.id._serialized)) {
             return true;
@@ -257,5 +337,5 @@ export function createUtils(store) {
         return isPending(chatId);
     }
 
-    return { setClient, sendText, replyText, sendImage, isBotSentMessage, idVariants, setHasAny, mapGetAny };
+    return { setClient, sendText, replyText, sendImage, forwardMessage, isBotSentMessage, idVariants, setHasAny, mapGetAny };
 }

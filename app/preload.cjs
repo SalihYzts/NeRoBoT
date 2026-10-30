@@ -102,6 +102,24 @@ contextBridge.exposeInMainWorld('nerobot', {
     markProfileNotificationsRead: (profileId) => ipcRenderer.invoke('notif:markProfileRead', profileId),
     onNewNotification: (cb) => ipcRenderer.on('notif:new', (_e, entry) => cb(entry)),
 
+    // Davet (toplu gönderim — Davet tab). previewBroadcast ayrıştırır ama
+    // hiçbir şey göndermez; gönderim yalnızca startBroadcast ile başlar ve
+    // ilerleme onBroadcastProgress ile akar. Bkz. main.js'teki runBroadcast.
+    previewBroadcast: (profileId, rawList, defaultCountry) => ipcRenderer.invoke('broadcast:preview', profileId, rawList, defaultCountry),
+    // "Gönderilmiş bir mesajı kullan" seçicisi — bir sohbette kullanıcının
+    // KENDİ gönderdiği mesajlar (id'leriyle, iletme için gerekli).
+    getBroadcastSentMessages: (profileId, chatId, limit) => ipcRenderer.invoke('broadcast:sentMessages', profileId, chatId, limit),
+    // Fotoğraf — dosya ana süreçte tutuluyor, buradan yalnızca adı/boyutu ve
+    // önizleme dönüyor (bkz. main.js'teki broadcastImages).
+    pickBroadcastImage: (profileId) => ipcRenderer.invoke('broadcast:pickImage', profileId),
+    clearBroadcastImage: (profileId) => ipcRenderer.invoke('broadcast:clearImage', profileId),
+    startBroadcast: (profileId, options) => ipcRenderer.invoke('broadcast:start', profileId, options),
+    stopBroadcast: (profileId) => ipcRenderer.invoke('broadcast:stop', profileId),
+    getBroadcastStatus: (profileId) => ipcRenderer.invoke('broadcast:status', profileId),
+    getBroadcastLog: (profileId) => ipcRenderer.invoke('broadcast:log', profileId),
+    clearBroadcastLog: (profileId) => ipcRenderer.invoke('broadcast:clearLog', profileId),
+    onBroadcastProgress: (cb) => ipcRenderer.on('broadcast:progress', (_e, snapshot) => cb(snapshot)),
+
     // ID lists (Listeler tab) — scoped to the given profile
     getList: (profileId, name) => ipcRenderer.invoke('lists:get', profileId, name),
     addToList: (profileId, name, id, force) => ipcRenderer.invoke('lists:add', profileId, name, id, force),
