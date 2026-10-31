@@ -23,6 +23,19 @@ const { NewMessage } = events;
 // Caps how much extracted file text (PDF/Word/plain-text attachments) gets
 // folded into a prompt — see bot.js's identical helper on the WhatsApp side.
 const FILE_TEXT_MAX_CHARS = 30_000;
+
+// Same as bot.js: media that isn't a question by itself.
+const PASSIVE_MEDIA_TYPES = new Set(['ptt', 'audio', 'video', 'sticker', 'gif']);
+function tgMessageType(m) {
+    if (m.sticker) return 'sticker';
+    if (m.voice) return 'ptt';
+    if (m.videoNote || m.video) return 'video';
+    if (m.gif) return 'gif';
+    if (m.audio) return 'audio';
+    if (m.photo) return 'image';
+    if (m.document) return 'document';
+    return 'chat';
+}
 function truncateFileText(text) {
     return text.length > FILE_TEXT_MAX_CHARS
         ? text.slice(0, FILE_TEXT_MAX_CHARS) + `\n\n[... ${text.length - FILE_TEXT_MAX_CHARS} characters truncated]`
@@ -99,13 +112,18 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
         const memoryKey = (await setHasAny(groupChats, chatId)) ? String(chatId) : String(userId);
 
         try {
-            const { allowed, shouldWarn } = await checkRateLimit(String(userId));
-            if (!allowed) {
-                if (shouldWarn) await sendText(chatId, state.rateLimitWarnMessage);
-                return;
-            }
-
             const rawPrompt = noPrefix ? body.trim() : body.slice(prefixUsed.length).trim();
+
+            // See bot.js: voice/stickers/video alone in a no-prefix chat are
+            // not a prompt, and the owner's own messages aren't rate-limited.
+            if (noPrefix && !rawPrompt && PASSIVE_MEDIA_TYPES.has(msg.type)) return;
+            if (!msg.fromMe) {
+                const { allowed, shouldWarn } = await checkRateLimit(String(userId));
+                if (!allowed) {
+                    if (shouldWarn) await sendText(chatId, state.rateLimitWarnMessage);
+                    return;
+                }
+            }
 
             const images = [];
             let fileContext = '';
@@ -129,8 +147,9 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
                     const lowerName = (filename || '').toLowerCase();
 
                     const isPdf = mimetype === 'application/pdf' || lowerName.endsWith('.pdf');
-                    const isWord = mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                        || mimetype === 'application/msword' || lowerName.endsWith('.docx') || lowerName.endsWith('.doc');
+                    const isLegacyDoc = mimetype === 'application/msword' || lowerName.endsWith('.doc');
+                    const isWord = !isLegacyDoc && (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                        || lowerName.endsWith('.docx'));
 
                     if (mimetype.startsWith('image/') || msg.isPhoto) {
                         if (!state.imageEnabled) {
@@ -158,6 +177,9 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
                                 if (!rawPrompt) return;
                             }
                         }
+                    } else if (isLegacyDoc) {
+                        await sendText(chatId, '⚠️ Old .doc Word files can\'t be read — save it as .docx and send again.');
+                        if (!rawPrompt) return;
                     } else if (isWord) {
                         if (!state.fileEnabled) {
                             await sendText(chatId, '⚠️ File reading is currently disabled. To enable: !media file');
@@ -209,7 +231,8 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
                             ? await describeImageForGeneration(images[0], intent.prompt || rawPrompt)
                             : (intent.prompt || rawPrompt);
                         const { buffer, mimetype } = await generateImage(genPrompt, { provider: state.imageGenProvider, apiKey });
-                        const caption = await describeGeneratedImage(memoryKey, rawPrompt);
+                        const caption = await describeGeneratedImage(memoryKey, rawPrompt, String(chatId))
+                            .catch(err => { reportError('imageCaption', err); return undefined; });
                         await sendImage(chatId, buffer, mimetype, caption);
                     } catch (err) {
                         await reportError('imageGen', err);
@@ -223,7 +246,7 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             if (state.thinkEnabled) await sendText(chatId, state.thinkMessage);
 
             try {
-                const aiResponse = await askModel(memoryKey, prompt, images);
+                const aiResponse = await askModel(memoryKey, prompt, images, null, String(chatId));
                 if (state.replyMode) await replyText(msg, aiResponse);
                 else await sendText(chatId, aiResponse);
             } catch (err) {
@@ -250,6 +273,8 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             // string "undefined" on Telegram.
             author: senderId != null ? String(senderId) : undefined,
             id: tgMessage.id,
+            fromMe: !!tgMessage.out,
+            type: tgMessageType(tgMessage),
             hasMedia: !!(tgMessage.photo || tgMessage.document),
             isPhoto: !!tgMessage.photo,
             async downloadMedia() {
@@ -347,8 +372,8 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             // letter could never match again.
             if (lower.startsWith(state.debugPrefix.toLowerCase())) {
                 if (admins.has(senderId)) {
-                    const command = lower.slice(state.debugPrefix.length).split(' ')[0];
-                    if (commands[command]) await dispatchCommand(command, msg, chatId, `command:${command}`);
+                    const command = lower.slice(state.debugPrefix.length).split(/\s+/)[0];
+                    if (Object.hasOwn(commands, command)) await dispatchCommand(command, msg, chatId, `command:${command}`);
                 }
                 return;
             }
@@ -371,7 +396,7 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             }
 
             if (state.whitelistMode && !chatIds.some(id => whitelist.has(id))) {
-                if (state.debugChatId) {
+                if (state.debugChatId && hasPrefix) {
                     try { await sendText(state.debugChatId, `New message received!\nID: ${chatId}\nMessage: ${text}`); } catch (_) {}
                 }
                 return;
@@ -403,8 +428,8 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             const msg = buildMsgShim(message, chatId, selfId);
 
             if (lower.startsWith(state.debugPrefix.toLowerCase())) {
-                const command = lower.slice(state.debugPrefix.length).split(' ')[0];
-                if (commands[command]) await dispatchCommand(command, msg, chatId, `command_create:${command}`);
+                const command = lower.slice(state.debugPrefix.length).split(/\s+/)[0];
+                if (Object.hasOwn(commands, command)) await dispatchCommand(command, msg, chatId, `command_create:${command}`);
                 return;
             }
 
@@ -416,8 +441,15 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
             const hasPrefix = lower.startsWith(chatPrefix.toLowerCase());
 
             if (isNoPrefixChat && state.ignorePrefix && lower.startsWith(state.ignorePrefix.toLowerCase())) return;
-            if (isNoPrefixChat || hasPrefix) {
-                await handleAiMessage(msg, chatId, chatId, text, isNoPrefixChat, chatPrefix);
+            // Same chat gates as incoming (see bot.js's message_create).
+            if (await setHasAny(blacklist, chatId)) return;
+            if (state.fixedMode && !chatIds.includes(state.activeChatId)) return;
+            const perChatNoPrefix = chatIds.some(id => noPrefixChats.has(id));
+            const whitelisted = chatIds.some(id => whitelist.has(id));
+            const noPrefixHere = perChatNoPrefix || (state.noPrefixAll && (!state.whitelistMode || whitelisted));
+            if (state.whitelistMode && !whitelisted && !perChatNoPrefix && !hasPrefix) return;
+            if (noPrefixHere || hasPrefix) {
+                await handleAiMessage(msg, chatId, chatId, text, noPrefixHere, chatPrefix);
             }
         } catch (err) {
             await reportError('message_create_event', err);

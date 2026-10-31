@@ -178,11 +178,22 @@ export function describeCliAgentLimits() {
 
 const AGENT_TIMEOUT_MS = 180_000; // ajanlar yavaş olabilir; sonsuz değil
 
+// Linux tek bir argv öğesini 128 KB ile sınırlıyor (MAX_ARG_STRLEN). Uzun bir
+// sohbet geçmişi (+ 30k'lık dosya içerikleri) bunu aşınca süreç hiç
+// başlamıyordu. Fazlası baştan (en eski kısımdan) kırpılır — en yeni mesaj
+// ve talimat sonda olduğu için korunur.
+const MAX_PROMPT_CHARS = 100_000;
+function fitPrompt(prompt) {
+    const text = String(prompt ?? '');
+    if (text.length <= MAX_PROMPT_CHARS) return text;
+    return '[…older conversation trimmed…]\n' + text.slice(text.length - MAX_PROMPT_CHARS);
+}
+
 // Tek-seferlik istek: süreci çalıştır, stdout'u topla.
 // Kullanıcı metni argv ile geçer (kabuk yok) — enjeksiyon riski yoktur.
 export function runCliAgent(agent, binPath, prompt, { cwd, signal } = {}) {
     return new Promise((resolve, reject) => {
-        const child = spawn(binPath, agent.args(prompt), {
+        const child = spawn(binPath, agent.args(fitPrompt(prompt)), {
             cwd: cwd || os.tmpdir(), // repo köküne yazmasın diye nötr bir dizin
             shell: false,
             signal,

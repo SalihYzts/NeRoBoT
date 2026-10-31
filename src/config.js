@@ -54,7 +54,7 @@ const DEFAULTS = {
     rateLimitWarnMessage:  "⚠️ You're sending messages too fast. Please wait a moment.",
 
     // Help
-    helpLanguage:          "en",     // "tr" | "en"
+    helpLanguage:          "tr",     // "tr" | "en" — the UI is Turkish-first; "en" flipped every new profile's UI to English
 
     // AI error message — shown to the user in the active chat when the
     // AI fails to respond. The detailed error always goes to the debug channel.
@@ -166,6 +166,7 @@ export function createProfileStore(profileDir) {
         settings:      path.join(profileDir, 'settings.json'),
         chatModels:    path.join(profileDir, 'chatmodels.json'),
         chatPrefixes:  path.join(profileDir, 'chatprefixes.json'),
+        chatPersonalities: path.join(profileDir, 'chatpersonalities.json'),
     };
 
     // ============================
@@ -228,8 +229,19 @@ export function createProfileStore(profileDir) {
     const chatPrefixes = loadJson(PATHS.chatPrefixes, {});
     function saveChatPrefixes() { saveJson(PATHS.chatPrefixes, chatPrefixes); }
 
+    // Chat-specific personalities (system prompts). Used to live only in
+    // chatHistories[chatId][0] — lost on every restart and on "!clear chat",
+    // and never reached group members' own histories. Persisted like
+    // chatModels; ai.js applies it to every history of that chat on each turn.
+    const chatPersonalities = loadJson(PATHS.chatPersonalities, {});
+    function saveChatPersonalities() { saveJson(PATHS.chatPersonalities, chatPersonalities); }
+
     // Chat histories (runtime only — intentionally not persisted).
     const chatHistories = {};
+    // chatId → Set of chatHistories keys used in it. In a group without
+    // shared memory every member has their own key; "!clear chat" there must
+    // clear all of them, not just a key nobody uses.
+    const chatMemoryKeys = {};
 
     return {
         state, PERSISTENT_KEYS, saveSettings, resetStateToDefaults,
@@ -240,6 +252,7 @@ export function createProfileStore(profileDir) {
         groupChats, saveGroupChats,
         chatModels, saveChatModels,
         chatPrefixes, saveChatPrefixes,
-        chatHistories,
+        chatPersonalities, saveChatPersonalities,
+        chatHistories, chatMemoryKeys,
     };
 }

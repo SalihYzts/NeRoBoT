@@ -68,13 +68,17 @@ export function createRateLimiter(store, idVariants) {
         }
 
         const bucket = buckets[key];
+        // Max lowered since this bucket filled up — don't keep the old surplus.
+        if (bucket.tokens > rateLimitMaxTokens) bucket.tokens = rateLimitMaxTokens;
 
-        // Refill tokens based on elapsed time
+        // Refill tokens based on elapsed time. Advance lastRefill only by the
+        // intervals actually credited — resetting it to `now` threw away the
+        // partial interval, so the real refill rate could drop to ~half.
         const elapsed = now - bucket.lastRefill;
-        const refillAmount = Math.floor(elapsed / rateLimitRefillMs);
+        const refillAmount = rateLimitRefillMs > 0 ? Math.floor(elapsed / rateLimitRefillMs) : 0;
         if (refillAmount > 0) {
             bucket.tokens = Math.min(rateLimitMaxTokens, bucket.tokens + refillAmount);
-            bucket.lastRefill = now;
+            bucket.lastRefill = bucket.tokens >= rateLimitMaxTokens ? now : bucket.lastRefill + refillAmount * rateLimitRefillMs;
         }
 
         // Check if user has a token to spend

@@ -139,8 +139,16 @@ export async function installOllama(onProgress) {
 // nothing in NeRoBoT should do that (the WhatsApp views are fully
 // embedded; this should be too). `windowsHide` stops even the CLI's own
 // console window from flashing on screen.
+// One spawn attempt per short window: this is called on every model listing
+// and NeRoChAt activation, and each extra "ollama serve" just fails to bind
+// and exits — pure process churn.
+let lastServeSpawnAt = 0;
+const SERVE_RESPAWN_MS = 60_000;
+
 export function openOllamaApp() {
     if (!fs.existsSync(KNOWN_EXE)) return false;
+    if (Date.now() - lastServeSpawnAt < SERVE_RESPAWN_MS) return true;
+    lastServeSpawnAt = Date.now();
     // NOTE: `detached: true` is deliberately NOT set here — on Windows,
     // combining it with `windowsHide` is a known bad pairing (Node opens a
     // new console for the detached process group before windowsHide can

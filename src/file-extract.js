@@ -43,7 +43,12 @@ export async function extractFileText(buffer, ext, filename) {
                 await parser.destroy();
             }
         }
-        if (lower === '.docx' || lower === '.doc') {
+        if (lower === '.doc') {
+            // mammoth only reads .docx; the old binary .doc always failed with
+            // a confusing parse error.
+            return { ok: false, error: 'Eski .doc biçimi okunamıyor — dosyayı .docx olarak kaydedip tekrar gönder.' };
+        }
+        if (lower === '.docx') {
             const result = await mammoth.extractRawText({ buffer });
             return { ok: true, text: truncate(`[Word belgesi içeriği: ${filename}]\n${result.value.trim()}`) };
         }

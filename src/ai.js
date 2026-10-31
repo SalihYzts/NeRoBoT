@@ -193,7 +193,7 @@ function cosineSimilarity(a, b) {
 // two different WhatsApp accounts talking to the same contact must not
 // merge into one conversation.
 export function createAi({ store, utils }) {
-    const { state, chatHistories, chatModels } = store;
+    const { state, chatHistories, chatModels, chatPersonalities, chatMemoryKeys } = store;
     const { mapGetAny, getAiClient } = utils;
 
     // Only warn once per profile run — an unpulled embed model would
@@ -252,7 +252,11 @@ export function createAi({ store, utils }) {
         }
 
         const recent = rest.slice(-RECENT_KEEP);
-        const olderCandidates = rest.slice(0, -RECENT_KEEP).filter(m => m._embedding);
+        // Pinned context (e.g. "!upload" history, a role:'system' entry with
+        // no embedding) must survive past the recent window, otherwise it
+        // vanished from every request after a few exchanges.
+        const pinned = new Set(rest.slice(0, -RECENT_KEEP).filter(m => m.role === 'system'));
+        const olderCandidates = rest.slice(0, -RECENT_KEEP).filter(m => m._embedding && !pinned.has(m));
         const topRelevant = new Set(
             olderCandidates
                 .map(m => ({ m, score: cosineSimilarity(m._embedding, latestEmbedding) }))
@@ -262,7 +266,7 @@ export function createAi({ store, utils }) {
         );
         // Keep whatever made the cut in ORIGINAL chronological order (not
         // relevance order) — the model reads a conversation, not a ranked list.
-        const relevantInOrder = rest.filter(m => topRelevant.has(m));
+        const relevantInOrder = rest.filter(m => topRelevant.has(m) || pinned.has(m));
         return [system, ...relevantInOrder, ...recent, latest];
     }
 
@@ -287,23 +291,33 @@ export function createAi({ store, utils }) {
         return response.message.content.trim();
     }
 
-    function askModel(userId, prompt, images = [], extraInstruction = null) {
-        return withMemoryLock(userId, () => askModelLocked(userId, prompt, images, extraInstruction));
+    // `userId` is the MEMORY key (a sender in a group without shared
+    // memory); `chatId` is the chat itself — per-chat model/personality
+    // overrides are set per chat, so they're looked up by chatId first.
+    function askModel(userId, prompt, images = [], extraInstruction = null, chatId = userId) {
+        return withMemoryLock(userId, () => askModelLocked(userId, prompt, images, extraInstruction, chatId));
     }
 
-    async function askModelLocked(userId, prompt, images = [], extraInstruction = null) {
-        if (!chatHistories[userId]) {
-            chatHistories[userId] = [
-                { role: 'system', content: state.systemPrompt }
-            ];
-        }
+    async function lookupChatOverride(map, chatId, userId) {
+        return (await mapGetAny(map, chatId)) || (userId !== chatId ? await mapGetAny(map, userId) : undefined);
+    }
+
+    async function askModelLocked(userId, prompt, images = [], extraInstruction = null, chatId = userId) {
+        // Work on one array for the whole turn: a "!clear" landing while
+        // the model is answering replaces/deletes chatHistories[userId], and
+        // pushing to that later threw — turning a good reply into an error.
+        const systemPrompt = (await lookupChatOverride(chatPersonalities, chatId, userId)) || state.systemPrompt;
+        let hist = chatHistories[userId];
+        if (!hist) hist = chatHistories[userId] = [{ role: 'system', content: systemPrompt }];
+        hist[0].content = systemPrompt;
+        (chatMemoryKeys[chatId] ||= new Set()).add(userId);
 
         // Use this chat's model override if one is set, otherwise fall back
         // to the global/main model. The override may be stored under either ID
         // form (@lid or @c.us) — mapGetAny checks both. Resolved up front
         // (rather than after building userMessage, as before) because the
         // image handling right below needs to know it first.
-        const modelToUse = (await mapGetAny(chatModels, userId)) || state.aiModel;
+        const modelToUse = (await lookupChatOverride(chatModels, chatId, userId)) || state.aiModel;
 
         // `images` should be an array of base64 strings (no data: prefix) —
         // the format vision-capable models expect. If
@@ -334,10 +348,10 @@ export function createAi({ store, utils }) {
 
         const latestEmbedding = await embed(prompt);
         if (latestEmbedding) userMessage._embedding = latestEmbedding;
-        chatHistories[userId].push(userMessage);
+        hist.push(userMessage);
 
         try {
-            const context = selectContext(chatHistories[userId], latestEmbedding);
+            const context = selectContext(hist, latestEmbedding);
             const apiMessages = toApiMessages(context);
             if (extraInstruction) apiMessages.push({ role: 'system', content: extraInstruction });
             const response = await getAiClient().chat({
@@ -348,12 +362,11 @@ export function createAi({ store, utils }) {
             const assistantMessage = { role: 'assistant', content: response.message.content };
             const replyEmbedding = await embed(response.message.content);
             if (replyEmbedding) assistantMessage._embedding = replyEmbedding;
-            chatHistories[userId].push(assistantMessage);
+            hist.push(assistantMessage);
 
             // Trim oldest non-system messages once the stored history grows
             // past the cap — index 0 is always the system prompt, so drop
             // starting at index 1.
-            const hist = chatHistories[userId];
             if (hist.length > MAX_STORED_HISTORY) {
                 hist.splice(1, hist.length - MAX_STORED_HISTORY);
             }
@@ -361,8 +374,10 @@ export function createAi({ store, utils }) {
             return response.message.content;
 
         } catch (err) {
-            // Roll back the user message on error to keep history clean
-            chatHistories[userId].pop();
+            // Roll back THIS turn's user message (not whatever was pushed
+            // last — !upload can append while we wait) to keep history clean.
+            const at = hist.lastIndexOf(userMessage);
+            if (at !== -1) hist.splice(at, 1);
 
             // Re-throw with context so the caller can route this to the
             // debug channel instead of the active chat.
@@ -428,8 +443,8 @@ export function createAi({ store, utils }) {
     // by imagegen.js, see bot.js) — reuses askModel() as-is so this turn
     // gets logged into the same chat history like any other exchange, and
     // future turns naturally see "I made this" from the model's own reply.
-    function describeGeneratedImage(userId, prompt) {
-        return askModel(userId, `${prompt}${IMAGE_ACK_NOTE}`, []);
+    function describeGeneratedImage(userId, prompt, chatId = userId) {
+        return askModel(userId, `${prompt}${IMAGE_ACK_NOTE}`, [], null, chatId);
     }
 
     return { askModel, classifyImageIntent, describeImageForGeneration, describeGeneratedImage };

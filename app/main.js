@@ -56,7 +56,7 @@ import QRCode from 'qrcode';
 // analyzable from an ESM import, hence the default-import + destructure
 // (Node's own suggestion for this exact error).
 import electronUpdaterPkg from 'electron-updater';
-const { autoUpdater } = electronUpdaterPkg;
+const { autoUpdater, CancellationToken } = electronUpdaterPkg;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // PROJECT_ROOT is the app's OWN install location (where package.json/
@@ -223,7 +223,8 @@ function matchesShortcutCombo(input, combo) {
     if (!!input.control !== parts.includes('Ctrl')) return false;
     if (!!input.alt !== parts.includes('Alt')) return false;
     if (!!input.shift !== parts.includes('Shift')) return false;
-    return String(input.key).toUpperCase() === wantKey.toUpperCase();
+    const key = input.key === '+' ? 'Plus' : String(input.key); // see the renderer's formatShortcutCombo
+    return key.toUpperCase() === wantKey.toUpperCase();
 }
 
 function matchesNeroShortcut(input) {
@@ -348,6 +349,39 @@ try {
 } catch (_) {}
 
 const require = createRequire(import.meta.url);
+
+// ============================
+// App lock enforcement in MAIN, not just the renderer's overlay: while
+// locked, anything that reads private data out, opens a profile or changes
+// something is refused here — the overlay alone could be bypassed by
+// tabbing to the controls behind it. Read-only startup calls (profile list
+// for the Home grid, version, config) stay allowed so the page can render
+// behind the lock. Unlocked by a successful applock:verify.
+// ============================
+let appUnlocked = null; // lazily: true when no lock is configured
+function isAppUnlocked() {
+    if (appUnlocked === null) appUnlocked = TEST_MODE || !readAppLock().enabled;
+    return appUnlocked;
+}
+const LOCKED_CHANNELS = new Set([
+    'profiles:create', 'telegram:createProfile', 'profiles:rename', 'profiles:setMode', 'profiles:delete',
+    'profiles:export', 'profiles:importInto', 'profile:open', 'profile:activate',
+    'settings:get', 'settings:save', 'settings:reset', 'settings:factoryReset', 'ai:clearAllMemory',
+    'app:setConfig', 'telegram:setAppCredentials', 'applock:setPassword', 'applock:changePassword', 'applock:disable',
+    'chats:list', 'chat:recentMessages', 'chat:send', 'chat:get', 'chat:set',
+    'lists:get', 'lists:add', 'lists:remove', 'lists:clear', 'notif:list',
+    'broadcast:preview', 'broadcast:sentMessages', 'broadcast:start', 'broadcast:clearLog', 'broadcast:log',
+    'ollama:activateTab', 'ollama:listConversations', 'ollama:getConversation', 'ollama:chatSend',
+]);
+{
+    const handle = ipcMain.handle.bind(ipcMain);
+    ipcMain.handle = (channel, listener) => handle(channel, (...args) => {
+        if (LOCKED_CHANNELS.has(channel) && !isAppUnlocked()) {
+            throw new Error('Uygulama kilitli.');
+        }
+        return listener(...args);
+    });
+}
 // Same hoisted instance whatsapp-web.js resolves — patching connect() here
 // is what lets us inject the right embedded page into each profile's
 // initialize() flow.
@@ -1739,6 +1773,9 @@ async function closeProfile(id) {
         run.stopRequested = true;
         run.wake?.();
     }
+    // The picked photo is a multi-MB buffer — don't keep it for a closed
+    // profile (the renderer drops its preview too, see loadBroadcastTab).
+    broadcastImages.delete(id);
 
     if (session.flushInterval) {
         clearInterval(session.flushInterval);
@@ -1778,7 +1815,9 @@ async function closeProfile(id) {
 }
 
 function activateProfile(id) {
-    activeProfileId = id || null;
+    // Only an OPEN profile can be active — a stale notification of a closed
+    // profile used to activate a ghost tab with no view and no bot.
+    activeProfileId = id && sessions.has(id) ? id : null;
     layoutViews();
 }
 
@@ -2053,9 +2092,16 @@ ipcMain.handle('app:setConfig', (_e, updates) => {
 // ============================
 ipcMain.handle('applock:status', () => ({ enabled: readAppLock().enabled }));
 
-ipcMain.handle('applock:verify', (_e, password) => ({ ok: verifyAppLockPassword(password) }));
+ipcMain.handle('applock:verify', (_e, password) => {
+    const ok = verifyAppLockPassword(password);
+    if (ok) appUnlocked = true;
+    return { ok };
+});
 
 ipcMain.handle('applock:setPassword', (_e, password) => {
+    // Enabling only — replacing an existing password must go through
+    // changePassword (which checks the current one).
+    if (readAppLock().enabled) return { ok: false, error: 'Şifre zaten ayarlı — değiştirmek için mevcut şifreyi gir.' };
     if (!password || String(password).length < 4) {
         return { ok: false, error: 'Şifre en az 4 karakter olmalı.' };
     }
@@ -2257,22 +2303,85 @@ ipcMain.handle('settings:get', (_e, profileId) => {
     // ahead of the bot factory populating session.store — {} is a safe,
     // silent fallback (splash.html just keeps its Turkish default).
     const session = sessions.get(profileId);
-    if (!session || !session.store) return {};
+    // notReady: the profile is open but its bot store doesn't exist yet
+    // (first open of a launch). The renderer must not build an all-blank
+    // form from this — saving it later wiped every setting.
+    if (!session || !session.store) return session ? { notReady: true } : {};
     return pickSettings(session.store.state, session.store.PERSISTENT_KEYS);
 });
+
+// Bounds for numeric settings — the same ranges the !ratelimit command
+// enforces. A cleared field used to arrive as '' → Number('') === 0 and get
+// saved: max tokens 0 rate-limited everyone forever, refill 0/negative
+// meant no limit or never refilling.
+const NUMERIC_SETTING_BOUNDS = {
+    rateLimitMaxTokens: { min: 1, max: 1000, int: true },
+    rateLimitRefillMs: { min: 1000, max: 24 * 60 * 60 * 1000, int: true },
+    rateLimitWarnCooldown: { min: 0, max: 24 * 60 * 60 * 1000, int: true },
+};
+// Text settings that must never be empty — an empty prefix matches every
+// message (startsWith('')): an empty debug prefix turned every message into
+// a command attempt and silenced the AI; an empty AI prefix answered all.
+const NON_EMPTY_SETTINGS = new Set(['prefix', 'debugPrefix', 'aiModel', 'thinkMessage', 'aiErrorMessage', 'rateLimitWarnMessage', 'systemPrompt']);
+
+function prefixesOverlap(a, b) {
+    const x = String(a || '').toLowerCase(), y = String(b || '').toLowerCase();
+    return !!x && !!y && (x.startsWith(y) || y.startsWith(x));
+}
+
+// Prefix sanity after applying `next` (a copy of state with the updates).
+// Returns an error message or null. Mirrors commands.js's !prefix checks.
+function prefixProblem(next, chatPrefixes) {
+    const lc = v => String(v || '').toLowerCase();
+    if (prefixesOverlap(next.prefix, next.debugPrefix)) {
+        return `AI prefix'i ("${next.prefix}") ile komut prefix'i ("${next.debugPrefix}") birbirinin başlangıcı olamaz — komut prefix'i her mesajda önce kontrol edildiği için AI hiç çalışmaz.`;
+    }
+    const clash = Object.values(chatPrefixes || {}).find(p => prefixesOverlap(p, next.debugPrefix));
+    if (clash) return `Komut prefix'i "${next.debugPrefix}", bir sohbetin AI prefix'i "${clash}" ile çakışıyor.`;
+    if (next.ignorePrefix && (lc(next.ignorePrefix) === lc(next.prefix) || lc(next.ignorePrefix) === lc(next.debugPrefix))) {
+        return 'Yok sayma prefix\'i, AI ve komut prefix\'lerinden farklı olmalı.';
+    }
+    return null;
+}
 
 // Applies updates to the live state object (bot handlers read it on every
 // message, so changes take effect immediately) and persists to settings.json.
 // Values are coerced to the type of the current value; invalid numbers are
 // silently dropped rather than corrupting the state.
 ipcMain.handle('settings:save', (_e, profileId, updates) => {
-    const session = requireSession(profileId);
+    const session = sessions.get(profileId);
+    if (!session?.store) return { ok: false, error: 'Profil henüz hazır değil — bağlanmasını bekleyip tekrar dene.' };
     const { state, PERSISTENT_KEYS, saveSettings } = session.store;
 
+    // Validate everything first, then apply — a rejected save changes nothing.
+    const staged = {};
+    const rejected = [];
     for (const key of PERSISTENT_KEYS) {
         if (!(key in updates)) continue;
         const current = state[key];
         const next = updates[key];
+        if (typeof current === 'number') {
+            const bounds = NUMERIC_SETTING_BOUNDS[key];
+            const n = next === '' || next == null ? NaN : Number(next);
+            if (!Number.isFinite(n)) { rejected.push(key); continue; }
+            staged[key] = bounds ? Math.min(bounds.max, Math.max(bounds.min, bounds.int ? Math.round(n) : n)) : n;
+            continue;
+        }
+        if (NON_EMPTY_SETTINGS.has(key) && typeof current === 'string' && !String(next ?? '').trim()) {
+            rejected.push(key);
+            continue;
+        }
+        staged[key] = next;
+    }
+    // Only when a prefix is part of this save — a single-toggle save (AI on/
+    // off, a device pick) must not be blocked by an older prefix setup.
+    const touchesPrefixes = ['prefix', 'debugPrefix', 'ignorePrefix'].some(k => k in staged);
+    const problem = touchesPrefixes ? prefixProblem({ ...state, ...staged }, session.store.chatPrefixes) : null;
+    if (problem) return { ok: false, error: problem, values: pickSettings(state, PERSISTENT_KEYS) };
+
+    for (const key of Object.keys(staged)) {
+        const current = state[key];
+        const next = staged[key];
 
         // debugChatId is a WhatsApp chat id or null (picked from a dropdown,
         // never typed) — its default is null, not a string, so it can't go
@@ -2282,8 +2391,7 @@ ipcMain.handle('settings:save', (_e, profileId, updates) => {
         } else if (typeof current === 'boolean') {
             state[key] = !!next;
         } else if (typeof current === 'number') {
-            const n = Number(next);
-            if (Number.isFinite(n)) state[key] = n;
+            state[key] = next; // already validated/clamped above
         } else {
             // next == null covers both null and undefined — a renderer
             // clearing a text field sends one of those, and String(null)/
@@ -2298,7 +2406,11 @@ ipcMain.handle('settings:save', (_e, profileId, updates) => {
     // Cheap enough to just always re-run — only actually changes anything
     // when preferredMicId/preferredCameraId were among `updates`.
     injectMediaDevicePrefs(session);
-    return pickSettings(state, PERSISTENT_KEYS);
+    const values = pickSettings(state, PERSISTENT_KEYS);
+    // Fields left empty/invalid kept their previous value — the renderer
+    // says which, instead of silently showing the old value again.
+    if (rejected.length) values._rejected = rejected;
+    return values;
 });
 
 // Ayarlar → Genel → İzinler's mic/camera dropdowns — only returns real
@@ -2343,7 +2455,10 @@ ipcMain.handle('settings:factoryReset', (_e, profileId) => {
     store.saveChatModels();
     for (const key in store.chatPrefixes) delete store.chatPrefixes[key];
     store.saveChatPrefixes();
+    for (const key in store.chatPersonalities) delete store.chatPersonalities[key];
+    store.saveChatPersonalities();
     for (const key in store.chatHistories) delete store.chatHistories[key];
+    for (const key in store.chatMemoryKeys) delete store.chatMemoryKeys[key];
     session.ratelimit?.resetAllRateLimitBuckets();
     console.log(`[${session.name}] Fabrika ayarlarına tamamen sıfırlandı`);
     return pickSettings(store.state, store.PERSISTENT_KEYS);
@@ -2355,6 +2470,7 @@ ipcMain.handle('ai:clearAllMemory', (_e, profileId) => {
     const session = requireSession(profileId);
     const store = session.store;
     for (const key in store.chatHistories) delete store.chatHistories[key];
+    for (const key in store.chatMemoryKeys) delete store.chatMemoryKeys[key];
     session.ratelimit?.resetAllRateLimitBuckets();
     console.log(`[${session.name}] Tüm AI hafızası temizlendi`);
     return { ok: true };
@@ -2818,7 +2934,7 @@ ipcMain.handle('ollama:listModels', async () => {
     // depends on some other screen having opened first. A freshly-spawned
     // server needs a beat to start listening, so retry a couple times before
     // reporting no models instead of failing on that first call.
-    openOllamaApp();
+    if (selectedRuntimeIsOllama()) openOllamaApp();
     for (let attempt = 0; ; attempt++) {
         try {
             const { models } = await currentAiClient().list();
@@ -2915,7 +3031,7 @@ ipcMain.handle('ollama:chatSend', async (e, { model, messages }) => {
 // deliberately does NOT launch Ollama's own tray/GUI app — nothing should
 // visibly pop up here, same as opening a WhatsApp profile doesn't.
 ipcMain.handle('ollama:activateTab', async (_e) => {
-    openOllamaApp();
+    if (selectedRuntimeIsOllama()) openOllamaApp();
     const isFirstActivation = !ollamaView;
     await setupOllamaView();
     ollamaActive = true;
@@ -3625,9 +3741,16 @@ async function injectLanguagePickerOverlay(session) {
 async function ensureFixTextBindings(session) {
     if (session._fixTextBindingsReady) return;
     session._fixTextBindingsReady = true;
-    await session.client.pupPage.exposeFunction('nerobotFixTextAction', (action) => {
-        handleFixTextAction(session, action).catch((err) => console.error('[fixText] action hatası:', err.message || err));
-    });
+    try {
+        await session.client.pupPage.exposeFunction('nerobotFixTextAction', (action) => {
+            handleFixTextAction(session, action).catch((err) => console.error('[fixText] action hatası:', err.message || err));
+        });
+    } catch (err) {
+        // Page mid-navigation etc. — allow a retry next time instead of
+        // leaving the buttons permanently dead for this page.
+        session._fixTextBindingsReady = false;
+        throw err;
+    }
 }
 
 // The "Düzeltme Önerileri" half of the flow — the actual Ollama request +
@@ -3776,10 +3899,11 @@ async function chatSnapshot(session, chatId) {
     const ids = await chatIdForms(session, chatId);
     const has = set => ids.some(id => set.has(id));
     const get = obj => ids.map(id => obj[id]).find(v => v !== undefined) || '';
-    // A custom personality is chatHistories[id][0] (the system-role entry) —
-    // '' means "no override, using the global systemPrompt", mirroring how
-    // Personality's "chat" subcommand and resetSingleChatSetting() treat it.
-    const personalityId = ids.find(id => store.chatHistories[id]);
+    // Custom personality lives in the persisted chatPersonalities map ('' =
+    // using the global systemPrompt). It used to be read off the volatile
+    // chatHistories[id][0], which showed the GLOBAL prompt as if it were this
+    // chat's own and was lost on restart/clear.
+    const personality = get(store.chatPersonalities);
     return {
         model: get(store.chatModels),
         prefix: get(store.chatPrefixes),
@@ -3787,8 +3911,8 @@ async function chatSnapshot(session, chatId) {
         group: has(store.groupChats),
         whitelisted: has(store.whitelist),
         blacklisted: has(store.blacklist),
-        hasMemory: ids.some(id => !!store.chatHistories[id]),
-        personality: personalityId ? store.chatHistories[personalityId][0].content : '',
+        hasMemory: ids.some(id => !!store.chatHistories[id] || store.chatMemoryKeys[id]?.size > 0),
+        personality,
         // Only one chat can hold the fixed-chat lock at a time — this reads
         // back true only for whichever chat state.activeChatId currently is.
         fixed: store.state.fixedMode && ids.includes(store.state.activeChatId),
@@ -3860,19 +3984,12 @@ ipcMain.handle('chat:set', async (_e, profileId, chatId, updates) => {
         store.saveChatPrefixes();
     }
     if ('personality' in updates) {
+        // Empty → back to the global personality (memory itself is kept;
+        // ai.js re-applies the system prompt on the next message).
         const text = updates.personality == null ? '' : String(updates.personality).trim();
-        const existingId = ids.find(id => store.chatHistories[id]);
-        if (!text) {
-            // Empty → drop the custom personality, fall back to global
-            // (matches resetSingleChatSetting('personality')), but keep the
-            // rest of this chat's memory intact — only its system entry
-            // stops being a per-chat override.
-            if (existingId) store.chatHistories[existingId][0].content = store.state.systemPrompt;
-        } else if (existingId) {
-            store.chatHistories[existingId][0].content = text;
-        } else {
-            store.chatHistories[chatId] = [{ role: 'system', content: text }];
-        }
+        ids.forEach(id => delete store.chatPersonalities[id]);
+        if (text && text !== store.state.systemPrompt) store.chatPersonalities[chatId] = text;
+        store.saveChatPersonalities();
     }
     if ('fixed' in updates) {
         if (updates.fixed) {
@@ -3885,7 +4002,12 @@ ipcMain.handle('chat:set', async (_e, profileId, chatId, updates) => {
         // fixedMode/activeChatId are intentionally not persisted (runtime-only)
     }
     if (updates.clearMemory) {
-        ids.forEach(id => delete store.chatHistories[id]);
+        // Every member's memory in a group without shared memory too.
+        for (const id of ids) {
+            for (const key of store.chatMemoryKeys[id] || []) delete store.chatHistories[key];
+            delete store.chatMemoryKeys[id];
+            delete store.chatHistories[id];
+        }
     }
 
     console.log(`[${session.name}] Sohbet ayarı güncellendi: ${chatId}`);
@@ -4665,17 +4787,45 @@ function checkForUpdate() {
 // kendini" — close it, update it, then open itself). Only ever runs once
 // the user actually clicks "Şimdi Güncelle" (see the update:startDownload
 // handler below) — checking for an update never downloads one on its own.
+// Fails only when the download STALLS (no progress for UPDATE_STALL_MS),
+// not after a fixed total time — a slow but moving download is fine. On
+// failure the download is really cancelled and every listener removed: the
+// old fixed 5-minute race reported "failed" while the download kept going
+// and later force-quit the app to install, killing running bots unannounced.
+const UPDATE_STALL_MS = 90_000;
 function downloadAndInstallUpdate() {
     return new Promise((resolve, reject) => {
-        autoUpdater.on('download-progress', (progress) => {
+        const token = new CancellationToken();
+        let stallTimer = null;
+        const armStall = () => {
+            clearTimeout(stallTimer);
+            stallTimer = setTimeout(() => fail(new Error('Güncelleme indirmesi ilerlemiyor (bağlantı koptu?) — iptal edildi.')), UPDATE_STALL_MS);
+        };
+        const onProgress = (progress) => {
+            armStall();
             if (win && !win.isDestroyed()) win.webContents.send('update:downloadProgress', { percent: progress.percent });
-        });
-        autoUpdater.once('update-downloaded', () => {
+        };
+        const onDownloaded = () => {
+            cleanup();
             autoUpdater.quitAndInstall(true, true);
             resolve();
-        });
-        autoUpdater.once('error', reject);
-        autoUpdater.downloadUpdate();
+        };
+        const cleanup = () => {
+            clearTimeout(stallTimer);
+            autoUpdater.removeListener('download-progress', onProgress);
+            autoUpdater.removeListener('update-downloaded', onDownloaded);
+            autoUpdater.removeListener('error', fail);
+        };
+        function fail(err) {
+            cleanup();
+            try { token.cancel(); } catch (_) {}
+            reject(err);
+        }
+        autoUpdater.on('download-progress', onProgress);
+        autoUpdater.once('update-downloaded', onDownloaded);
+        autoUpdater.once('error', fail);
+        armStall();
+        autoUpdater.downloadUpdate(token).catch(fail);
     });
 }
 
@@ -4734,10 +4884,7 @@ ipcMain.handle('update:startDownload', async () => {
         return { ok: false, error: blockedReason };
     }
     try {
-        await Promise.race([
-            downloadAndInstallUpdate(),
-            new Promise((_resolve, reject) => setTimeout(() => reject(new Error('Güncelleme indirme zaman aşımına uğradı.')), 5 * 60 * 1000)),
-        ]);
+        await downloadAndInstallUpdate();
         return { ok: true }; // never actually reached — quitAndInstall() tears the process down first
     } catch (err) {
         console.error('[NeRoBoT] Güncelleme indirilemedi:', err.message || err);
@@ -4849,7 +4996,7 @@ app.whenReady().then(async () => {
     // called; see ollama:activateTab above). Fire-and-forget: harmless if
     // Ollama's already running, or not installed at all (see
     // openOllamaApp's own doc — both cases just no-op).
-    openOllamaApp();
+    if (selectedRuntimeIsOllama()) openOllamaApp();
     patchPuppeteerConnect();
     devToolsPort = await getDevToolsPort();
     // Fire-and-forget, well after the window's already showing — only

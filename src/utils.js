@@ -37,6 +37,18 @@ export function createUtils(store) {
         }
     }
 
+    // Error reports to the debug chat: marked pending like any bot send, so
+    // a no-prefix debug chat doesn't hand the error text to the AI before
+    // trackSentMessage() runs (message_create can fire first).
+    async function sendDebugRaw(text) {
+        markPending(state.debugChatId);
+        try {
+            return await client.sendMessage(state.debugChatId, text);
+        } finally {
+            unmarkPending(state.debugChatId);
+        }
+    }
+
     function isPending(chatId) {
         return pendingSends.has(chatId);
     }
@@ -173,7 +185,7 @@ export function createUtils(store) {
                     if (state.debugChatId && state.debugChatId !== chatId) {
                         try {
                             const errMsg = `[NeRoBoT Error - sendText]\nTarget: ${chatId}\nReason: ${err.message || err}`;
-                            const debugMsg = await client.sendMessage(state.debugChatId, errMsg);
+                            const debugMsg = await sendDebugRaw(errMsg);
                             trackSentMessage(debugMsg);
                         } catch (_) {}
                     }
@@ -209,7 +221,7 @@ export function createUtils(store) {
                     if (state.debugChatId && state.debugChatId !== chatId) {
                         try {
                             const errMsg = `[NeRoBoT Error - replyText]\nTarget: ${chatId}\nReason: ${err.message || err}`;
-                            const debugMsg = await client.sendMessage(state.debugChatId, errMsg);
+                            const debugMsg = await sendDebugRaw(errMsg);
                             trackSentMessage(debugMsg);
                         } catch (_) {}
                     }
@@ -288,7 +300,7 @@ export function createUtils(store) {
             if (state.debugChatId && state.debugChatId !== chatId) {
                 try {
                     const errMsg = `[NeRoBoT Error - sendImage]\nTarget: ${chatId}\nReason: ${err.message || err}`;
-                    const debugMsg = await client.sendMessage(state.debugChatId, errMsg);
+                    const debugMsg = await sendDebugRaw(errMsg);
                     trackSentMessage(debugMsg);
                 } catch (_) {}
             }
@@ -317,7 +329,7 @@ export function createUtils(store) {
             if (state.debugChatId && state.debugChatId !== chatId) {
                 try {
                     const errMsg = `[NeRoBoT Error - forwardMessage]\nTarget: ${chatId}\nReason: ${err.message || err}`;
-                    const debugMsg = await client.sendMessage(state.debugChatId, errMsg);
+                    const debugMsg = await sendDebugRaw(errMsg);
                     trackSentMessage(debugMsg);
                 } catch (_) {}
             }

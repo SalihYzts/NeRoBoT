@@ -10,6 +10,9 @@ import { createAi } from './ai.js';
 import { generateImage } from './imagegen.js';
 import { createCommands, AI_GATED_COMMANDS } from './commands.js';
 
+// Message types that carry no question by themselves (see handleAiMessage).
+const PASSIVE_MEDIA_TYPES = new Set(['ptt', 'audio', 'video', 'sticker', 'gif']);
+
 // pdf-parse v2 exposes a PDFParse class (pdf.js based) instead of the old
 // v1 callable function — see https://github.com/mehmet-kozan/pdf-parse
 const require = createRequire(import.meta.url);
@@ -121,17 +124,26 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
         const memoryKey = (await setHasAny(groupChats, chatId)) ? chatId : userId;
 
         try {
-            // Rate limit check — runs before thinkMessage so we don't send "thinking..." then drop it
-            const { allowed, shouldWarn } = await checkRateLimit(userId);
-            if (!allowed) {
-                if (shouldWarn) {
-                    await sendText(chatId, state.rateLimitWarnMessage);
-                }
-                return;
-            }
-
             // In no-prefix mode send the raw message, otherwise strip the prefix
             const rawPrompt = noPrefix ? body.trim() : body.slice(prefixUsed.length).trim();
+
+            // Voice notes, audio, video and stickers with no text aren't a
+            // question: in a no-prefix chat they used to get "file type not
+            // supported" (voice) or an AI description of every sticker.
+            if (noPrefix && !rawPrompt && PASSIVE_MEDIA_TYPES.has(msg.type)) return;
+
+            // Rate limit check — runs before thinkMessage so we don't send
+            // "thinking..." then drop it. Not for the account owner's own
+            // messages: those used to spend the DM partner's tokens.
+            if (!fromMe) {
+                const { allowed, shouldWarn } = await checkRateLimit(userId);
+                if (!allowed) {
+                    if (shouldWarn) {
+                        await sendText(chatId, state.rateLimitWarnMessage);
+                    }
+                    return;
+                }
+            }
 
             // ============================
             // Media handling
@@ -170,9 +182,9 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                     const filename = (media.filename || '').toLowerCase();
 
                     const isPdf  = mime === 'application/pdf' || filename.endsWith('.pdf');
-                    const isWord = mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                        || mime === 'application/msword'
-                        || filename.endsWith('.docx') || filename.endsWith('.doc');
+                    const isLegacyDoc = mime === 'application/msword' || filename.endsWith('.doc');
+                    const isWord = !isLegacyDoc && (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                        || filename.endsWith('.docx'));
 
                     if (mime.startsWith('image/')) {
                         // Görsel → vision modeli
@@ -204,6 +216,10 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                             }
                         }
 
+                    } else if (isLegacyDoc) {
+                        // mammoth reads .docx only — say so instead of a parse error.
+                        await sendText(chatId, '⚠️ Old .doc Word files can\'t be read — save it as .docx and send again.');
+                        if (!rawPrompt) return;
                     } else if (isWord) {
                         // Word (.docx / .doc) → metin çıkar
                         if (!state.fileEnabled) {
@@ -296,7 +312,10 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                             ? await describeImageForGeneration(images[0], intent.prompt || rawPrompt)
                             : (intent.prompt || rawPrompt);
                         const { buffer, mimetype } = await generateImage(genPrompt, { provider: state.imageGenProvider, apiKey });
-                        const caption = await describeGeneratedImage(memoryKey, rawPrompt);
+                        // A failing caption must not throw away the image
+                        // that was already generated.
+                        const caption = await describeGeneratedImage(memoryKey, rawPrompt, chatId)
+                            .catch(err => { reportError('imageCaption', err); return undefined; });
                         await sendImage(chatId, buffer, mimetype, caption);
                     } catch (err) {
                         await reportError('imageGen', err);
@@ -315,7 +334,7 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
             }
 
             try {
-                const aiResponse = await askModel(memoryKey, prompt, images);
+                const aiResponse = await askModel(memoryKey, prompt, images, null, chatId);
                 if (state.replyMode) {
                     await replyText(msg, aiResponse);
                 } else {
@@ -413,8 +432,8 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                 const senderIds = await idVariants(senderId);
 
                 if (senderIds.some(id => admins.has(id)) || msg.fromMe) {
-                    const command = text.slice(state.debugPrefix.length).split(" ")[0];
-                    if (commands[command]) {
+                    const command = text.slice(state.debugPrefix.length).split(/\s+/)[0];
+                    if (Object.hasOwn(commands, command)) {
                         const targetId = msg.fromMe ? msg.to : msg.from;
                         await dispatchCommand(command, msg, targetId, `command:${command}`);
                     }
@@ -449,7 +468,9 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                 }
 
                 if (state.whitelistMode && !chatIds.some(id => whitelist.has(id))) {
-                    if (state.debugChatId) {
+                    // Only relay real attempts (prefix used) — with no-prefix-all
+                    // on, every message of every chat used to be forwarded.
+                    if (state.debugChatId && hasPrefix) {
                         try {
                             await sendText(state.debugChatId, `New message received!\nID: ${msg.from}\nMessage: ${msg.body}`);
                         } catch (_) {}
@@ -473,8 +494,8 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
             const text = msg.body.trim().toLowerCase();
 
             if (text.startsWith(state.debugPrefix.toLowerCase())) {
-                const command = text.slice(state.debugPrefix.length).split(" ")[0];
-                if (commands[command]) {
+                const command = text.slice(state.debugPrefix.length).split(/\s+/)[0];
+                if (Object.hasOwn(commands, command)) {
                     const targetId = msg.to;
                     await dispatchCommand(command, msg, targetId, `command_create:${command}`);
                 }
@@ -497,8 +518,20 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                     return;
                 }
 
-                if (isNoPrefixChat || hasPrefix) {
-                    await handleAiMessage(msg, msg.from, msg.to, msg.to, msg.body, true, isNoPrefixChat, chatPrefix);
+                // Same chat gates as incoming messages: a blacklisted chat is
+                // fully ignored, fixed mode means only that chat, and a chat
+                // outside the whitelist only answers an explicit prefix (with
+                // no-prefix-all on, the AI used to reply to everything the
+                // owner typed in every chat).
+                if (chatIds.some(id => blacklist.has(id))) return;
+                if (state.fixedMode && !chatIds.includes(state.activeChatId)) return;
+                const perChatNoPrefix = chatIds.some(id => noPrefixChats.has(id));
+                const whitelisted = chatIds.some(id => whitelist.has(id));
+                const noPrefixHere = perChatNoPrefix || (state.noPrefixAll && (!state.whitelistMode || whitelisted));
+                if (state.whitelistMode && !whitelisted && !perChatNoPrefix && !hasPrefix) return;
+
+                if (noPrefixHere || hasPrefix) {
+                    await handleAiMessage(msg, msg.from, msg.to, msg.to, msg.body, true, noPrefixHere, chatPrefix);
                 }
             }
         } catch (err) {

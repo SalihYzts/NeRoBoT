@@ -197,7 +197,13 @@ contextBridge.exposeInMainWorld('nerobot', {
     getOllamaConversation: (id) => ipcRenderer.invoke('ollama:getConversation', id),
     saveOllamaConversation: (id, messages, title) => ipcRenderer.invoke('ollama:saveConversation', id, messages, title),
     deleteOllamaConversation: (id) => ipcRenderer.invoke('ollama:deleteConversation', id),
-    onOllamaInstallProgress: (cb) => ipcRenderer.on('ollama:installProgress', (_e, progress) => cb(progress)),
+    // Returns an unsubscribe function — each install attempt used to stack
+    // another listener that was never removed.
+    onOllamaInstallProgress: (cb) => {
+        const listener = (_e, progress) => cb(progress);
+        ipcRenderer.on('ollama:installProgress', listener);
+        return () => ipcRenderer.removeListener('ollama:installProgress', listener);
+    },
     // App auto-update — see notifyIfUpdateAvailable/update:startDownload in
     // main.js. Checked once per launch, well after the window's already
     // open; onUpdateAvailable only ever fires if one's actually found.

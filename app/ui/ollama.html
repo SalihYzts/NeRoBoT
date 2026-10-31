@@ -419,6 +419,10 @@
     // "no models" chat hint on every refresh.
     async function loadModels(showHintIfEmpty) {
         const result = await window.nerobot.listOllamaModels();
+        // Keep the user's pick across refreshes (tab re-shown, a model
+        // pulled/deleted) — it used to jump back to the first model silently,
+        // so the next message could go to a different (even paid) model.
+        const previous = modelSelect.value;
         modelSelect.innerHTML = '<option value="">— model —</option>';
         if (!result.ok || !result.models.length) {
             if (showHintIfEmpty) addHint('Hiç model bulunamadı — yukarıdaki "+" ile bir model indirebilir, ya da bir terminalde "ollama pull llama3.2" çalıştırabilirsin.');
@@ -432,7 +436,7 @@
             opt.textContent = name;
             modelSelect.appendChild(opt);
         }
-        modelSelect.value = result.models[0];
+        modelSelect.value = result.models.includes(previous) ? previous : result.models[0];
     }
 
     // New models are pulled from Ayarlar → NeRoChAt (see index.html's
@@ -470,6 +474,7 @@
             del.title = 'Sil';
             del.addEventListener('click', async (e) => {
                 e.stopPropagation();
+                if (blockWhileSending()) return;
                 await window.nerobot.deleteOllamaConversation(c.id);
                 if (c.id === currentConvId) startNewChat();
                 loadConvList();
@@ -481,7 +486,17 @@
         }
     }
 
+    // Switching/deleting conversations while a reply is still streaming
+    // pushed that reply into the NEW conversation and lost the old turn.
+    // Wait for the reply (and any queued messages) instead.
+    function blockWhileSending() {
+        if (!sending && !queue.length) return false;
+        addHint('Cevap bitmeden sohbet değiştirilemez — biraz bekle.');
+        return true;
+    }
+
     function startNewChat() {
+        if (blockWhileSending()) return;
         currentConvId = null;
         history = [];
         messagesEl.innerHTML = '';
@@ -490,6 +505,7 @@
 
     async function openConversation(id) {
         if (id === currentConvId) return;
+        if (blockWhileSending()) return;
         const conv = await window.nerobot.getOllamaConversation(id);
         if (!conv) return;
         currentConvId = id;

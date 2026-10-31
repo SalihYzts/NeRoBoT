@@ -25,7 +25,8 @@ export const AI_GATED_COMMANDS = new Set([
 export function createCommands({ store, utils, ratelimit }) {
     const {
         state, saveSettings, resetStateToDefaults,
-        chatHistories,
+        chatHistories, chatMemoryKeys,
+        chatPersonalities, saveChatPersonalities,
         whitelist, saveWhitelist,
         blacklist, saveBlacklist,
         admins, saveAdmins,
@@ -36,6 +37,28 @@ export function createCommands({ store, utils, ratelimit }) {
     } = store;
     const { sendText, getAiClient } = utils;
     const { resetRateLimitBucket, resetAllRateLimitBuckets } = ratelimit;
+
+// Text after the first `n` whitespace-separated words of a command,
+// verbatim — re-joining split tokens used to flatten multi-line texts
+// (personality, think/error/warn messages) into one line.
+function rawArgs(body, n) {
+    let rest = String(body ?? '').replace(/^\s+/, '');
+    for (let i = 0; i < n; i++) rest = rest.replace(/^\S+\s*/, '');
+    return rest.trim();
+}
+
+// Two prefixes "overlap" if either starts with the other (case-insensitive).
+// The debug prefix is checked first on every message, so an AI prefix like
+// "!ai" with debug "!" was swallowed as an unknown command — the AI never ran.
+function prefixesOverlap(a, b) {
+    const x = String(a || '').toLowerCase(), y = String(b || '').toLowerCase();
+    return !!x && !!y && (x.startsWith(y) || y.startsWith(x));
+}
+
+// WhatsApp groups end in @g.us; Telegram groups/channels are negative ids.
+function isGroupId(id) {
+    return String(id).endsWith('@g.us') || /^-\d+$/.test(String(id));
+}
 
 // ============================
 // Project version — read from package.json (project root, one level up
@@ -236,7 +259,9 @@ async function Whitelist(msg, targetId) {
 async function Blacklist(msg, targetId) {
     const parts = msg.body.trim().split(/\s+/);
     const sub   = parts[1]?.toLowerCase();
-    const selfId = msg.author || msg.from;
+    // "this chat" — NOT the sender: in a group the sender is the admin, and
+    // blacklisting them silently cut them off from their own DM with the bot.
+    const selfId = targetId;
 
     if (!sub || sub === 'list') {
         if (blacklist.size === 0) return sendText(targetId, `Blacklist is empty.`);
@@ -293,9 +318,10 @@ async function Blacklist(msg, targetId) {
 //   global <text>        → set global personality (applies to new/cleared chats)
 // ============================
 async function Personality(msg, targetId) {
-    const afterCmd   = msg.body.trim().split(/\s+/).slice(1).join(' ').trim();
+    const afterCmd   = rawArgs(msg.body, 1);
     const firstWord  = afterCmd.split(/\s+/)[0]?.toLowerCase();
-    const restOfText = afterCmd.split(/\s+/).slice(1).join(' ').trim();
+    // Raw remainder — keeps the line breaks of a multi-line prompt.
+    const restOfText = rawArgs(msg.body, 2);
 
     // personality chat <text> → set this chat's personality
     if (firstWord === 'chat') {
@@ -306,11 +332,10 @@ async function Personality(msg, targetId) {
                 `To view personalities, use: ${state.debugPrefix}personality`
             );
         }
-        if (!chatHistories[targetId]) {
-            chatHistories[targetId] = [{ role: 'system', content: restOfText }];
-        } else {
-            chatHistories[targetId][0].content = restOfText;
-        }
+        // Persisted; ai.js applies it to every memory of this chat (each
+        // member's in a group without shared memory) on the next message.
+        chatPersonalities[targetId] = restOfText;
+        saveChatPersonalities();
         return sendText(targetId, `Personality for this chat updated:\n${restOfText}`);
     }
 
@@ -319,20 +344,20 @@ async function Personality(msg, targetId) {
         if (!restOfText) {
             return sendText(targetId,
                 `Usage: ${state.debugPrefix}personality global <text>\n` +
-                `Sets the global personality (applies to new/cleared chats).\n\n` +
+                `Sets the global personality (every chat without its own personality).\n\n` +
                 `To view personalities, use: ${state.debugPrefix}personality`
             );
         }
         state.systemPrompt = restOfText;
         saveSettings();
         return sendText(targetId,
-            `Global personality updated (applies to new/cleared chats):\n${state.systemPrompt}`
+            `Global personality updated (every chat without its own personality):\n${state.systemPrompt}`
         );
     }
 
     // personality (no args) → show both active + global
-    const hasCustom   = !!chatHistories[targetId];
-    const activePers  = hasCustom ? chatHistories[targetId][0].content : state.systemPrompt;
+    const hasCustom   = !!chatPersonalities[targetId];
+    const activePers  = hasCustom ? chatPersonalities[targetId] : state.systemPrompt;
 
     await sendText(targetId,
         `[Active personality — this chat]${hasCustom ? ' (custom)' : ' (using global)'}:\n${activePers}\n\n` +
@@ -363,13 +388,14 @@ async function Think(msg, targetId) {
         );
     }
 
-    if (sub === 'on' || sub === 'off') {
+    // Only a bare "on"/"off" toggles — "!think on my way…" is message text.
+    if ((sub === 'on' || sub === 'off') && parts.length === 2) {
         state.thinkEnabled = sub === 'on';
         saveSettings();
         return sendText(targetId, `Think message ${state.thinkEnabled ? 'enabled' : 'disabled'}.`);
     }
 
-    state.thinkMessage = parts.slice(1).join(' ');
+    state.thinkMessage = rawArgs(msg.body, 1);
     saveSettings();
     await sendText(targetId, `Think message text updated:\n${state.thinkMessage}`);
 }
@@ -440,8 +466,8 @@ async function Prefix(msg, targetId) {
                 `${state.debugPrefix}prefix chat reset [ID]   — remove override, fall back to global`
             );
         }
-        if (p.toLowerCase() === state.debugPrefix.toLowerCase() || p.toLowerCase() === state.ignorePrefix.toLowerCase()) {
-            return sendText(targetId, `Chat prefix must differ from the debug and ignore prefixes.`);
+        if (prefixesOverlap(p, state.debugPrefix) || p.toLowerCase() === state.ignorePrefix.toLowerCase()) {
+            return sendText(targetId, `Chat prefix must differ from the ignore prefix and must not start with (or be the start of) the debug prefix "${state.debugPrefix}".`);
         }
 
         const old = chatPrefixes[id] || `${state.prefix} (global)`;
@@ -453,7 +479,7 @@ async function Prefix(msg, targetId) {
     if (sub === 'main') {
         const p = parts[2];
         if (!p) return sendText(targetId, `Usage: ${state.debugPrefix}prefix main <p>`);
-        if (p.toLowerCase() === state.debugPrefix.toLowerCase() || p.toLowerCase() === state.ignorePrefix.toLowerCase()) return sendText(targetId, `Main prefix must differ from debug and ignore prefixes.`);
+        if (prefixesOverlap(p, state.debugPrefix) || p.toLowerCase() === state.ignorePrefix.toLowerCase()) return sendText(targetId, `Main prefix must differ from the ignore prefix and must not start with (or be the start of) the debug prefix "${state.debugPrefix}".`);
         state.prefix = p;
         saveSettings();
         return sendText(targetId, `Main prefix → ${state.prefix}`);
@@ -462,7 +488,9 @@ async function Prefix(msg, targetId) {
     if (sub === 'debug') {
         const p = parts[2];
         if (!p) return sendText(targetId, `Usage: ${state.debugPrefix}prefix debug <p>`);
-        if (p.toLowerCase() === state.prefix.toLowerCase() || p.toLowerCase() === state.ignorePrefix.toLowerCase()) return sendText(targetId, `Debug prefix must differ from main and ignore prefixes.`);
+        if (p.toLowerCase() === state.ignorePrefix.toLowerCase()) return sendText(targetId, `Debug prefix must differ from the ignore prefix.`);
+        const clash = [state.prefix, ...Object.values(chatPrefixes)].find(q => prefixesOverlap(p, q));
+        if (clash) return sendText(targetId, `Debug prefix "${p}" overlaps the AI prefix "${clash}" — every "${clash}…" message would be taken as a command.`);
         state.debugPrefix = p;
         saveSettings();
         return sendText(targetId, `Debug prefix → ${state.debugPrefix}`);
@@ -498,10 +526,15 @@ async function Clear(msg, targetId) {
 
     if (sub === 'chat') {
         const id = parts[2] || targetId;
-        if (!chatHistories[id]) {
+        // In a group without shared memory each member has their own memory
+        // key (see ai.js's chatMemoryKeys) — clear all of them.
+        const keys = new Set([id, ...(chatMemoryKeys[id] || [])]);
+        const existing = [...keys].filter(k => chatHistories[k]);
+        if (!existing.length) {
             return sendText(targetId, id === targetId ? `No memory for this chat.` : `No memory for: ${id}`);
         }
-        delete chatHistories[id];
+        for (const k of existing) delete chatHistories[k];
+        delete chatMemoryKeys[id];
         await resetRateLimitBucket(id);
         return sendText(targetId, id === targetId ? `Memory cleared for this chat.` : `Memory cleared for: ${id}`);
     }
@@ -512,6 +545,7 @@ async function Clear(msg, targetId) {
             `This will erase memory for ALL ${count} active chat(s).`,
             async () => {
                 for (const key in chatHistories) delete chatHistories[key];
+                for (const key in chatMemoryKeys) delete chatMemoryKeys[key];
                 resetAllRateLimitBuckets();
                 await sendText(targetId, `All chat memories cleared.`);
             }
@@ -550,6 +584,14 @@ async function Upload(msg, targetId) {
     }
 
     const limit = Math.min(300, Math.floor(n));
+
+    // In a group without shared memory every member has a separate memory —
+    // there's no single place this history could go that the AI would read.
+    if (isGroupId(targetId) && !groupChats.has(targetId)) {
+        return sendText(targetId,
+            `This group has no shared memory, so uploaded history wouldn't reach anyone's conversation.\n` +
+            `Turn it on first with ${state.debugPrefix}groupchat, then run ${state.debugPrefix}upload again.`);
+    }
 
     let messages;
     try {
@@ -615,8 +657,9 @@ function resetSingleChatSetting(targetId, name) {
             return `Prefix override removed — back to global prefix: ${state.prefix}`;
         }
         case 'personality': {
-            if (!chatHistories[targetId]) return `This chat had no custom personality.`;
-            chatHistories[targetId][0].content = state.systemPrompt;
+            if (!chatPersonalities[targetId]) return `This chat had no custom personality.`;
+            delete chatPersonalities[targetId];
+            saveChatPersonalities();
             return `Personality reset to global for this chat.`;
         }
         case 'noprefix': {
@@ -672,7 +715,10 @@ async function Reset(msg, targetId) {
                 saveChatModels();
                 for (const key in chatPrefixes) delete chatPrefixes[key];
                 saveChatPrefixes();
+                for (const key in chatPersonalities) delete chatPersonalities[key];
+                saveChatPersonalities();
                 for (const key in chatHistories) delete chatHistories[key];
+                for (const key in chatMemoryKeys) delete chatMemoryKeys[key];
                 resetAllRateLimitBuckets();
                 await sendText(targetId, `Everything has been reset to the project defaults.`);
             }
@@ -847,7 +893,9 @@ async function AiChat(msg, targetId) {
 // !fixedchat  —  lock bot to one chat
 // ============================
 async function FixedChat(msg, targetId) {
-    state.fixedMode = !state.fixedMode;
+    // Run in another chat while locked → move the lock there (it used to
+    // unlock everything instead). Same chat → release.
+    state.fixedMode = !(state.fixedMode && state.activeChatId === targetId);
     state.activeChatId = state.fixedMode ? targetId : null;
     // fixedMode is intentionally not persisted (runtime-only)
     await sendText(targetId, state.fixedMode
@@ -1009,7 +1057,7 @@ async function RateLimit(msg, targetId) {
         return sendText(targetId, `Warn cooldown: ${s}s`);
     }
     if (sub === 'message') {
-        const text = parts.slice(2).join(' ');
+        const text = rawArgs(msg.body, 2);
         if (!text) return sendText(targetId, `Usage: ${state.debugPrefix}ratelimit message <text>`);
         state.rateLimitWarnMessage = text;
         saveSettings();
@@ -1036,7 +1084,7 @@ async function Info(msg, targetId) {
     // WhatsApp groups end in "@g.us"; Telegram groups/supergroups use a
     // negative numeric chat ID (DMs/users are always positive) — check both
     // so this reads correctly on either platform.
-    const isGroup = targetId.endsWith('@g.us') || /^-\d+$/.test(targetId);
+    const isGroup = isGroupId(targetId);
 
     if (!sub) {
         return sendText(targetId,
@@ -1062,8 +1110,8 @@ async function Info(msg, targetId) {
     }
 
     if (sub === 'chat') {
-        const hasCustom   = !!chatHistories[targetId];
-        const personality = hasCustom ? chatHistories[targetId][0].content : state.systemPrompt;
+        const hasCustom   = !!chatPersonalities[targetId];
+        const personality = hasCustom ? chatPersonalities[targetId] : state.systemPrompt;
         return sendText(targetId,
             `[Chat Info]\n` +
             `ID: ${chatId}\n` +
@@ -1072,15 +1120,15 @@ async function Info(msg, targetId) {
             `Group chat mode: ${groupChats.has(targetId) ? 'Enabled (shared memory)' : 'Disabled'}\n` +
             `Prefix: ${chatPrefixes[targetId] || state.prefix}${chatPrefixes[targetId] ? ' (override)' : ' (global)'}\n` +
             `Model: ${chatModels[targetId] || state.aiModel}${chatModels[targetId] ? ' (override)' : ' (global)'}\n` +
-            `Memory: ${hasCustom ? `Active (${chatHistories[targetId].length - 1} messages)` : 'None'}\n` +
+            `Memory: ${chatHistories[targetId] ? `Active (${chatHistories[targetId].length - 1} messages)` : 'None'}\n` +
             `Personality: ${hasCustom ? '(custom)' : '(global)'}\n` +
             `${personality}`
         );
     }
 
     if (sub === 'ai') {
-        const hasCustom   = !!chatHistories[targetId];
-        const personality = hasCustom ? chatHistories[targetId][0].content : state.systemPrompt;
+        const hasCustom   = !!chatPersonalities[targetId];
+        const personality = hasCustom ? chatPersonalities[targetId] : state.systemPrompt;
         return sendText(targetId,
             `[AI Info]\n` +
             `Enabled: ${state.aiChatEnabled}  |  Global model: ${state.aiModel}\n` +
@@ -1137,7 +1185,7 @@ async function Info(msg, targetId) {
 //   <text>      → set new message text
 // ============================
 async function AiError(msg, targetId) {
-    const text = msg.body.trim().split(/\s+/).slice(1).join(' ').trim();
+    const text = rawArgs(msg.body, 1);
 
     if (!text) {
         return sendText(targetId,

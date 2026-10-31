@@ -1351,11 +1351,11 @@
     <div id="appLockOverlay">
         <div id="appLockPanel">
             <img id="appLockLogo" src="logo.svg" alt="">
-            <div id="appLockTitle">NeRoBoT Kilitli</div>
-            <div id="appLockHint">Devam etmek için şifreni gir.</div>
-            <input type="password" id="appLockPasswordInput" placeholder="Şifre" autocomplete="off">
+            <div id="appLockTitle" data-i18n="ui_appLockTitle">NeRoBoT Kilitli</div>
+            <div id="appLockHint" data-i18n="ui_appLockHint">Devam etmek için şifreni gir.</div>
+            <input type="password" id="appLockPasswordInput" data-i18n-ph="ph_appLockPasswordInput" placeholder="Şifre" autocomplete="off">
             <div id="appLockError"></div>
-            <button id="appLockUnlockBtn">Kilidi Aç</button>
+            <button id="appLockUnlockBtn" data-i18n="ui_appLockUnlockBtn">Kilidi Aç</button>
         </div>
     </div>
     <script>
@@ -1416,12 +1416,12 @@
         <div id="telegramPlaceholder">
             <div id="telegramStatusText">Bağlanılıyor…</div>
             <img id="telegramQrImage" alt="QR kod" style="display:none">
-            <div class="hint" id="telegramQrHint" style="display:none">Telegram → Ayarlar → Cihazlar → Cihaz Bağla ile bu kodu okut.</div>
+            <div class="hint" id="telegramQrHint" data-i18n="ui_telegramQrHint" style="display:none">Telegram → Ayarlar → Cihazlar → Cihaz Bağla ile bu kodu okut.</div>
             <div id="telegramPasswordField" style="display:none">
                 <div class="hint" id="telegramPasswordHint">İki adımlı doğrulama şifresi gerekli.</div>
                 <div class="btnRow">
                     <input type="password" id="telegramPasswordInput">
-                    <button id="telegramPasswordSubmitBtn" class="miniBtn">Gönder</button>
+                    <button id="telegramPasswordSubmitBtn" data-i18n="ui_telegramPasswordSubmitBtn" class="miniBtn">Gönder</button>
                 </div>
             </div>
         </div>
@@ -1500,7 +1500,7 @@
     <div id="notifOverlay" class="modalOverlay">
         <div class="modalPanel" id="notifPanel">
             <div class="modalHeader">
-                <span id="notifTitle">Bildirimler</span>
+                <span id="notifTitle" data-i18n="ui_notifTitle">Bildirimler</span>
                 <button class="modalClose" id="notifClose">✕</button>
             </div>
             <div id="notifList"></div>
@@ -1601,11 +1601,14 @@
         <div class="modalPanel" id="gsPanel">
             <div id="gsHeader" class="modalHeader">
                 <span id="gsTitle">Ayarlar</span>
+                <!-- In the always-visible header: inside the profile section
+                     it was invisible for every Uygulama/NeRoChAt save. -->
+                <span id="savedToast" style="margin-left:auto; margin-right:12px">Kaydedildi ✓</span>
                 <button class="modalClose" id="globalSettingsClose">✕</button>
             </div>
             <div id="gsBody">
                 <div id="gsSidebar">
-                    <div class="gsNavItem" data-section="app" id="gsNavApp">Uygulama</div>
+                    <div class="gsNavItem" data-section="app" id="gsNavApp" data-i18n="ui_gsNavApp">Uygulama</div>
                     <div class="gsNavItem" data-section="ollama" id="gsNavOllama">NeRoChAt</div>
                     <div id="gsSidebarDivider"></div>
                     <div id="gsProfileNavList"></div>
@@ -1621,21 +1624,21 @@
                          section instead of a separate overlay. -->
                     <div id="gsSection-app" class="gsSection">
                         <div class="section">
-                            <div class="sectionTitle" id="gsAppTelegramTitle">Telegram API Kimliği</div>
-                            <div class="hint" id="telegramCredsHint">
+                            <div class="sectionTitle" id="gsAppTelegramTitle" data-i18n="ui_gsAppTelegramTitle">Telegram API Kimliği</div>
+                            <div class="hint" id="telegramCredsHint" data-i18n="ui_telegramCredsHint">
                                 Bir kere gerekiyor (uygulama geneli, her profil için değil):
                                 my.telegram.org/apps adresine kendi telefon numaranla gir, bir uygulama oluştur, aşağıya api_id ve api_hash'i yapıştır.
                             </div>
                             <div class="hint warn" id="gsAppTelegramGateHint" style="display:none"></div>
                             <div class="field">
                                 <label class="name" id="telegramApiIdLabel">api_id</label>
-                                <input type="text" id="telegramApiIdInput" placeholder="örn: 1234567">
+                                <input type="text" id="telegramApiIdInput" data-i18n-ph="ph_telegramApiIdInput" placeholder="örn: 1234567">
                             </div>
                             <div class="field">
                                 <label class="name" id="telegramApiHashLabel">api_hash</label>
                                 <input type="text" id="telegramApiHashInput" placeholder="örn: a1b2c3d4e5f6...">
                             </div>
-                            <button id="telegramCredsSaveBtn" class="miniBtn" style="width:100%">Kaydet</button>
+                            <button id="telegramCredsSaveBtn" data-i18n="ui_telegramCredsSaveBtn" class="miniBtn" style="width:100%">Kaydet</button>
                         </div>
                         <!-- Local Ollama vs Ollama Cloud API key — see
                              ensureOllamaOrPrompt/openOllamaApiKeyPanel above for
@@ -1647,58 +1650,58 @@
                              reasoning fixTextUseLocalModelToggle below already
                              applies to WA's own AI features. -->
                         <div class="section">
-                            <div class="sectionTitle" id="ollamaConnectionTitle">Bağlantı</div>
+                            <div class="sectionTitle" id="ollamaConnectionTitle" data-i18n="ui_ollamaConnectionTitle">Bağlantı</div>
                             <div class="hint" id="ollamaConnectionStatusText">Şu an: —</div>
                             <!-- Sağlayıcı listesi burada SABİT DEĞİL: main.js'in
                                  ai:getProviders kanalı üzerinden src/ai-provider.js
                                  registry'sinden doldurulur. Yeni bir araç eklemek
                                  bu HTML'i değiştirmez. -->
                             <div class="field" style="margin-top:8px;">
-                                <label class="name" id="aiModeLabel">Nerede çalışsın</label>
+                                <label class="name" id="aiModeLabel" data-i18n="ui_aiModeLabel">Nerede çalışsın</label>
                                 <select id="aiModeSelect">
-                                    <option value="local">Kendi bilgisayarımda / kendi sunucumda</option>
-                                    <option value="agent">Kurulu bir AI aracı (Claude Code, Hermes…)</option>
-                                    <option value="api">Bulut sağlayıcı (API anahtarı)</option>
+                                    <option value="local" data-i18n="ui_aiModeLocal">Kendi bilgisayarımda / kendi sunucumda</option>
+                                    <option value="agent" data-i18n="ui_aiModeAgent">Kurulu bir AI aracı (Claude Code, Hermes…)</option>
+                                    <option value="api" data-i18n="ui_aiModeApi">Bulut sağlayıcı (API anahtarı)</option>
                                 </select>
                             </div>
                             <div class="field" id="aiLocalRuntimeField">
-                                <label class="name" id="aiLocalRuntimeLabel">Yerel çalışma zamanı</label>
+                                <label class="name" id="aiLocalRuntimeLabel" data-i18n="ui_aiLocalRuntimeLabel">Yerel çalışma zamanı</label>
                                 <select id="aiLocalRuntimeSelect"></select>
                             </div>
                             <div class="field" id="aiLocalEndpointField">
-                                <label class="name" id="aiLocalEndpointLabel">Sunucu adresi</label>
+                                <label class="name" id="aiLocalEndpointLabel" data-i18n="ui_aiLocalEndpointLabel">Sunucu adresi</label>
                                 <div class="btnRow">
-                                    <input type="text" id="aiLocalEndpointInput" placeholder="sunucu adresi">
-                                    <button id="aiTestConnectionBtn" class="miniBtn">Dene</button>
+                                    <input type="text" id="aiLocalEndpointInput" data-i18n-ph="ph_aiLocalEndpointInput" placeholder="sunucu adresi">
+                                    <button id="aiTestConnectionBtn" data-i18n="ui_aiTestConnectionBtn" class="miniBtn">Dene</button>
                                 </div>
                             </div>
                             <!-- Kurulu CLI ajanları — liste main.js'in taramasından
                                  gelir (ai:getProviders → cliAgents), burada sabit
                                  araç adı yok. Kurulu olmayanlar devre dışı görünür. -->
                             <div class="field" id="aiAgentField" style="display:none;">
-                                <label class="name" id="aiAgentLabel">Araç</label>
+                                <label class="name" id="aiAgentLabel" data-i18n="ui_aiAgentLabel">Araç</label>
                                 <select id="aiAgentSelect"></select>
                             </div>
                             <div class="hint" id="aiAgentLimitsHint" style="display:none; margin-top:6px;"></div>
                             <div class="field" id="aiCloudProviderField" style="display:none;">
-                                <label class="name" id="aiCloudProviderLabel">Sağlayıcı</label>
+                                <label class="name" id="aiCloudProviderLabel" data-i18n="ui_aiCloudProviderLabel">Sağlayıcı</label>
                                 <select id="aiCloudProviderSelect"></select>
                             </div>
                             <div class="field" id="aiCloudBaseUrlField" style="display:none;">
-                                <label class="name" id="aiCloudBaseUrlLabel">Adres</label>
+                                <label class="name" id="aiCloudBaseUrlLabel" data-i18n="ui_aiCloudBaseUrlLabel">Adres</label>
                                 <input type="text" id="aiCloudBaseUrlInput" placeholder="https://...">
                             </div>
                             <div class="hint" id="aiConnectionProbeText" style="margin-top:6px;"></div>
-                            <button id="ollamaConnectionChangeKeyBtn" class="miniBtn" style="width:100%; margin-top:8px;">Anahtarı Değiştir</button>
+                            <button id="ollamaConnectionChangeKeyBtn" data-i18n="ui_ollamaConnectionChangeKeyBtn" class="miniBtn" style="width:100%; margin-top:8px;">Anahtarı Değiştir</button>
                         </div>
                         <div class="section">
-                            <div class="sectionTitle" id="neroShortcutTitle">NeRoChAt Hızlı Erişim</div>
-                            <div class="hint" id="neroShortcutHint">Uygulama açıkken, herhangi bir sekmedeyken bu kısayola basınca küçük bir NeRoChAt penceresi açılır.</div>
+                            <div class="sectionTitle" id="neroShortcutTitle" data-i18n="ui_neroShortcutTitle">NeRoChAt Hızlı Erişim</div>
+                            <div class="hint" id="neroShortcutHint" data-i18n="ui_neroShortcutHint">Uygulama açıkken, herhangi bir sekmedeyken bu kısayola basınca küçük bir NeRoChAt penceresi açılır.</div>
                             <div class="field">
-                                <label class="name" id="neroShortcutLabel">Kısayol</label>
+                                <label class="name" id="neroShortcutLabel" data-i18n="ui_neroShortcutLabel">Kısayol</label>
                                 <div class="btnRow">
-                                    <input type="text" id="neroShortcutInput" readonly placeholder="örn: Ctrl+Shift+K">
-                                    <button id="neroShortcutRecordBtn" class="miniBtn">Değiştir</button>
+                                    <input type="text" id="neroShortcutInput" data-i18n-ph="ph_neroShortcutInput" readonly placeholder="örn: Ctrl+Shift+K">
+                                    <button id="neroShortcutRecordBtn" data-i18n="ui_neroShortcutRecordBtn" class="miniBtn">Değiştir</button>
                                 </div>
                             </div>
                         </div>
@@ -1708,47 +1711,47 @@
                             <div class="field">
                                 <label class="name" id="gamesShortcutLabel">Kısayol</label>
                                 <div class="btnRow">
-                                    <input type="text" id="gamesShortcutInput" readonly placeholder="örn: Ctrl+Shift+O">
-                                    <button id="gamesShortcutRecordBtn" class="miniBtn">Değiştir</button>
+                                    <input type="text" id="gamesShortcutInput" data-i18n-ph="ph_gamesShortcutInput" readonly placeholder="örn: Ctrl+Shift+O">
+                                    <button id="gamesShortcutRecordBtn" data-i18n="ui_gamesShortcutRecordBtn" class="miniBtn">Değiştir</button>
                                 </div>
                             </div>
                         </div>
                         <div class="section">
-                            <div class="sectionTitle" id="fixTextShortcutTitle">Yazı Düzeltme Kısayolu</div>
-                            <div class="hint" id="fixTextShortcutHint">WhatsApp'ta bir mesaj yazarken (henüz göndermeden) bu kısayola basınca, yazı kutusunun altında iki seçenek çıkar: "Düzeltme Önerileri" düzeltilmiş/resmi/samimi varyantlar önerir, "Dile Çevir" ise seçtiğin dile çevirir.</div>
+                            <div class="sectionTitle" id="fixTextShortcutTitle" data-i18n="ui_fixTextShortcutTitle">Yazı Düzeltme Kısayolu</div>
+                            <div class="hint" id="fixTextShortcutHint" data-i18n="ui_fixTextShortcutHint">WhatsApp'ta bir mesaj yazarken (henüz göndermeden) bu kısayola basınca, yazı kutusunun altında iki seçenek çıkar: "Düzeltme Önerileri" düzeltilmiş/resmi/samimi varyantlar önerir, "Dile Çevir" ise seçtiğin dile çevirir.</div>
                             <div class="field">
-                                <label class="name" id="fixTextShortcutLabel">Kısayol</label>
+                                <label class="name" id="fixTextShortcutLabel" data-i18n="ui_fixTextShortcutLabel">Kısayol</label>
                                 <div class="btnRow">
-                                    <input type="text" id="fixTextShortcutInput" readonly placeholder="örn: Ctrl+Shift+J">
-                                    <button id="fixTextShortcutRecordBtn" class="miniBtn">Değiştir</button>
+                                    <input type="text" id="fixTextShortcutInput" data-i18n-ph="ph_fixTextShortcutInput" readonly placeholder="örn: Ctrl+Shift+J">
+                                    <button id="fixTextShortcutRecordBtn" data-i18n="ui_fixTextShortcutRecordBtn" class="miniBtn">Değiştir</button>
                                 </div>
                             </div>
                             <label class="toggleRow">
-                                <span id="fixTextAutoModeLabel">Otomatik Düzeltme (kısayolsuz)</span>
+                                <span id="fixTextAutoModeLabel" data-i18n="ui_fixTextAutoModeLabel">Otomatik Düzeltme (kısayolsuz)</span>
                                 <span class="switch"><input type="checkbox" id="fixTextAutoModeToggle"><span class="track"></span></span>
                             </label>
-                            <div class="hint" id="fixTextAutoModeHint">Açıkken, WhatsApp'ta yazarken bir süre durduğunda kısayola basmana gerek kalmadan yukarıdaki "Düzeltme Önerileri / Dile Çevir" paneli otomatik açılır.</div>
+                            <div class="hint" id="fixTextAutoModeHint" data-i18n="ui_fixTextAutoModeHint">Açıkken, WhatsApp'ta yazarken bir süre durduğunda kısayola basmana gerek kalmadan yukarıdaki "Düzeltme Önerileri / Dile Çevir" paneli otomatik açılır.</div>
                             <label class="toggleRow">
-                                <span id="fixTextUseLocalModelLabel">Özellikler İçin Yerel AI Kullan</span>
+                                <span id="fixTextUseLocalModelLabel" data-i18n="ui_fixTextUseLocalModelLabel">Özellikler İçin Yerel AI Kullan</span>
                                 <span class="switch"><input type="checkbox" id="fixTextUseLocalModelToggle"><span class="track"></span></span>
                             </label>
-                            <div class="hint" id="fixTextUseLocalModelHint">Açıkken, yazı düzeltme gibi yardımcı özellikler önce yerelde kurulu bir modeli dener (daha hızlı, cloud kotanı harcamaz) — model uygun bir sonuç üretemezse (ör. yanlış dilde yazarsa) otomatik olarak ayarlı asıl modele döner. Kapalıyken doğrudan ayarlı modeli kullanır.</div>
+                            <div class="hint" id="fixTextUseLocalModelHint" data-i18n="ui_fixTextUseLocalModelHint">Açıkken, yazı düzeltme gibi yardımcı özellikler önce yerelde kurulu bir modeli dener (daha hızlı, cloud kotanı harcamaz) — model uygun bir sonuç üretemezse (ör. yanlış dilde yazarsa) otomatik olarak ayarlı asıl modele döner. Kapalıyken doğrudan ayarlı modeli kullanır.</div>
                         </div>
                         <div class="section">
-                            <div class="sectionTitle">Uygulama Kilidi</div>
-                            <div class="hint">Açıkken, NeRoBoT her başlatıldığında burada belirlediğin şifre istenir — bir ekran kilidi. Profil verileri diskte şifrelenmez.</div>
+                            <div data-i18n="ui_appLockSectionTitle" class="sectionTitle">Uygulama Kilidi</div>
+                            <div class="hint" data-i18n="ui_appLockSectionHint">Açıkken, NeRoBoT her başlatıldığında burada belirlediğin şifre istenir — bir ekran kilidi. Profil verileri diskte şifrelenmez.</div>
                             <label class="toggleRow">
-                                <span>Şifre ile kilitle</span>
+                                <span data-i18n="ui_appLockToggleLabel">Şifre ile kilitle</span>
                                 <span class="switch"><input type="checkbox" id="appLockToggle"><span class="track"></span></span>
                             </label>
                             <div id="appLockFields" style="display:none">
                                 <div class="field" id="appLockCurrentField" style="display:none">
-                                    <label class="name">Mevcut şifre</label>
+                                    <label data-i18n="ui_appLockCurrentLabel" class="name">Mevcut şifre</label>
                                     <input type="password" id="appLockCurrentPasswordInput" autocomplete="off">
                                 </div>
                                 <div class="field" id="appLockNewField">
-                                    <label class="name">Yeni şifre</label>
-                                    <input type="password" id="appLockNewPasswordInput" placeholder="En az 4 karakter" autocomplete="off">
+                                    <label data-i18n="ui_appLockNewLabel" class="name">Yeni şifre</label>
+                                    <input type="password" id="appLockNewPasswordInput" data-i18n-ph="ph_appLockNewPasswordInput" placeholder="En az 4 karakter" autocomplete="off">
                                 </div>
                                 <div class="hint warn" id="appLockSettingsError"></div>
                                 <button id="appLockSaveBtn" class="miniBtn" style="width:100%">Kaydet</button>
@@ -1756,7 +1759,7 @@
                             <button id="appLockChangeBtn" class="miniBtn" style="width:100%; margin-top:8px; display:none">Şifreyi Değiştir</button>
                         </div>
                         <div class="section">
-                            <div class="sectionTitle" id="gsAppAboutTitle">Hakkında</div>
+                            <div class="sectionTitle" id="gsAppAboutTitle" data-i18n="ui_gsAppAboutTitle">Hakkında</div>
                             <div class="hint" id="gsAppVersionText">Sürüm —</div>
                         </div>
                     </div>
@@ -1768,7 +1771,7 @@
                              real benefit; the global panel's own header/close now cover
                              both jobs. -->
                         <div style="display:none">
-                            <span id="ollamaSettingsTitle">Ayarlar</span>
+                            <span id="ollamaSettingsTitle" data-i18n="ui_ollamaSettingsTitle">Ayarlar</span>
                             <button id="ollamaSettingsClose">✕</button>
                         </div>
                         <div class="miniTabBar">
@@ -1795,7 +1798,7 @@
                                         <label class="name" id="ollamaPullLabel">Yeni model indir</label>
                                         <div id="ollamaPullSuggestions" class="ollamaPullSuggestions"></div>
                                         <div class="btnRow">
-                                            <input type="text" id="ollamaPullInput" placeholder="örn: llama3.2, nomic-embed-text">
+                                            <input type="text" id="ollamaPullInput" data-i18n-ph="ph_ollamaPullInput" placeholder="örn: llama3.2, nomic-embed-text">
                                             <button id="ollamaPullBtn" class="miniBtn">İndir</button>
                                         </div>
                                         <div class="hint" id="ollamaPullStatus"></div>
@@ -1810,7 +1813,7 @@
                                      accepts any typed name, cloud tag included — no
                                      separate "cloud model" input needed here. -->
                                 <div class="section" id="ollamaCloudModelHint" style="display:none">
-                                    <div class="hint">Cloud modunda model "indirilmez" — hangi modeli kullanacağını her profilin kendi Ayarlar → AI sekmesindeki "Model (Ollama)" alanına yazarsın (örn. minimax-m3:cloud, gpt-oss:120b-cloud).</div>
+                                    <div class="hint" data-i18n="ui_ollamaCloudModelHintText">Cloud modunda model "indirilmez" — hangi modeli kullanacağını her profilin kendi Ayarlar → AI sekmesindeki "Model (Ollama)" alanına yazarsın (örn. minimax-m3:cloud, gpt-oss:120b-cloud).</div>
                                 </div>
                                 <div class="section">
                                     <div class="sectionTitle" id="ollamaPersonalityTitle">Kişilik</div>
@@ -1851,7 +1854,7 @@
                             <div id="tab-ollama-chat" class="oTabContent">
                                 <div class="field">
                                     <label class="name" id="ollamaChatSelectLabel">Sohbet seç</label>
-                                    <select id="ollamaChatSelect"><option value="" id="ollamaChatSelectPlaceholder">— sohbet seç —</option></select>
+                                    <select id="ollamaChatSelect"><option value="" id="ollamaChatSelectPlaceholder" data-i18n="ui_ollamaChatSelectPlaceholder">— sohbet seç —</option></select>
                                 </div>
                                 <div id="ollamaChatNotice" class="hint" style="display:none"></div>
                                 <div id="ollamaChatConfig" style="display:none">
@@ -1868,7 +1871,6 @@
                     <div id="gsSection-profile" class="gsSection">
                         <div id="settingsHeader">
                             <span id="settingsTitle">Ayarlar</span>
-                            <span id="savedToast">Kaydedildi ✓</span>
                         </div>
                         <div id="tabBar">
                             <button class="tabBtn active" data-tab="general" id="tabBtnGeneral">Genel</button>
@@ -1888,15 +1890,15 @@
                                      once WhatsApp's mic/camera permission is actually
                                      granted, so this needs its own load/refresh, not a
                                      fixed options list like the rest of Genel. -->
-                                <div class="section">
+                                <div class="section" id="mediaDevicesSection">
                                     <div class="sectionTitle" id="mediaDevicesTitle">Cihazlar</div>
                                     <div class="field">
                                         <label class="name" id="preferredMicLabel">Mikrofon</label>
-                                        <select id="preferredMicSelect"><option value="">— sistem varsayılanı —</option></select>
+                                        <select id="preferredMicSelect"><option value="" data-i18n="ui_systemDefault">— sistem varsayılanı —</option></select>
                                     </div>
                                     <div class="field">
                                         <label class="name" id="preferredCameraLabel">Kamera</label>
-                                        <select id="preferredCameraSelect"><option value="">— sistem varsayılanı —</option></select>
+                                        <select id="preferredCameraSelect"><option value="" data-i18n="ui_systemDefault">— sistem varsayılanı —</option></select>
                                     </div>
                                     <button id="refreshMediaDevicesBtn" class="miniBtn" style="width:100%">Cihazları Yenile</button>
                                     <div class="hint" id="mediaDevicesHint"></div>
@@ -1931,7 +1933,7 @@
                                 <div class="chatCard">
                                     <div class="field">
                                         <label class="name" id="chatSelectLabel">Sohbet seç</label>
-                                        <select id="chatSelect"><option value="" id="chatSelectPlaceholder">— sohbet seç —</option></select>
+                                        <select id="chatSelect"><option value="" id="chatSelectPlaceholder" data-i18n="ui_chatSelectPlaceholder">— sohbet seç —</option></select>
                                         <div class="hint" id="chatListHint">Liste, bot hazır olduğunda WhatsApp'tan çekilir.</div>
                                     </div>
                                     <div class="field">
@@ -1968,7 +1970,7 @@
                                     <div class="sectionTitle" id="chatAiSectionTitle">AI Bot (bu sohbet)</div>
                                     <div class="field">
                                         <label class="name" id="aiChatSelectLabel">Sohbet seç</label>
-                                        <select id="aiChatSelect"><option value="" id="aiChatSelectPlaceholder">— sohbet seç —</option></select>
+                                        <select id="aiChatSelect"><option value="" id="aiChatSelectPlaceholder" data-i18n="ui_aiChatSelectPlaceholder">— sohbet seç —</option></select>
                                     </div>
                                     <div class="field">
                                         <label class="name" id="aiChatIdManualLabel">…veya ID gir</label>
@@ -1992,14 +1994,14 @@
                                         <div class="field">
                                             <label class="name" id="cPrefixLabel">Prefix (bu sohbete özel — boş bırak = genel prefix)</label>
                                             <div class="btnRow">
-                                                <input type="text" id="cPrefix" placeholder="örn: .">
+                                                <input type="text" id="cPrefix" data-i18n-ph="ph_cPrefix" placeholder="örn: .">
                                                 <button id="cPrefixApply" class="miniBtn">Uygula</button>
                                             </div>
                                         </div>
                                         <div class="field">
                                             <label class="name" id="cModelLabel">Model (bu sohbete özel — boş bırak = genel model)</label>
                                             <div class="btnRow">
-                                                <input type="text" id="cModel" placeholder="örn: llama3.2">
+                                                <input type="text" id="cModel" data-i18n-ph="ph_cModel" placeholder="örn: llama3.2">
                                                 <button id="cModelApply" class="miniBtn">Uygula</button>
                                             </div>
                                         </div>
@@ -2216,17 +2218,17 @@
     <div id="telegramBotLoginOverlay" class="modalOverlay">
         <div class="modalPanel">
             <div class="modalHeader">
-                <span id="telegramBotLoginTitle">Bot Bağlantısı — 2. Cihaz</span>
+                <span id="telegramBotLoginTitle" data-i18n="ui_telegramBotLoginTitle">Bot Bağlantısı — 2. Cihaz</span>
                 <button class="modalClose" id="telegramBotLoginClose">✕</button>
             </div>
             <div class="modalBody">
-                <div class="hint" id="telegramBotLoginHint">Bu, web arayüzünden ayrı bir oturum — botun kendi bağlantısı için ayrıca bu QR'ı okut.</div>
+                <div class="hint" id="telegramBotLoginHint" data-i18n="ui_telegramBotLoginHint">Bu, web arayüzünden ayrı bir oturum — botun kendi bağlantısı için ayrıca bu QR'ı okut.</div>
                 <img id="telegramBotQrImage" alt="QR kod" style="width:220px;height:220px;background:#fff;border-radius:8px;padding:10px;display:block;margin:0 auto;">
                 <div id="telegramBotPasswordField" style="display:none">
                     <div class="hint" id="telegramBotPasswordHint">İki adımlı doğrulama şifresi gerekli.</div>
                     <div class="btnRow">
                         <input type="password" id="telegramBotPasswordInput">
-                        <button id="telegramBotPasswordSubmitBtn" class="miniBtn">Gönder</button>
+                        <button id="telegramBotPasswordSubmitBtn" data-i18n="ui_telegramBotPasswordSubmitBtn" class="miniBtn">Gönder</button>
                     </div>
                 </div>
             </div>
@@ -2250,7 +2252,7 @@
             </div>
             <div id="neroPopupToolbar">
                 <select id="neroPopupModelSelect"><option value="">— model —</option></select>
-                <button id="neroPopupAskChatBtn" class="miniBtn" style="display:none">💬 Bu sohbeti sor</button>
+                <button id="neroPopupAskChatBtn" data-i18n="ui_neroPopupAskChatBtn" class="miniBtn" style="display:none">💬 Bu sohbeti sor</button>
             </div>
             <!-- Opened by neroPopupAskChatBtn — pick a start message (and,
                  optionally, an end message; left blank = through the last
@@ -2260,19 +2262,19 @@
                  populateNeroRangeSelects in the script. -->
             <div id="neroPopupChatRangeBar">
                 <div class="field">
-                    <label class="name" id="neroRangeStartLabel">Başlangıç mesajı</label>
+                    <label class="name" id="neroRangeStartLabel" data-i18n="ui_neroRangeStartLabel">Başlangıç mesajı</label>
                     <select id="neroPopupRangeStart"></select>
                 </div>
                 <div class="field">
-                    <label class="name" id="neroRangeEndLabel">Bitiş mesajı (opsiyonel)</label>
+                    <label class="name" id="neroRangeEndLabel" data-i18n="ui_neroRangeEndLabel">Bitiş mesajı (opsiyonel)</label>
                     <select id="neroPopupRangeEnd"></select>
                 </div>
-                <button id="neroPopupRangeLoadBtn" class="miniBtn">Yükle</button>
+                <button id="neroPopupRangeLoadBtn" data-i18n="ui_neroPopupRangeLoadBtn" class="miniBtn">Yükle</button>
             </div>
             <div id="neroPopupMessages"></div>
             <div id="neroPopupInputBar">
-                <textarea id="neroPopupInput" rows="1" placeholder="Bir mesaj yaz…"></textarea>
-                <button id="neroPopupSendBtn" class="miniBtn">Gönder</button>
+                <textarea id="neroPopupInput" data-i18n-ph="ph_neroPopupInput" rows="1" placeholder="Bir mesaj yaz…"></textarea>
+                <button id="neroPopupSendBtn" data-i18n="ui_neroPopupSendBtn" class="miniBtn">Gönder</button>
             </div>
         </div>
     </div>
@@ -2403,13 +2405,13 @@
     <div id="ollamaModeChoiceOverlay" class="modalOverlay">
         <div class="modalPanel">
             <div class="modalHeader">
-                <span id="ollamaModeChoiceTitle">AI Nasıl Çalışsın?</span>
+                <span id="ollamaModeChoiceTitle" data-i18n="ui_ollamaModeChoiceTitle">AI Nasıl Çalışsın?</span>
             </div>
             <div class="modalBody">
-                <div class="hint" id="ollamaModeChoiceHint">AI özellikleri Ollama kullanıyor — bilgisayarına kurabilir, ya da hiçbir şey kurmadan Ollama'nın bulut API'sine bir anahtarla bağlanabilirsin. İstediğin zaman Ayarlar'dan değiştirebilirsin.</div>
-                <button id="ollamaModeChoiceLocalBtn" class="miniBtn" style="width:100%; margin-top:12px;">💻 Yerel Ollama Kur</button>
-                <button id="ollamaModeChoiceApiBtn" class="miniBtn" style="width:100%; margin-top:8px;">☁️ API Anahtarı Kullan</button>
-                <button id="ollamaModeChoiceCancelBtn" class="miniBtn" style="width:100%; margin-top:8px; opacity:.7;">Şimdi Değil</button>
+                <div class="hint" id="ollamaModeChoiceHint" data-i18n="ui_ollamaModeChoiceHint">AI özellikleri Ollama kullanıyor — bilgisayarına kurabilir, ya da hiçbir şey kurmadan Ollama'nın bulut API'sine bir anahtarla bağlanabilirsin. İstediğin zaman Ayarlar'dan değiştirebilirsin.</div>
+                <button id="ollamaModeChoiceLocalBtn" data-i18n="ui_ollamaModeChoiceLocalBtn" class="miniBtn" style="width:100%; margin-top:12px;">💻 Yerel Ollama Kur</button>
+                <button id="ollamaModeChoiceApiBtn" data-i18n="ui_ollamaModeChoiceApiBtn" class="miniBtn" style="width:100%; margin-top:8px;">☁️ API Anahtarı Kullan</button>
+                <button id="ollamaModeChoiceCancelBtn" data-i18n="ui_ollamaModeChoiceCancelBtn" class="miniBtn" style="width:100%; margin-top:8px; opacity:.7;">Şimdi Değil</button>
             </div>
         </div>
     </div>
@@ -2429,8 +2431,8 @@
                 <button class="modalClose" id="ollamaApiKeyClose">✕</button>
             </div>
             <div class="miniTabBar">
-                <button class="tabBtn active" data-akatab="enter" id="tabBtnApiKeyEnter">Anahtar Gir</button>
-                <button class="tabBtn" data-akatab="guide" id="tabBtnApiKeyGuide">Nasıl Alınır?</button>
+                <button class="tabBtn active" data-akatab="enter" id="tabBtnApiKeyEnter" data-i18n="ui_tabBtnApiKeyEnter">Anahtar Gir</button>
+                <button class="tabBtn" data-akatab="guide" id="tabBtnApiKeyGuide" data-i18n="ui_tabBtnApiKeyGuide">Nasıl Alınır?</button>
             </div>
             <div class="modalBody">
                 <div id="tab-akey-enter">
@@ -2439,7 +2441,7 @@
                         <input type="password" id="ollamaApiKeyInput" placeholder="sk-...">
                     </div>
                     <div class="hint warn" id="ollamaApiKeyError" style="display:none"></div>
-                    <button id="ollamaApiKeySaveBtn" class="miniBtn" style="width:100%">Kaydet</button>
+                    <button id="ollamaApiKeySaveBtn" data-i18n="ui_ollamaApiKeySaveBtn" class="miniBtn" style="width:100%">Kaydet</button>
                 </div>
                 <div id="tab-akey-guide" style="display:none">
                     <div class="hint" id="ollamaApiKeyGuideSteps"></div>
@@ -2456,12 +2458,12 @@
     <div id="updateAvailableOverlay" class="modalOverlay">
         <div class="modalPanel">
             <div class="modalHeader">
-                <span id="updateAvailableTitle">Güncelleme Var</span>
+                <span id="updateAvailableTitle" data-i18n="ui_updateAvailableTitle">Güncelleme Var</span>
             </div>
             <div class="modalBody">
                 <div class="hint" id="updateAvailableText">Yeni bir sürüm var.</div>
-                <button id="updateNowBtn" class="miniBtn" style="width:100%; margin-top:10px;">Şimdi Güncelle</button>
-                <button id="updateLaterBtn" class="miniBtn" style="width:100%; margin-top:8px; opacity:.7;">Daha Sonra</button>
+                <button id="updateNowBtn" data-i18n="ui_updateNowBtn" class="miniBtn" style="width:100%; margin-top:10px;">Şimdi Güncelle</button>
+                <button id="updateLaterBtn" data-i18n="ui_updateLaterBtn" class="miniBtn" style="width:100%; margin-top:8px; opacity:.7;">Daha Sonra</button>
             </div>
         </div>
     </div>
@@ -2473,7 +2475,7 @@
     <div id="updateProgressOverlay" class="modalOverlay">
         <div class="modalPanel">
             <div class="modalHeader">
-                <span id="updateProgressTitle">Güncelleniyor</span>
+                <span id="updateProgressTitle" data-i18n="ui_updateProgressTitle">Güncelleniyor</span>
             </div>
             <div class="modalBody">
                 <div id="updateProgressStatus" class="hint">Hazırlanıyor…</div>
@@ -2705,6 +2707,99 @@
             gamesShortcutHintStr: 'Uygulama açıkken, herhangi bir sekmedeyken bu kısayola basınca küçük bir oyun penceresi açılır.',
             gamesShortcutLabelStr: 'Kısayol',
             gameSnakeName: 'Yılan',
+            appLockWrongPassword: 'Yanlış şifre.',
+            // Static markup texts (data-i18n / data-i18n-ph, see applyLanguage)
+            ui_appLockTitle: "NeRoBoT Kilitli",
+            ui_appLockHint: "Devam etmek için şifreni gir.",
+            ui_appLockUnlockBtn: "Kilidi Aç",
+            ui_telegramQrHint: "Telegram → Ayarlar → Cihazlar → Cihaz Bağla ile bu kodu okut.",
+            ui_telegramPasswordSubmitBtn: "Gönder",
+            ui_notifTitle: "Bildirimler",
+            ui_gsNavApp: "Uygulama",
+            ui_gsAppTelegramTitle: "Telegram API Kimliği",
+            ui_telegramCredsHint: "Bir kere gerekiyor (uygulama geneli, her profil için değil): my.telegram.org/apps adresine kendi telefon numaranla gir, bir uygulama oluştur, aşağıya api_id ve api_hash'i yapıştır.",
+            ui_telegramCredsSaveBtn: "Kaydet",
+            ui_ollamaConnectionTitle: "Bağlantı",
+            ui_aiModeLabel: "Nerede çalışsın",
+            ui_aiLocalRuntimeLabel: "Yerel çalışma zamanı",
+            ui_aiLocalEndpointLabel: "Sunucu adresi",
+            ui_aiTestConnectionBtn: "Dene",
+            ui_aiAgentLabel: "Araç",
+            ui_aiCloudProviderLabel: "Sağlayıcı",
+            ui_aiCloudBaseUrlLabel: "Adres",
+            ui_ollamaConnectionChangeKeyBtn: "Anahtarı Değiştir",
+            ui_neroShortcutTitle: "NeRoChAt Hızlı Erişim",
+            ui_neroShortcutHint: "Uygulama açıkken, herhangi bir sekmedeyken bu kısayola basınca küçük bir NeRoChAt penceresi açılır.",
+            ui_neroShortcutLabel: "Kısayol",
+            ui_neroShortcutRecordBtn: "Değiştir",
+            ui_gamesShortcutRecordBtn: "Değiştir",
+            ui_fixTextShortcutTitle: "Yazı Düzeltme Kısayolu",
+            ui_fixTextShortcutHint: "WhatsApp'ta bir mesaj yazarken (henüz göndermeden) bu kısayola basınca, yazı kutusunun altında iki seçenek çıkar: \"Düzeltme Önerileri\" düzeltilmiş/resmi/samimi varyantlar önerir, \"Dile Çevir\" ise seçtiğin dile çevirir.",
+            ui_fixTextShortcutLabel: "Kısayol",
+            ui_fixTextShortcutRecordBtn: "Değiştir",
+            ui_fixTextAutoModeLabel: "Otomatik Düzeltme (kısayolsuz)",
+            ui_fixTextAutoModeHint: "Açıkken, WhatsApp'ta yazarken bir süre durduğunda kısayola basmana gerek kalmadan yukarıdaki \"Düzeltme Önerileri / Dile Çevir\" paneli otomatik açılır.",
+            ui_fixTextUseLocalModelLabel: "Özellikler İçin Yerel AI Kullan",
+            ui_fixTextUseLocalModelHint: "Açıkken, yazı düzeltme gibi yardımcı özellikler önce yerelde kurulu bir modeli dener (daha hızlı, cloud kotanı harcamaz) — model uygun bir sonuç üretemezse (ör. yanlış dilde yazarsa) otomatik olarak ayarlı asıl modele döner. Kapalıyken doğrudan ayarlı modeli kullanır.",
+            ui_gsAppAboutTitle: "Hakkında",
+            ui_ollamaSettingsTitle: "Ayarlar",
+            ui_ollamaChatSelectPlaceholder: "— sohbet seç —",
+            ui_chatSelectPlaceholder: "— sohbet seç —",
+            ui_aiChatSelectPlaceholder: "— sohbet seç —",
+            ui_telegramBotLoginTitle: "Bot Bağlantısı — 2. Cihaz",
+            ui_telegramBotLoginHint: "Bu, web arayüzünden ayrı bir oturum — botun kendi bağlantısı için ayrıca bu QR'ı okut.",
+            ui_telegramBotPasswordSubmitBtn: "Gönder",
+            ui_neroPopupAskChatBtn: "💬 Bu sohbeti sor",
+            ui_neroRangeStartLabel: "Başlangıç mesajı",
+            ui_neroRangeEndLabel: "Bitiş mesajı (opsiyonel)",
+            ui_neroPopupRangeLoadBtn: "Yükle",
+            ui_neroPopupSendBtn: "Gönder",
+            ui_ollamaModeChoiceTitle: "AI Nasıl Çalışsın?",
+            ui_ollamaModeChoiceHint: "AI özellikleri Ollama kullanıyor — bilgisayarına kurabilir, ya da hiçbir şey kurmadan Ollama'nın bulut API'sine bir anahtarla bağlanabilirsin. İstediğin zaman Ayarlar'dan değiştirebilirsin.",
+            ui_ollamaModeChoiceLocalBtn: "💻 Yerel Ollama Kur",
+            ui_ollamaModeChoiceApiBtn: "☁️ API Anahtarı Kullan",
+            ui_ollamaModeChoiceCancelBtn: "Şimdi Değil",
+            ui_tabBtnApiKeyEnter: "Anahtar Gir",
+            ui_tabBtnApiKeyGuide: "Nasıl Alınır?",
+            ui_ollamaApiKeySaveBtn: "Kaydet",
+            ui_updateAvailableTitle: "Güncelleme Var",
+            ui_updateNowBtn: "Şimdi Güncelle",
+            ui_updateLaterBtn: "Daha Sonra",
+            ui_updateProgressTitle: "Güncelleniyor",
+            ph_appLockPasswordInput: "Şifre",
+            ph_telegramApiIdInput: "örn: 1234567",
+            ph_aiLocalEndpointInput: "sunucu adresi",
+            ph_neroShortcutInput: "örn: Ctrl+Shift+K",
+            ph_gamesShortcutInput: "örn: Ctrl+Shift+O",
+            ph_fixTextShortcutInput: "örn: Ctrl+Shift+J",
+            ph_appLockNewPasswordInput: "En az 4 karakter",
+            ph_ollamaPullInput: "örn: llama3.2, nomic-embed-text",
+            ph_cPrefix: "örn: .",
+            ph_cModel: "örn: llama3.2",
+            ph_neroPopupInput: "Bir mesaj yaz…",
+            ui_appLockSectionTitle: "Uygulama Kilidi",
+            ui_appLockToggleLabel: "Şifre ile kilitle",
+            ui_appLockCurrentLabel: "Mevcut şifre",
+            ui_appLockNewLabel: "Yeni şifre",
+            ui_appLockSectionHint: "Açıkken, NeRoBoT her başlatıldığında burada belirlediğin şifre istenir — bir ekran kilidi. Profil verileri diskte şifrelenmez.",
+            ui_ollamaCloudModelHintText: "Cloud modunda model \"indirilmez\" — hangi modeli kullanacağını her profilin kendi Ayarlar → Genel → AI bölümündeki \"Model\" alanına yazarsın (örn. minimax-m3:cloud, gpt-oss:120b-cloud).",
+            ui_aiModeLocal: "Kendi bilgisayarımda / kendi sunucumda",
+            ui_aiModeAgent: "Kurulu bir AI aracı (Claude Code, Hermes…)",
+            ui_aiModeApi: "Bulut sağlayıcı (API anahtarı)",
+            ui_systemDefault: "— sistem varsayılanı —",
+            telegramPasswordNeeded: "İki adımlı doğrulama şifresi gerekli.",
+            telegramPasswordHintPrefix: "İpucu: ",
+            unexpectedError: m => `Bir işlem tamamlanamadı:\n${m}`,
+            aiNoAgentInstalled: 'Bu bilgisayarda kurulu bir AI aracı (Claude Code, Codex, Gemini CLI…) bulunamadı. Önce birini kur.',
+            aiUrlInvalid: 'Adres http:// ya da https:// ile başlamalı',
+            shortcutNeedsModifier: 'Kısayol Ctrl ya da Alt içermeli (Esc: iptal)',
+            shortcutInUse: 'Bu kısayol başka bir özellikte kullanılıyor',
+            profileOpenFailed: e => `Profil açılamadı: ${e}`,
+            telegramCredsInvalid: 'api_id yalnızca rakamlardan oluşmalı ve api_hash boş olmamalı.',
+            telegramHashSaved: 'kayıtlı — değiştirmek için yenisini yaz',
+            settingsSaveFailed: 'Ayarlar kaydedilemedi.',
+            settingsFieldsKept: n => `Kaydedildi — ${n} alan boş/geçersiz olduğu için eski değerinde bırakıldı`,
+            noPrefixAllConfirm: 'Beyaz liste kapalıyken "önek olmadan cevap ver" açılırsa AI, yazılan HER sohbete cevap verir. Emin misin?',
             gamePaddleName: 'Raket Düellosu', gameBricksName: 'Tuğla Kırıcı', gameMemoryName: 'Hafıza',
             gamePaddleHint: 'W/S, ↑/↓ ya da fare ile raketini oynat — 7 sayı alan kazanır',
             gameBricksHint: '←/→, A/D ya da fare ile hareket et — Boşluk/tık ile topu at',
@@ -2934,6 +3029,98 @@
             gamesShortcutHintStr: 'While the app is open, on any tab, pressing this shortcut opens a small game window.',
             gamesShortcutLabelStr: 'Shortcut',
             gameSnakeName: 'Snake',
+            appLockWrongPassword: 'Wrong password.',
+            ui_appLockTitle: "NeRoBoT is locked",
+            ui_appLockHint: "Enter your password to continue.",
+            ui_appLockUnlockBtn: "Unlock",
+            ui_telegramQrHint: "Scan this code with Telegram → Settings → Devices → Link Desktop Device.",
+            ui_telegramPasswordSubmitBtn: "Send",
+            ui_notifTitle: "Notifications",
+            ui_gsNavApp: "App",
+            ui_gsAppTelegramTitle: "Telegram API Credentials",
+            ui_telegramCredsHint: "Needed once (app-wide, not per profile): sign in at my.telegram.org/apps with your own phone number, create an app, and paste its api_id and api_hash below.",
+            ui_telegramCredsSaveBtn: "Save",
+            ui_ollamaConnectionTitle: "Connection",
+            ui_aiModeLabel: "Where it runs",
+            ui_aiLocalRuntimeLabel: "Local runtime",
+            ui_aiLocalEndpointLabel: "Server address",
+            ui_aiTestConnectionBtn: "Test",
+            ui_aiAgentLabel: "Tool",
+            ui_aiCloudProviderLabel: "Provider",
+            ui_aiCloudBaseUrlLabel: "Address",
+            ui_ollamaConnectionChangeKeyBtn: "Change Key",
+            ui_neroShortcutTitle: "NeRoChAt Quick Access",
+            ui_neroShortcutHint: "While the app is open, pressing this shortcut on any tab opens a small NeRoChAt window.",
+            ui_neroShortcutLabel: "Shortcut",
+            ui_neroShortcutRecordBtn: "Change",
+            ui_gamesShortcutRecordBtn: "Change",
+            ui_fixTextShortcutTitle: "Text Fix Shortcut",
+            ui_fixTextShortcutHint: "While typing a WhatsApp message (before sending), press this shortcut to get two options under the text box: \"Suggestions\" offers corrected/formal/casual variants, \"Translate\" translates it into the language you pick.",
+            ui_fixTextShortcutLabel: "Shortcut",
+            ui_fixTextShortcutRecordBtn: "Change",
+            ui_fixTextAutoModeLabel: "Auto Fix (no shortcut)",
+            ui_fixTextAutoModeHint: "When on, pausing while typing in WhatsApp opens the \"Suggestions / Translate\" panel above by itself — no shortcut needed.",
+            ui_fixTextUseLocalModelLabel: "Use Local AI for Features",
+            ui_fixTextUseLocalModelHint: "When on, helper features like text fixing try a locally installed model first (faster, doesn't use your cloud quota) and fall back to the configured main model if it can't produce a good result (e.g. answers in the wrong language). When off, the configured model is used directly.",
+            ui_gsAppAboutTitle: "About",
+            ui_ollamaSettingsTitle: "Settings",
+            ui_ollamaChatSelectPlaceholder: "— pick a chat —",
+            ui_chatSelectPlaceholder: "— pick a chat —",
+            ui_aiChatSelectPlaceholder: "— pick a chat —",
+            ui_telegramBotLoginTitle: "Bot Connection — 2nd Device",
+            ui_telegramBotLoginHint: "This is a separate session from the web interface — scan this QR too for the bot's own connection.",
+            ui_telegramBotPasswordSubmitBtn: "Send",
+            ui_neroPopupAskChatBtn: "💬 Ask about this chat",
+            ui_neroRangeStartLabel: "Start message",
+            ui_neroRangeEndLabel: "End message (optional)",
+            ui_neroPopupRangeLoadBtn: "Load",
+            ui_neroPopupSendBtn: "Send",
+            ui_ollamaModeChoiceTitle: "How Should AI Run?",
+            ui_ollamaModeChoiceHint: "AI features use Ollama — you can install it on your computer, or connect to Ollama's cloud API with a key without installing anything. You can change this any time in Settings.",
+            ui_ollamaModeChoiceLocalBtn: "💻 Install Local Ollama",
+            ui_ollamaModeChoiceApiBtn: "☁️ Use an API Key",
+            ui_ollamaModeChoiceCancelBtn: "Not Now",
+            ui_tabBtnApiKeyEnter: "Enter Key",
+            ui_tabBtnApiKeyGuide: "How to Get One?",
+            ui_ollamaApiKeySaveBtn: "Save",
+            ui_updateAvailableTitle: "Update Available",
+            ui_updateNowBtn: "Update Now",
+            ui_updateLaterBtn: "Later",
+            ui_updateProgressTitle: "Updating",
+            ph_appLockPasswordInput: "Password",
+            ph_telegramApiIdInput: "e.g. 1234567",
+            ph_aiLocalEndpointInput: "server address",
+            ph_neroShortcutInput: "e.g. Ctrl+Shift+K",
+            ph_gamesShortcutInput: "e.g. Ctrl+Shift+O",
+            ph_fixTextShortcutInput: "e.g. Ctrl+Shift+J",
+            ph_appLockNewPasswordInput: "At least 4 characters",
+            ph_ollamaPullInput: "e.g. llama3.2, nomic-embed-text",
+            ph_cPrefix: "e.g. .",
+            ph_cModel: "e.g. llama3.2",
+            ph_neroPopupInput: "Type a message…",
+            ui_appLockSectionTitle: "App Lock",
+            ui_appLockToggleLabel: "Lock with a password",
+            ui_appLockCurrentLabel: "Current password",
+            ui_appLockNewLabel: "New password",
+            ui_appLockSectionHint: "When on, NeRoBoT asks for the password set here every time it starts — a screen lock. Profile data on disk is not encrypted.",
+            ui_ollamaCloudModelHintText: "In cloud mode models aren't \"downloaded\" — type the model to use in each profile's Settings → General → AI \"Model\" field (e.g. minimax-m3:cloud, gpt-oss:120b-cloud).",
+            ui_aiModeLocal: "On my computer / my own server",
+            ui_aiModeAgent: "An installed AI tool (Claude Code, Hermes…)",
+            ui_aiModeApi: "Cloud provider (API key)",
+            ui_systemDefault: "— system default —",
+            telegramPasswordNeeded: "Two-step verification password required.",
+            telegramPasswordHintPrefix: "Hint: ",
+            unexpectedError: m => `An action couldn't be completed:\n${m}`,
+            aiNoAgentInstalled: 'No AI tool (Claude Code, Codex, Gemini CLI…) is installed on this computer. Install one first.',
+            aiUrlInvalid: 'The address must start with http:// or https://',
+            shortcutNeedsModifier: 'A shortcut needs Ctrl or Alt (Esc: cancel)',
+            shortcutInUse: 'This shortcut is already used by another feature',
+            profileOpenFailed: e => `Couldn't open the profile: ${e}`,
+            telegramCredsInvalid: 'api_id must be digits only and api_hash must not be empty.',
+            telegramHashSaved: 'saved — type a new one to change it',
+            settingsSaveFailed: 'Settings could not be saved.',
+            settingsFieldsKept: n => `Saved — ${n} empty/invalid field(s) kept their previous value`,
+            noPrefixAllConfirm: 'With the whitelist off, "answer without prefix" makes the AI reply to EVERY chat. Are you sure?',
             gamePaddleName: 'Paddle Duel', gameBricksName: 'Brick Breaker', gameMemoryName: 'Memory',
             gamePaddleHint: 'W/S, ↑/↓ or the mouse moves your paddle — first to 7 wins',
             gameBricksHint: '←/→, A/D or the mouse to move — Space/click launches the ball',
@@ -2987,11 +3174,15 @@
         const { ok } = await window.nerobot.verifyAppLockPassword(password);
         if (ok) {
             appLocked = false;
+            setAppBehindLockInert(false);
             document.getElementById('appLockOverlay').style.display = 'none';
             appLockPasswordInput.value = '';
             appLockErrorEl.textContent = '';
+            // Main refused private data while locked (see main.js's
+            // LOCKED_CHANNELS) — load it now.
+            loadNotificationsFromMain();
         } else {
-            appLockErrorEl.textContent = 'Yanlış şifre.';
+            appLockErrorEl.textContent = t('appLockWrongPassword');
             appLockPasswordInput.value = '';
             appLockPasswordInput.focus();
         }
@@ -3000,7 +3191,19 @@
     appLockPasswordInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') attemptUnlock();
     });
-    if (appLocked) setTimeout(() => appLockPasswordInput.focus(), 0);
+    // Everything behind the overlay is inert while locked — it was still
+    // reachable with Tab (profile gear → Export opened a save dialog).
+    function setAppBehindLockInert(on) {
+        for (const el of document.body.children) {
+            if (el.id !== 'appLockOverlay' && el.tagName !== 'SCRIPT') el.inert = on;
+        }
+    }
+    if (appLocked) {
+        setAppBehindLockInert(true);
+        // Elements parsed after this script too.
+        document.addEventListener('DOMContentLoaded', () => { if (appLocked) setAppBehindLockInert(true); });
+        setTimeout(() => appLockPasswordInput.focus(), 0);
+    }
 
     // ============================
     // Profiles — shared state used by both the status/log wiring below and
@@ -3028,6 +3231,15 @@
     let gamesTabActive = false;
 
     function applyLanguage() {
+        // Static markup tagged with data-i18n (text) / data-i18n-ph (placeholder).
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const v = t(el.dataset.i18n);
+            if (typeof v === 'string') el.textContent = v;
+        });
+        document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+            const v = t(el.dataset.i18nPh);
+            if (typeof v === 'string') el.placeholder = v;
+        });
         document.documentElement.lang = lang;
         document.getElementById('settingsBtn').title = t('settingsBtn');
         document.getElementById('statusLogBtn').title = t('logsBtn');
@@ -3299,7 +3511,7 @@
             qrHint.style.display = '';
         } else if (s.key === 'telegram_password') {
             statusTextEl.textContent = s.text || 'İki adımlı doğrulama şifresi gerekli';
-            pwHint.textContent = s.extra ? `İpucu: ${s.extra}` : 'İki adımlı doğrulama şifresi gerekli.';
+            pwHint.textContent = s.extra ? `${t('telegramPasswordHintPrefix')}${s.extra}` : t('telegramPasswordNeeded');
             pwField.style.display = '';
         } else if (s.key === 'ready') {
             statusTextEl.textContent = 'Bağlandı ✓';
@@ -3325,7 +3537,7 @@
             pwField.style.display = 'none';
             openModal('telegramBotLoginOverlay');
         } else if (s.key === 'telegram_password') {
-            pwHint.textContent = s.extra ? `İpucu: ${s.extra}` : (s.text || 'İki adımlı doğrulama şifresi gerekli.');
+            pwHint.textContent = s.extra ? `${t('telegramPasswordHintPrefix')}${s.extra}` : t('telegramPasswordNeeded');
             pwField.style.display = '';
             openModal('telegramBotLoginOverlay');
         } else if (s.key === 'ready' || s.key === 'error') {
@@ -3434,9 +3646,12 @@
     // panel is currently showing.
     let gsCurrentSection = null;
 
-    function showSaved() {
+    let savedToastTimer = null;
+    function showSaved(text) {
+        savedToast.textContent = text || t('saved');
         savedToast.classList.add('show');
-        setTimeout(() => savedToast.classList.remove('show'), 1500);
+        clearTimeout(savedToastTimer);
+        savedToastTimer = setTimeout(() => savedToast.classList.remove('show'), text ? 4000 : 1500);
     }
 
     let activeTab = 'general';
@@ -3447,7 +3662,10 @@
     let aiSectionsEnabled = false;
     const tabBtns = document.querySelectorAll('.tabBtn');
     const tabBar = document.getElementById('tabBar');
-    tabBtns.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+    // Only the profile tabs: NeRoChAt's/API-key panel's own sub-tab buttons
+    // share the .tabBtn class but have no data-tab — clicking them called
+    // switchTab(undefined) and blanked the whole profile settings panel.
+    tabBtns.forEach(btn => btn.addEventListener('click', () => { if (btn.dataset.tab) switchTab(btn.dataset.tab); }));
 
     // A profile's own tabs (Genel/Sohbet/Listeler/Hizmetler/Yardım) —
     // unchanged from the old drawer, just living inside #gsSection-profile
@@ -3459,7 +3677,7 @@
     // "Genel" or "Sohbet" content.
     function switchTab(tab) {
         activeTab = tab;
-        tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        tabBtns.forEach(b => { if (b.dataset.tab) b.classList.toggle('active', b.dataset.tab === tab); });
         document.querySelectorAll('.tabContent').forEach(c =>
             c.classList.toggle('active', c.id === 'tab-' + tab));
         settingsFooter.classList.toggle('hidden', tab !== 'general');
@@ -3701,6 +3919,7 @@
 
     // Dosyanın kendisi ana süreçte; burada yalnızca adı/boyutu tutuluyor.
     let bcPhoto = null;
+    let bcPhotoProfileId = null;
 
     bcPhotoPickBtn.addEventListener('click', async () => {
         if (!activeProfileId) return;
@@ -3712,6 +3931,7 @@
             return;
         }
         bcPhoto = { filename: result.filename, bytes: result.bytes, captionMax: result.captionMax };
+        bcPhotoProfileId = activeProfileId;
         bcPhotoThumb.src = result.dataUrl;
         bcPhotoPreview.style.display = '';
         bcPhotoClearBtn.disabled = false;
@@ -3781,6 +4001,10 @@
         // Profil değiştiyse eski raporu at — başka hesabın davet kaydına göre
         // hesaplanmıştı.
         if (bcPreviewProfileId && bcPreviewProfileId !== activeProfileId) bcInvalidatePreview();
+        // The photo lives in main PER PROFILE — a thumbnail picked in another
+        // profile must not stay on screen here (Start would send this
+        // profile's photo, or none at all).
+        if (bcPhotoProfileId && bcPhotoProfileId !== activeProfileId) clearBroadcastPhoto();
         applyBroadcastLanguage();
         // Mesaj seçicisinin sohbet listesi — bağlantı hazır değilse hint'e
         // yazıp geçiyor, sekmenin geri kalanı çalışmaya devam ediyor.
@@ -4032,6 +4256,13 @@
             // loadOllamaGeneralTab() already does for whoever's looking at
             // NeRoChAt's tab instead.
             await updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
+            // The lock switch could be left showing a state that was never
+            // applied (toggled, panel closed without pressing the button).
+            refreshAppLockUI();
+            // Saved Telegram credentials: show the id, mark the hash as saved.
+            const creds = await window.nerobot.getTelegramAppCredentials();
+            if (creds?.apiId) document.getElementById('telegramApiIdInput').value = String(creds.apiId);
+            if (creds?.hasApiHash) document.getElementById('telegramApiHashInput').placeholder = t('telegramHashSaved');
             return;
         }
 
@@ -4064,6 +4295,14 @@
         settingsOpen = false;
         closeModal('globalSettingsOverlay');
         settingsBtn.classList.remove('active');
+        // A Telegram-credentials gate abandoned by closing the panel must not
+        // resume later: an unrelated save used to silently create a Telegram
+        // profile or apply an old mode change.
+        pendingModeChangeProfileId = null;
+        pendingTelegramMode = null;
+        document.getElementById('gsAppTelegramGateHint').style.display = 'none';
+        // Shortcut recorders left armed would swallow the next keypress.
+        cancelShortcutRecording();
     }
     document.getElementById('globalSettingsClose').addEventListener('click', closeGlobalSettings);
     document.getElementById('globalSettingsOverlay').addEventListener('click', (e) => {
@@ -4114,7 +4353,8 @@
         if (e.shiftKey) parts.push('Shift');
         const key = e.key;
         if (!['Control', 'Alt', 'Shift', 'Meta'].includes(key)) {
-            parts.push(key.length === 1 ? key.toUpperCase() : key);
+            // "+" is the separator — store that key by name so it can match.
+            parts.push(key === '+' ? 'Plus' : key.length === 1 ? key.toUpperCase() : key);
         }
         return parts.join('+');
     }
@@ -4126,7 +4366,55 @@
         const wantAlt = parts.includes('Alt');
         const wantShift = parts.includes('Shift');
         if (e.ctrlKey !== wantCtrl || e.altKey !== wantAlt || e.shiftKey !== wantShift) return false;
-        return e.key.toUpperCase() === wantKey.toUpperCase();
+        const key = e.key === '+' ? 'Plus' : e.key;
+        return key.toUpperCase() === wantKey.toUpperCase();
+    }
+
+    // Only one recorder armed at a time; Escape or closing the panel cancels
+    // (an armed recorder used to swallow the next key typed anywhere).
+    const SHORTCUT_RECORDERS = {
+        nero: { input: 'neroShortcutInput', get: () => neroPopupShortcut },
+        fixText: { input: 'fixTextShortcutInput', get: () => fixTextShortcut },
+        games: { input: 'gamesShortcutInput', get: () => gamesPopupShortcut },
+    };
+    function cancelShortcutRecording() {
+        recordingNeroShortcut = recordingFixTextShortcut = recordingGamesShortcut = false;
+        for (const r of Object.values(SHORTCUT_RECORDERS)) {
+            const el = document.getElementById(r.input);
+            if (el) el.value = r.get();
+        }
+    }
+    // Validates a just-recorded combo for `which`. Returns an error or null.
+    function shortcutProblem(which, combo, e) {
+        // A bare key would be swallowed in every WhatsApp/Telegram view.
+        if (!e.ctrlKey && !e.altKey) return t('shortcutNeedsModifier');
+        const clash = Object.entries(SHORTCUT_RECORDERS).find(([k, r]) => k !== which && r.get().toUpperCase() === combo.toUpperCase());
+        return clash ? t('shortcutInUse') : null;
+    }
+    // Shared keydown step for an armed recorder. Returns the accepted combo,
+    // or null (keep waiting / cancelled / rejected).
+    async function recordShortcutKey(which, e) {
+        e.preventDefault();
+        if (e.key === 'Escape') { cancelShortcutRecording(); return null; }
+        if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return null; // wait for a real key
+        const combo = formatShortcutCombo(e);
+        const problem = shortcutProblem(which, combo, e);
+        if (problem) {
+            document.getElementById(SHORTCUT_RECORDERS[which].input).value = '…';
+            showSaved(problem);
+            return null;
+        }
+        cancelShortcutRecording();
+        return combo;
+    }
+    function armShortcutRecorder(which) {
+        cancelShortcutRecording();
+        if (which === 'nero') recordingNeroShortcut = true;
+        if (which === 'fixText') recordingFixTextShortcut = true;
+        if (which === 'games') recordingGamesShortcut = true;
+        const input = document.getElementById(SHORTCUT_RECORDERS[which].input);
+        input.value = '…';
+        input.focus();
     }
 
     async function loadNeroPopupShortcut() {
@@ -4136,12 +4424,7 @@
         if (input) input.value = neroPopupShortcut;
     }
 
-    document.getElementById('neroShortcutRecordBtn').addEventListener('click', () => {
-        recordingNeroShortcut = true;
-        const input = document.getElementById('neroShortcutInput');
-        input.value = '…';
-        input.focus();
-    });
+    document.getElementById('neroShortcutRecordBtn').addEventListener('click', () => armShortcutRecorder('nero'));
 
     async function loadFixTextShortcut() {
         const config = await window.nerobot.getAppConfig();
@@ -4154,12 +4437,7 @@
         if (useLocalToggle) useLocalToggle.checked = config.fixTextUseLocalModel !== false;
     }
 
-    document.getElementById('fixTextShortcutRecordBtn').addEventListener('click', () => {
-        recordingFixTextShortcut = true;
-        const input = document.getElementById('fixTextShortcutInput');
-        input.value = '…';
-        input.focus();
-    });
+    document.getElementById('fixTextShortcutRecordBtn').addEventListener('click', () => armShortcutRecorder('fixText'));
 
     document.getElementById('fixTextAutoModeToggle').addEventListener('change', (e) => {
         window.nerobot.setAppConfig({ fixTextAutoMode: e.target.checked });
@@ -4244,12 +4522,7 @@
         if (input) input.value = gamesPopupShortcut;
     }
 
-    document.getElementById('gamesShortcutRecordBtn').addEventListener('click', () => {
-        recordingGamesShortcut = true;
-        const input = document.getElementById('gamesShortcutInput');
-        input.value = '…';
-        input.focus();
-    });
+    document.getElementById('gamesShortcutRecordBtn').addEventListener('click', () => armShortcutRecorder('games'));
 
     // One listener does double duty: while `recordingNeroShortcut` is armed,
     // the next keypress anywhere becomes the new combo (works even though
@@ -4260,30 +4533,33 @@
     document.addEventListener('keydown', async (e) => {
         if (appLocked) return;
         if (recordingNeroShortcut) {
-            e.preventDefault();
-            if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return; // wait for a real key, not just the modifier
-            recordingNeroShortcut = false;
-            neroPopupShortcut = formatShortcutCombo(e);
-            document.getElementById('neroShortcutInput').value = neroPopupShortcut;
-            await window.nerobot.setAppConfig({ neroPopupShortcut });
+            const combo = await recordShortcutKey('nero', e);
+            if (combo) {
+                neroPopupShortcut = combo;
+                document.getElementById('neroShortcutInput').value = combo;
+                await window.nerobot.setAppConfig({ neroPopupShortcut });
+                showSaved();
+            }
             return;
         }
         if (recordingFixTextShortcut) {
-            e.preventDefault();
-            if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
-            recordingFixTextShortcut = false;
-            fixTextShortcut = formatShortcutCombo(e);
-            document.getElementById('fixTextShortcutInput').value = fixTextShortcut;
-            await window.nerobot.setAppConfig({ fixTextShortcut });
+            const combo = await recordShortcutKey('fixText', e);
+            if (combo) {
+                fixTextShortcut = combo;
+                document.getElementById('fixTextShortcutInput').value = combo;
+                await window.nerobot.setAppConfig({ fixTextShortcut });
+                showSaved();
+            }
             return;
         }
         if (recordingGamesShortcut) {
-            e.preventDefault();
-            if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
-            recordingGamesShortcut = false;
-            gamesPopupShortcut = formatShortcutCombo(e);
-            document.getElementById('gamesShortcutInput').value = gamesPopupShortcut;
-            await window.nerobot.setAppConfig({ gamesPopupShortcut });
+            const combo = await recordShortcutKey('games', e);
+            if (combo) {
+                gamesPopupShortcut = combo;
+                document.getElementById('gamesShortcutInput').value = combo;
+                await window.nerobot.setAppConfig({ gamesPopupShortcut });
+                showSaved();
+            }
             return;
         }
         const typingInField = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
@@ -4952,15 +5228,20 @@
 
     window.nerobot.onNewNotification((entry) => {
         notifications.push(entry);
+        // Same cap as main (MAX_NOTIFICATIONS) so the badge counts agree.
+        if (notifications.length > 200) notifications.splice(0, notifications.length - 200);
         renderNotifBadge();
         updateTabUnreadIndicator(entry.profileId);
         if (notifOverlay.classList.contains('open')) renderNotifPanel();
     });
-    window.nerobot.listNotifications().then((list) => {
-        notifications = list || [];
-        renderNotifBadge();
-        renderTabs();
-    });
+    function loadNotificationsFromMain() {
+        window.nerobot.listNotifications().then((list) => {
+            notifications = list || [];
+            renderNotifBadge();
+            renderTabs();
+        }).catch(() => {}); // refused while the app is locked — reloaded on unlock
+    }
+    if (!appLocked) loadNotificationsFromMain();
 
     // ============================
     // Genel tab — global settings form
@@ -4989,16 +5270,20 @@
         {
             title: { tr: 'Komutlar', en: 'Commands' },
             fields: [
+                // 'web' runs no bot, so no commands either.
                 { key: 'debugPrefix', type: 'text', label: { tr: 'Komut prefix', en: 'Command prefix' },
+                  showIf: () => settingsProfileCtx.mode !== 'web',
                   hint: { tr: 'Admin komutları (örn: "!help") — AI Bot kapalıyken de çalışır.', en: 'Admin commands (e.g. "!help") — work even while AI Bot is off.' } },
             ],
         },
         {
             title: { tr: 'İzinler', en: 'Permissions' },
             fields: [
-                { key: 'notificationsEnabled', type: 'toggle', label: { tr: 'Bildirim izni', en: 'Notification permission' } },
-                { key: 'locationEnabled', type: 'toggle', label: { tr: 'Konum izni', en: 'Location permission' } },
-                { key: 'cameraEnabled', type: 'toggle', label: { tr: 'Kamera izni', en: 'Camera permission' },
+                // Page permissions — a Telegram profile in 'bot' mode has no
+                // web page to grant them to.
+                { key: 'notificationsEnabled', type: 'toggle', label: { tr: 'Bildirim izni', en: 'Notification permission' }, showIf: () => profileHasWebPage() },
+                { key: 'locationEnabled', type: 'toggle', label: { tr: 'Konum izni', en: 'Location permission' }, showIf: () => profileHasWebPage() },
+                { key: 'cameraEnabled', type: 'toggle', label: { tr: 'Kamera izni', en: 'Camera permission' }, showIf: () => profileHasWebPage(),
                   hint: { tr: "Kapalıyken görüntülü aramalar reddedilir. Mikrofon her zaman açık (WhatsApp'ın sesli özellikleri için) — bu, WhatsApp'ın diğer isteklerini kapsar.",
                           en: "Video calls are rejected while this is off. Microphone is always on (for WhatsApp's voice features) — this covers WhatsApp's other requests." } },
             ],
@@ -5068,9 +5353,9 @@
                 // switching imageGenProvider back and forth never loses one
                 // to overwrite the other — both just sit in state, only the
                 // active one's box is shown (see showIf + applyVisibility).
-                { key: 'imageGenApiKeyOpenai', type: 'text', label: { tr: 'OpenAI API anahtarı', en: 'OpenAI API key' },
+                { key: 'imageGenApiKeyOpenai', type: 'password', label: { tr: 'OpenAI API anahtarı', en: 'OpenAI API key' },
                   showIf: v => !!v.imageGenEnabled && v.imageGenProvider === 'openai' },
-                { key: 'imageGenApiKeyStability', type: 'text', label: { tr: 'Stability AI API anahtarı', en: 'Stability AI API key' },
+                { key: 'imageGenApiKeyStability', type: 'password', label: { tr: 'Stability AI API anahtarı', en: 'Stability AI API key' },
                   showIf: v => !!v.imageGenEnabled && v.imageGenProvider === 'stability' },
             ],
         },
@@ -5078,9 +5363,9 @@
             title: { tr: 'Hız Limiti', en: 'Rate Limit' },
             fields: [
                 { key: 'rateLimitEnabled', type: 'toggle', label: { tr: 'Hız limiti aktif', en: 'Rate limit active' } },
-                { key: 'rateLimitMaxTokens', type: 'number', label: { tr: 'Maks. ardışık mesaj', en: 'Max burst messages' } },
-                { key: 'rateLimitRefillMs', type: 'number', label: { tr: 'Yenileme süresi (ms)', en: 'Refill interval (ms)' } },
-                { key: 'rateLimitWarnCooldown', type: 'number', label: { tr: 'Uyarı aralığı (ms)', en: 'Warning cooldown (ms)' } },
+                { key: 'rateLimitMaxTokens', type: 'number', min: 1, step: 1, label: { tr: 'Maks. ardışık mesaj', en: 'Max burst messages' } },
+                { key: 'rateLimitRefillMs', type: 'number', min: 1000, step: 1000, label: { tr: 'Yenileme süresi (ms)', en: 'Refill interval (ms)' } },
+                { key: 'rateLimitWarnCooldown', type: 'number', min: 0, step: 1000, label: { tr: 'Uyarı aralığı (ms)', en: 'Warning cooldown (ms)' } },
                 { key: 'rateLimitWarnMessage', type: 'text', label: { tr: 'Uyarı mesajı', en: 'Warning message' } },
             ],
         },
@@ -5159,7 +5444,10 @@
                             input.value = values[f.key] ?? f.options[0][0];
                         } else {
                             input = document.createElement('input');
-                            input.type = f.type; // text | number
+                            input.type = f.type; // text | number | password (API keys)
+                            if (f.min !== undefined) input.min = String(f.min);
+                            if (f.step !== undefined) input.step = String(f.step);
+                            if (f.type === 'password') input.autocomplete = 'off';
                             input.value = values[f.key] ?? '';
                         }
                         wrap.appendChild(input);
@@ -5228,18 +5516,56 @@
         return generalForm.collect();
     }
 
+    // Shared result handling for every settings:save call: main refuses a
+    // save that would break the bot (empty/overlapping prefixes) with
+    // {ok:false,error}, and lists in _rejected the fields it kept unchanged
+    // (empty or invalid numbers/texts). Returns the accepted values, or null.
+    async function handleSettingsSaveResult(values) {
+        if (!values || values.ok === false) {
+            await showAlertPanel(values?.error || t('settingsSaveFailed'));
+            return values?.values || null;
+        }
+        if (values._rejected?.length) showSaved(t('settingsFieldsKept')(values._rejected.length));
+        else showSaved();
+        return values;
+    }
+
+    // "Herkese önek olmadan cevap ver" with the whitelist off answers EVERY
+    // chat — the !noprefixall command asks first; the UI now does too.
+    async function confirmRiskyNoPrefixAll(updates, previous) {
+        const next = { ...previous, ...updates };
+        const risky = next.noPrefixAll && !next.whitelistMode;
+        const wasRisky = previous.noPrefixAll && !previous.whitelistMode;
+        if (!risky || wasRisky) return true;
+        return showConfirmPanel(t('noPrefixAllConfirm'), { danger: true });
+    }
+
     saveBtn.addEventListener('click', async () => {
         if (!activeProfileId) return;
-        const values = await window.nerobot.saveSettings(activeProfileId, collectForm());
+        // One Kaydet for the whole Genel tab: the AI section's edits used to
+        // be silently dropped unless its own button was pressed.
+        const updates = { ...collectForm(), ...(aiSectionsEnabled ? aiForm.collect() : {}) };
+        if (!(await confirmRiskyNoPrefixAll(updates, { ...(generalForm.getLastValues() || {}), ...(aiForm.getLastValues() || {}) }))) return;
+        const values = await handleSettingsSaveResult(await window.nerobot.saveSettings(activeProfileId, updates));
+        if (!values) return;
         const langChanged = values.helpLanguage && values.helpLanguage !== lang;
         buildForm(values); // re-render with the values main actually accepted
+        if (aiSectionsEnabled) aiForm.build(values);
         if (langChanged) {
             lang = values.helpLanguage;
             applyLanguage();
             buildForm(values); // rebuild again in the now-active language
         }
-        showSaved();
     });
+
+    // After a reset the AI on/off state and device picks changed too — the
+    // AI sections, Hizmetler's switch and the device selects must follow.
+    async function refreshAfterSettingsReset(values) {
+        const entry = allProfiles.find(p => p.id === activeProfileId);
+        syncAiSectionsVisibility(!!values.aiChatEnabled && entry?.mode !== 'web');
+        if (typeof loadServicesTab === 'function') loadServicesTab();
+        if (aiSectionsEnabled) loadAiGeneralTab();
+    }
 
     resetBtn.addEventListener('click', async () => {
         if (!activeProfileId) return;
@@ -5252,6 +5578,7 @@
             applyLanguage();
             buildForm(values);
         }
+        await refreshAfterSettingsReset(values);
         showSaved();
     });
 
@@ -5276,7 +5603,7 @@
         // refresh it here.
         if (currentChatId) openChat(currentChatId);
         if (activeTab === 'lists') loadList();
-        if (aiSectionsEnabled) loadAiGeneralTab();
+        await refreshAfterSettingsReset(values);
         showSaved();
     });
 
@@ -5451,7 +5778,11 @@
     chatSelect.addEventListener('change', () => openChat(chatSelect.value));
     aiChatSelect.addEventListener('change', () => openChat(aiChatSelect.value));
     function openChatFromManualInput(id) {
-        if (id) openChat(id.includes('@') ? id : (/^\d+$/.test(id) ? id + '@c.us' : id));
+        if (!id) return;
+        // Telegram ids are bare (possibly negative) numbers — the WhatsApp
+        // "@c.us" suffix wrote per-chat settings under an id that never matched.
+        const isTelegram = allProfiles.find(p => p.id === activeProfileId)?.platform === 'telegram';
+        openChat(isTelegram || id.includes('@') ? id : (/^\d+$/.test(id) ? id + '@c.us' : id));
     }
     chatIdOpen.addEventListener('click', () => openChatFromManualInput(chatIdManual.value.trim()));
     aiChatIdOpen.addEventListener('click', () => openChatFromManualInput(aiChatIdManual.value.trim()));
@@ -5646,7 +5977,16 @@
     // main.js's openProfile/bot.js's automationEnabled) — Sohbet/Listeler/
     // Hizmetler exist to configure a bot, so there's nothing for them to do
     // there. Falls back to Genel if one of them was the active tab.
+    // Platform/mode of the profile whose settings are shown — read by the
+    // forms' showIf predicates (see SECTIONS_I18N).
+    var settingsProfileCtx = { platform: 'whatsapp', mode: 'both' };
+    function profileHasWebPage() {
+        return !(settingsProfileCtx.platform === 'telegram' && settingsProfileCtx.mode === 'bot');
+    }
     function updateModeTabVisibility(mode) {
+        const entry = allProfiles.find(p => p.id === activeProfileId);
+        settingsProfileCtx = { platform: entry?.platform || 'whatsapp', mode: mode || 'both' };
+        document.getElementById('mediaDevicesSection').style.display = profileHasWebPage() ? '' : 'none';
         const hideBotTabs = mode === 'web';
         document.getElementById('tabBtnChat').style.display = hideBotTabs ? 'none' : '';
         document.getElementById('tabBtnLists').style.display = hideBotTabs ? 'none' : '';
@@ -5708,6 +6048,14 @@
                     aiDebugChatSelect.appendChild(opt);
                 }
             }
+        }
+        // A saved debug chat that isn't in the list (bot still connecting,
+        // chat not loaded) must still show as set, not as "pick a chat".
+        if (selectedId && ![...aiDebugChatSelect.options].some(o => o.value === selectedId)) {
+            const opt = document.createElement('option');
+            opt.value = selectedId;
+            opt.textContent = selectedId;
+            aiDebugChatSelect.appendChild(opt);
         }
         aiDebugChatSelect.value = selectedId || '';
         updateDebugChatHint(selectedId);
@@ -5811,16 +6159,16 @@
 
     aiDebugChatSelect.addEventListener('change', async () => {
         if (!activeProfileId) return;
-        const values = await window.nerobot.saveSettings(activeProfileId, { debugChatId: aiDebugChatSelect.value || null });
-        updateDebugChatHint(values.debugChatId);
-        showSaved();
+        const values = await handleSettingsSaveResult(await window.nerobot.saveSettings(activeProfileId, { debugChatId: aiDebugChatSelect.value || null }));
+        if (values) updateDebugChatHint(values.debugChatId);
     });
 
     aiSaveBtn.addEventListener('click', async () => {
         if (!activeProfileId) return;
-        const values = await window.nerobot.saveSettings(activeProfileId, aiForm.collect());
-        aiForm.build(values);
-        showSaved();
+        const updates = aiForm.collect();
+        if (!(await confirmRiskyNoPrefixAll(updates, { ...(generalForm.getLastValues() || {}), ...(aiForm.getLastValues() || {}) }))) return;
+        const values = await handleSettingsSaveResult(await window.nerobot.saveSettings(activeProfileId, updates));
+        if (values) aiForm.build(values);
     });
 
     aiClearAllBtn.addEventListener('click', async () => {
@@ -6069,13 +6417,24 @@
 
     document.getElementById('aiModeSelect').addEventListener('change', async (e) => {
         const mode = e.target.value;
+        if (mode === 'agent') {
+            // No installed agent → refuse instead of saving a mode that has
+            // nothing to talk to (AI broke silently).
+            const { cliAgents } = await aiProviders();
+            if (!(cliAgents || []).some(a => a.installed)) {
+                await showAlertPanel(t('aiNoAgentInstalled'));
+                await updateOllamaConnectionSection(await window.nerobot.getOllamaStatus()); // revert the select
+                return;
+            }
+        }
         await window.nerobot.setOllamaConnectionMode(mode);
         const status = await window.nerobot.getOllamaStatus();
         if (mode === 'agent') {
             // İlk kurulu ajanı seç — kullanıcı ayrıca bir adım atmak zorunda kalmasın.
             const { cliAgents } = await aiProviders();
-            const ilk = (cliAgents || []).find(a => a.installed);
-            if (ilk) await window.nerobot.setAiAgent(status.aiAgentId || ilk.id);
+            const installed = (cliAgents || []).filter(a => a.installed);
+            const keep = installed.some(a => a.id === status.aiAgentId);
+            await window.nerobot.setAiAgent(keep ? status.aiAgentId : installed[0].id);
         }
         const cloudId = status.aiCloudProvider || (await aiProviders()).cloudProviders[0].id;
         if (mode === 'api' && !(status.aiApiKeyPresent || {})[cloudId]) await openOllamaApiKeyPanel();
@@ -6092,7 +6451,14 @@
     });
     document.getElementById('aiLocalEndpointInput').addEventListener('change', async (e) => {
         const runtimeId = document.getElementById('aiLocalRuntimeSelect').value;
-        await window.nerobot.setAiLocalRuntime(runtimeId, e.target.value.trim());
+        const url = e.target.value.trim();
+        if (url && !/^https?:\/\/[^\s/]+/i.test(url)) {
+            showSaved(t('aiUrlInvalid'));
+            return;
+        }
+        await window.nerobot.setAiLocalRuntime(runtimeId, url);
+        // Empty → main falls back to the runtime's default address: show it.
+        await updateOllamaConnectionSection(await window.nerobot.getOllamaStatus());
         await refreshAiProbe();
         showSaved();
     });
@@ -6112,7 +6478,12 @@
     });
     document.getElementById('aiCloudBaseUrlInput').addEventListener('change', async (e) => {
         const providerId = document.getElementById('aiCloudProviderSelect').value;
-        await window.nerobot.setAiCloudProvider(providerId, e.target.value.trim());
+        const url = e.target.value.trim();
+        if (url && !/^https?:\/\/[^\s/]+/i.test(url)) {
+            showSaved(t('aiUrlInvalid'));
+            return;
+        }
+        await window.nerobot.setAiCloudProvider(providerId, url);
         showSaved();
     });
     document.getElementById('ollamaConnectionChangeKeyBtn').addEventListener('click', async () => {
@@ -7201,6 +7572,7 @@
         });
 
         const result = await window.nerobot.installOllama();
+        if (typeof offProgress === 'function') offProgress();
         closeModal('ollamaInstallOverlay');
         if (!result.ok) await showAlertPanel(t('ollamaInstallFailed')(result.error || '?'));
         return !!result.ok;
@@ -7700,6 +8072,8 @@
     // to Home) — the Sohbet-tab selection and the topbar status/settings
     // drawer all belong to ONE profile at a time and must not leak state
     // from whichever profile was active a moment ago.
+    let settingsNotReady = false;
+    let settingsReadyRetry = null;
     async function onActiveProfileChanged() {
         currentChatId = null;
         chatNames = {};
@@ -7731,6 +8105,17 @@
         updatePlatformTabVisibility(entry?.platform);
 
         const values = await window.nerobot.getSettings(activeProfileId);
+        // Store not created yet (profile still starting): don't build a blank
+        // form that a later Save would write back over every setting — keep
+        // Save disabled and retry shortly.
+        settingsNotReady = !!values.notReady;
+        saveBtn.disabled = settingsNotReady;
+        if (settingsNotReady) {
+            const forId = activeProfileId;
+            clearTimeout(settingsReadyRetry);
+            settingsReadyRetry = setTimeout(() => { if (activeProfileId === forId) onActiveProfileChanged(); }, 1000);
+            return;
+        }
         syncAiSectionsVisibility(!!values.aiChatEnabled && entry?.mode !== 'web');
 
         // Only rebuild the profile-tab form/reload its data if the panel is
@@ -7764,7 +8149,14 @@
     async function openTile(id) {
         await leaveOllamaTabIfActive();
         await leaveGamesTabIfActive();
-        applyProfilesPayload(await window.nerobot.openProfile(id));
+        try {
+            applyProfilesPayload(await window.nerobot.openProfile(id));
+        } catch (err) {
+            // e.g. closed again while still opening — resync instead of
+            // leaving a stale tab strip.
+            await refreshProfiles();
+            await showAlertPanel(t('profileOpenFailed')(err?.message || String(err)));
+        }
         await onActiveProfileChanged();
     }
 
@@ -7812,9 +8204,18 @@
         }
     }
 
+    // Main drops a closed/deleted profile's notifications — mirror that, or
+    // the badge stays inflated and clicking one opened a ghost profile.
+    function dropNotificationsOf(profileId) {
+        notifications = notifications.filter(n => n.profileId !== profileId);
+        renderNotifBadge();
+        if (notifOverlay.classList.contains('open')) renderNotifPanel();
+    }
+
     async function closeTab(id) {
         const wasActive = id === activeProfileId;
         applyProfilesPayload(await window.nerobot.closeProfile(id));
+        dropNotificationsOf(id);
         if (wasActive) await onActiveProfileChanged();
     }
 
@@ -7896,6 +8297,17 @@
         setBackdropSrc(URL.createObjectURL(new Blob([jpeg], { type: 'image/jpeg' })));
     });
     window.addEventListener('resize', () => { if (backdropLive) placeBackdropContent(); });
+
+    // Any IPC call that fails without its own catch (e.g. "Profile is not
+    // open." when a profile closes mid-action) used to vanish as an
+    // unhandled rejection with no feedback at all — surface it instead.
+    window.addEventListener('unhandledrejection', (ev) => {
+        const msg = String(ev.reason?.message || ev.reason || '')
+            .replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+        if (!msg || appLocked || /Uygulama kilitli/.test(msg)) return;
+        console.error('[NeRoBoT UI]', ev.reason);
+        showAlertPanel(t('unexpectedError')(msg));
+    });
 
     // In-app replacement for window.confirm() — resolves true/false exactly
     // like confirm() would, just via a styled panel instead of a native
@@ -8055,10 +8467,21 @@
     }
     document.getElementById('telegramCredsSaveBtn').addEventListener('click', async () => {
         const apiId = document.getElementById('telegramApiIdInput').value.trim();
-        const apiHash = document.getElementById('telegramApiHashInput').value.trim();
-        if (!apiId || !apiHash) return;
+        const apiHashInput = document.getElementById('telegramApiHashInput');
+        const apiHash = apiHashInput.value.trim();
+        const gateHint = document.getElementById('gsAppTelegramGateHint');
+        // api_id is numeric; anything else used to be stored as null while the
+        // UI carried on as if it had worked.
+        if (!/^\d+$/.test(apiId) || !apiHash) {
+            gateHint.textContent = t('telegramCredsInvalid');
+            gateHint.style.display = '';
+            return;
+        }
         await window.nerobot.setTelegramAppCredentials(apiId, apiHash);
-        document.getElementById('gsAppTelegramGateHint').style.display = 'none';
+        apiHashInput.value = '';
+        apiHashInput.placeholder = t('telegramHashSaved');
+        gateHint.style.display = 'none';
+        showSaved();
         if (pendingModeChangeProfileId) {
             const id = pendingModeChangeProfileId;
             const mode = pendingTelegramMode || 'bot';
@@ -8138,6 +8561,10 @@
         }
         applyProfilesPayload(result);
         if (settingsModalProfileId === id) highlightProfileMode(mode);
+        // The session was reopened in the new mode — tabs/sections that
+        // depend on the mode (Sohbet/Listeler/Hizmetler, AI sections) must
+        // follow now, not on some later unrelated event.
+        if (id === activeProfileId) await onActiveProfileChanged();
     }
 
     document.getElementById('modeSettingOptions').addEventListener('click', async (e) => {
@@ -8202,6 +8629,7 @@
         const wasActive = id === activeProfileId;
         closeProfileSettingsModal();
         applyProfilesPayload(await window.nerobot.deleteProfile(id));
+        dropNotificationsOf(id);
         if (wasActive) await onActiveProfileChanged();
     });
 
