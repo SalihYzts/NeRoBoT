@@ -4389,7 +4389,9 @@
         // A bare key would be swallowed in every WhatsApp/Telegram view.
         if (!e.ctrlKey && !e.altKey) return t('shortcutNeedsModifier');
         const clash = Object.entries(SHORTCUT_RECORDERS).find(([k, r]) => k !== which && r.get().toUpperCase() === combo.toUpperCase());
-        return clash ? t('shortcutInUse') : null;
+        // Fixed tab keys (Ctrl+T/W, Ctrl+Tab — see handleTabsKey/stepTabSwitcher).
+        const fixed = ['CTRL+T', 'CTRL+W', 'CTRL+TAB', 'CTRL+SHIFT+TAB'].includes(combo.toUpperCase());
+        return clash || fixed ? t('shortcutInUse') : null;
     }
     // Shared keydown step for an armed recorder. Returns the accepted combo,
     // or null (keep waiting / cancelled / rejected).
@@ -4725,6 +4727,9 @@
         } else if (e.key === 'Escape' && tabSwitcherOpen) {
             e.preventDefault();
             cancelTabSwitcher();
+        } else if (e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && !e.repeat && ['t', 'w'].includes(e.key.toLowerCase())) {
+            e.preventDefault();
+            handleTabsKey(e.key.toLowerCase() === 't' ? 'home' : 'close');
         }
     });
     document.addEventListener('keyup', (e) => {
@@ -4733,6 +4738,20 @@
     window.nerobot.onTabSwitcherStep((direction) => stepTabSwitcher(direction));
     window.nerobot.onTabSwitcherCommit(() => commitTabSwitcher());
     window.nerobot.onTabSwitcherCancel(() => cancelTabSwitcher());
+
+    // Ctrl+T → Home (profiles) screen, Ctrl+W → close the tab on screen
+    // (nothing on Home itself). Reaches here from the keydown listener above
+    // or, while a WA/Telegram/NeRoChAt view has focus, from main's
+    // wireGlobalShortcuts. Ignored while a modal or the switcher is up, so
+    // it never pulls a tab out from under an open panel.
+    function handleTabsKey(action) {
+        if (appLocked || tabSwitcherOpen || document.querySelector('.modalOverlay.open')) return;
+        if (action === 'home') activateTab(null);
+        else if (ollamaTabActive) closeOllamaTab();
+        else if (gamesTabActive) closeGamesTab();
+        else if (activeProfileId) closeTab(activeProfileId);
+    }
+    window.nerobot.onTabsKey((action) => handleTabsKey(action));
 
     // ============================
     // NeRoChAt quick-access popup — the actual small chat window (model
@@ -7817,7 +7836,7 @@
     // movement-threshold check) so it can't fight a native DnD gesture for
     // the same mousedown the way the old draggable=true version could.
     const TAB_DRAG_THRESHOLD = 6; // px of movement before a press counts as a reorder-drag instead of a click
-    let tabPress = null; // { kind: 'profile'|'ollama'|'games', id?, downX, downY, dragging }
+    let tabPress = null; // { kind: 'profile'|'ollama'|'games'|'close'|'middleClose', id?, downX, downY, dragging }
 
     function clearDragOverMarkers() {
         document.querySelectorAll('.profileTab.dragOverBefore, .profileTab.dragOverAfter')
@@ -7845,6 +7864,14 @@
 
     const tabStripEl = document.getElementById('tabStrip');
     tabStripEl.addEventListener('pointerdown', (e) => {
+        // Middle button closes the tab, like a browser — resolved again at
+        // pointerup (same renderTabs()-mid-press story as the ✕ below).
+        if (e.button === 1) {
+            e.preventDefault(); // no autoscroll cursor
+            const info = tabPressInfoFromEl(e.target);
+            if (info) tabPress = { kind: 'middleClose', closeKind: info.kind, id: info.id };
+            return;
+        }
         if (e.button !== 0) return;
         // Close (✕) buttons get the same DOM-node-may-not-survive-to-pointerup
         // treatment as the rest of the tab below — they're rebuilt by
@@ -7884,12 +7911,12 @@
         if (!tabPress) return;
         const press = tabPress;
         tabPress = null;
-        if (press.kind === 'close') {
+        if (press.kind === 'close' || press.kind === 'middleClose') {
             // Re-resolve fresh at the pointer's actual release position,
             // same as tab activation below — not the node captured at
             // pointerdown, which renderTabs() may have already replaced.
             const overEl = document.elementFromPoint(e.clientX, e.clientY);
-            const info = overEl?.closest('.tabClose') ? tabPressInfoFromEl(overEl) : null;
+            const info = (press.kind === 'middleClose' || overEl?.closest('.tabClose')) ? tabPressInfoFromEl(overEl) : null;
             if (!info || info.kind !== press.closeKind) return;
             if (info.kind === 'profile' && info.id !== press.id) return;
             if (info.kind === 'ollama') closeOllamaTab();

@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld('nerobot', {
     onTabSwitcherStep: (cb) => ipcRenderer.on('tabSwitcher:step', (_e, direction) => cb(direction)),
     onTabSwitcherCommit: (cb) => ipcRenderer.on('tabSwitcher:commit', () => cb()),
     onTabSwitcherCancel: (cb) => ipcRenderer.on('tabSwitcher:cancel', () => cb()),
+    onTabsKey: (cb) => ipcRenderer.on('tabs:key', (_e, action) => cb(action)),
 
     // Window controls (frame: false — #topbar's own minimize/maximize/close
     // buttons replace the native title bar's).

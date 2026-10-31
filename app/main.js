@@ -260,6 +260,14 @@ function isControlKeyUp(input) {
 function matchesEscapeKeyDown(input) {
     return input.type === 'keyDown' && !input.isAutoRepeat && input.key === 'Escape';
 }
+// Browser-style tab keys — Ctrl+T jumps to the Home (profiles) screen,
+// Ctrl+W closes whichever tab is on screen. Fixed combos like Ctrl+Tab
+// above (the renderer's shortcut recorder refuses them); Shift/Alt held
+// means it's some other combo, so those don't count.
+function matchesPlainCtrlKey(input, key) {
+    return input.type === 'keyDown' && !input.isAutoRepeat && input.control && !input.alt && !input.shift && !input.meta
+        && String(input.key).toUpperCase() === key;
+}
 
 // ============================
 // Cross-profile notification feed — every WA/Telegram profile's incoming
@@ -333,6 +341,9 @@ function wireGlobalShortcuts(webContents, session) {
             if (win && !win.isDestroyed()) win.webContents.send('tabSwitcher:commit');
         } else if (matchesEscapeKeyDown(input)) {
             if (win && !win.isDestroyed()) win.webContents.send('tabSwitcher:cancel');
+        } else if (matchesPlainCtrlKey(input, 'T') || matchesPlainCtrlKey(input, 'W')) {
+            event.preventDefault();
+            if (win && !win.isDestroyed()) win.webContents.send('tabs:key', input.key.toUpperCase() === 'T' ? 'home' : 'close');
         } else if (session && matchesFixTextShortcut(input)) {
             event.preventDefault();
             handleFixTextShortcut(session).catch(err => console.error('[fixText]', err.message || err));
