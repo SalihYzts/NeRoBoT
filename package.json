@@ -1,6 +1,6 @@
 {
   "name": "nerobot",
-  "version": "4.4.34",
+  "version": "4.4.35",
   "description": "NeRoBoT masaüstü uygulaması",
   "main": "app/main.js",
   "scripts": {

@@ -1,3 +1,17 @@
+## v4.4.35 - 2026-10-31
+
+### Yeni Özellikler
+
+- **Tarayıcı gibi sekme kısayolları.**
+  - `Ctrl+T` Ana sayfaya (profiller ekranı) geçiyor; açık sekmeler kapanmıyor.
+  - `Ctrl+W` ekrandaki sekmeyi kapatıyor (WhatsApp/Telegram profili,
+    NeRoChAt ya da Oyunlar).
+  - Bir sekmeye **orta tuşla (tekerlek) tıklamak** onu kapatıyor.
+
+  WhatsApp, Telegram ya da NeRoChAt'a yazı yazarken de çalışıyorlar. Ayarlar
+  gibi bir pencere açıkken devre dışı, böylece arkadaki sekme yanlışlıkla
+  kapanmıyor. Bu tuşlar artık başka bir kısayola atanamıyor.
+
 ## v4.4.34 - 2026-10-31
 
 ### Düzeltmeler — Bot
