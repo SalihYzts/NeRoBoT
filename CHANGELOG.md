@@ -1,3 +1,22 @@
+## v4.4.33 - 2026-10-31
+
+### Yeni Özellikler
+
+- **Üç yeni oyun.** Oyunlar sekmesinde ve hızlı oyun penceresinde (Ctrl+Shift+O):
+  - **Raket Düellosu** — bilgisayara karşı, 7 sayı alan kazanır. Top her
+    vuruşta hızlanıyor, raketin neresine çarptığı açıyı belirliyor, hareket
+    halindeki raket falso veriyor. W/S, ↑/↓ ya da fare.
+  - **Tuğla Kırıcı** — 3 can; duvar bitince bir sıra daha uzun ve biraz daha
+    hızlı yeni duvar geliyor. ←/→, A/D ya da fare; Boşluk/tık ile top atılır.
+  - **Hafıza** — 4×4 kart eşleştirme; fare ya da oklar + Enter.
+
+### İyileştirmeler
+
+- **Açılır pencerelerin arkası artık canlı bulanık.** Ayarlar, oyun penceresi
+  gibi bir pencere açıldığında arkada donmuş bir ekran görüntüsü yerine
+  ekranın canlı hali bulanık görünüyor — WhatsApp/Telegram/NeRoChAt'ta gelen
+  mesajlar blur'un arkasında akmaya devam ediyor.
+
 ## v4.4.32 - 2026-10-31
 
 ### Yeni Özellikler
