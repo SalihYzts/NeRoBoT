@@ -69,7 +69,7 @@ Geliştirici: **Salih Yazıtaş**
 - Yerel YZ Desteği — Ollama üzerinden çektiğiniz istediğiniz modeli (görsel destekli modeller dahil) kullanın
 - Sohbet Hafızası — her sohbet/kullanıcı için ayrı bağlam, isteğe bağlı ortak hafızalı grup modu
 - Görsel & Dosya Okuma — görselleri (vision), PDF, Word ve düz metin/kod dosyalarını okuyup modele aktarır
-- AI Görsel Üretimi — istek üzerine görsel üretip sohbete geri gönderir
+- AI Görsel Üretimi — istek üzerine görsel üretip sohbete geri gönderir (Pollinations, OpenAI, Stability AI ya da kendi bilgisayarındaki ComfyUI: checkpoint'lerinden birini seç veya Flux/SD3/LoRA kurulumları için dışa aktardığın API iş akışını yapıştır)
 - Beyaz Liste / Kara Liste — belirli sohbetlere botu kullanma izni verin ya da engelleyin
 - Admin Paneli — sadece yetkili kişiler yönetim komutlarını kullanabilir; geri alınamaz işlemler onay gerektirir
 - Kişilik (Personality) — botun sistem mesajını global veya sohbet bazında değiştirin

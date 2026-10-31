@@ -158,6 +158,8 @@ contextBridge.exposeInMainWorld('nerobot', {
     setOllamaImageGenEnabled: (enabled) => ipcRenderer.invoke('ollama:setImageGenEnabled', enabled),
     setOllamaImageGenProvider: (provider) => ipcRenderer.invoke('ollama:setImageGenProvider', provider),
     setOllamaImageGenApiKey: (provider, apiKey) => ipcRenderer.invoke('ollama:setImageGenApiKey', provider, apiKey),
+    setOllamaImageGenComfy: (updates) => ipcRenderer.invoke('ollama:setImageGenComfy', updates),
+    listComfyModels: (endpoint) => ipcRenderer.invoke('imagegen:comfyModels', endpoint),
     // Sağlayıcı seçimi — hangi yerel çalışma zamanı (Ollama, LM Studio,
     // llama.cpp, vLLM, OpenAI-uyumlu herhangi biri) ya da hangi bulut
     // sağlayıcısı (OpenAI, OpenRouter, Groq, Together, Ollama Cloud …)

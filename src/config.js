@@ -75,12 +75,19 @@ const DEFAULTS = {
     // so there's nothing to configure before it works).
     imageGenEnabled:       true,
     // Which backend imageGenEnabled routes to — 'pollinations' (free, no
-    // key) | 'openai' | 'stability'. The latter two need their own API key
-    // below; switching providers keeps both keys around so flipping back
-    // and forth doesn't lose either one.
+    // key) | 'openai' | 'stability' | 'comfyui'. openai/stability need their
+    // own API key below; switching providers keeps both keys around so
+    // flipping back and forth doesn't lose either one.
     imageGenProvider:      'pollinations',
     imageGenApiKeyOpenai:     '',
     imageGenApiKeyStability:  '',
+    // ComfyUI: the user's own local server and which of its checkpoints to
+    // draw with — empty model means "the first image checkpoint it has".
+    // A workflow (ComfyUI's "Export (API)" JSON with %prompt% in it) replaces
+    // the built-in checkpoint graph for models that need their own nodes.
+    imageGenComfyEndpoint:    'http://127.0.0.1:8188',
+    imageGenComfyModel:       '',
+    imageGenComfyWorkflow:    '',
 
     // Browser permissions the embedded WhatsApp view grants — see
     // app/main.js's setPermissionRequestHandler. Microphone is always
@@ -143,6 +150,7 @@ export const PERSISTENT_KEYS = [
     'rateLimitWarnCooldown', 'rateLimitWarnMessage',
     'helpLanguage', 'aiErrorMessage', 'replyMode', 'imageEnabled', 'fileEnabled',
     'imageGenEnabled', 'imageGenProvider', 'imageGenApiKeyOpenai', 'imageGenApiKeyStability',
+    'imageGenComfyEndpoint', 'imageGenComfyModel', 'imageGenComfyWorkflow',
     'notificationsEnabled', 'locationEnabled', 'cameraEnabled', 'preferredMicId', 'preferredCameraId',
 ];
 

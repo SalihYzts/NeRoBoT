@@ -12,7 +12,7 @@ import { createProfileStore } from './config.js';
 import { createTelegramUtils, describeMedia } from './telegram-utils.js';
 import { createRateLimiter } from './ratelimit.js';
 import { createAi } from './ai.js';
-import { generateImage } from './imagegen.js';
+import { generateImage, imageGenOptions } from './imagegen.js';
 import { createCommands, AI_GATED_COMMANDS } from './commands.js';
 
 const require = createRequire(import.meta.url);
@@ -224,13 +224,10 @@ export function createTelegramBot({ profileId, profileDir, apiId, apiHash, sessi
                 if (intent.image) {
                     if (state.thinkEnabled) await sendText(chatId, state.thinkMessage);
                     try {
-                        const apiKey = state.imageGenProvider === 'openai' ? state.imageGenApiKeyOpenai
-                            : state.imageGenProvider === 'stability' ? state.imageGenApiKeyStability
-                            : undefined;
                         const genPrompt = images.length > 0
                             ? await describeImageForGeneration(images[0], intent.prompt || rawPrompt)
                             : (intent.prompt || rawPrompt);
-                        const { buffer, mimetype } = await generateImage(genPrompt, { provider: state.imageGenProvider, apiKey });
+                        const { buffer, mimetype } = await generateImage(genPrompt, imageGenOptions(state));
                         const caption = await describeGeneratedImage(memoryKey, rawPrompt, String(chatId))
                             .catch(err => { reportError('imageCaption', err); return undefined; });
                         await sendImage(chatId, buffer, mimetype, caption);

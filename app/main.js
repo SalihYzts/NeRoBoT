@@ -32,7 +32,7 @@ import {
 } from '../src/profiles.js';
 import { isOllamaInstalled, installOllama, openOllamaApp } from '../src/ollama-installer.js';
 import { isImageExt, extractFileText } from '../src/file-extract.js';
-import { generateImage } from '../src/imagegen.js';
+import { generateImage, imageGenOptions, listComfyModels } from '../src/imagegen.js';
 import {
     IMAGE_CLASSIFY_PROMPT, IMAGE_ACK_NOTE, IMAGE_DESCRIBE_FOR_GEN_PROMPT, IMAGE_READ_FALLBACK_PROMPT,
     pickClassifierModel, modelHasVision, pickVisionFallbackModel, resolveVisionModel,
@@ -2705,6 +2705,29 @@ ipcMain.handle('ollama:setImageGenApiKey', (_e, provider, apiKey) => {
     return status;
 });
 
+// NeRoChAt's ComfyUI address/checkpoint/workflow — `updates` carries any of
+// imageGenComfyEndpoint/imageGenComfyModel/imageGenComfyWorkflow. A
+// WA/Telegram profile stores the same keys through settings:save instead.
+ipcMain.handle('ollama:setImageGenComfy', (_e, updates) => {
+    const status = readAiStatus();
+    for (const key of ['imageGenComfyEndpoint', 'imageGenComfyModel', 'imageGenComfyWorkflow']) {
+        if (key in (updates || {})) status[key] = String(updates[key] ?? '').trim();
+    }
+    writeAiStatus(status);
+    return status;
+});
+
+// The checkpoint dropdown in both settings screens (a profile's AI tab and
+// NeRoChAt's) — asked live from the user's ComfyUI so a model they just
+// dropped into models/checkpoints shows up without restarting anything.
+ipcMain.handle('imagegen:comfyModels', async (_e, endpoint) => {
+    try {
+        return { ok: true, models: await listComfyModels(endpoint) };
+    } catch (err) {
+        return { ok: false, models: [], error: err.message || String(err) };
+    }
+});
+
 // 'local' (bir adresteki sunucu) | 'api' (bulut sağlayıcı) — hangisinin
 // neye çözümlendiği için bkz. src/ai-provider.js's resolveConnection.
 // Kullanıcı seçene kadar tanımsız kalır; index.html'in ensureAiOrPrompt()'u
@@ -2832,12 +2855,7 @@ ipcMain.handle('ollama:prepareImageForChat', async (_e, { model, imageBase64 }) 
 // for the renderer to display inline in the chat.
 ipcMain.handle('ollama:generateImage', async (_e, prompt) => {
     try {
-        const status = readAiStatus();
-        const provider = status.imageGenProvider || 'pollinations';
-        const apiKey = provider === 'openai' ? status.imageGenApiKeyOpenai
-            : provider === 'stability' ? status.imageGenApiKeyStability
-            : undefined;
-        const { buffer, mimetype } = await generateImage(prompt, { provider, apiKey });
+        const { buffer, mimetype } = await generateImage(prompt, imageGenOptions(readAiStatus()));
         return { ok: true, base64: buffer.toString('base64'), mimetype };
     } catch (err) {
         return { ok: false, error: err.message || String(err) };

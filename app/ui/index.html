@@ -1841,6 +1841,7 @@
                                             <option value="pollinations" id="ollamaImageGenProviderPollinations">Pollinations (ücretsiz, API anahtarı gerekmez)</option>
                                             <option value="openai" id="ollamaImageGenProviderOpenai">OpenAI (DALL·E) — API anahtarı gerekir</option>
                                             <option value="stability" id="ollamaImageGenProviderStability">Stability AI — API anahtarı gerekir</option>
+                                            <option value="comfyui" id="ollamaImageGenProviderComfy">ComfyUI — kendi bilgisayarında, yerel modellerle</option>
                                         </select>
                                     </div>
                                     <div class="field" id="ollamaImageGenApiKeyOpenaiField" style="display:none">
@@ -1850,6 +1851,20 @@
                                     <div class="field" id="ollamaImageGenApiKeyStabilityField" style="display:none">
                                         <label class="name" id="ollamaImageGenApiKeyStabilityLabel">Stability AI API anahtarı</label>
                                         <input type="text" id="ollamaImageGenApiKeyStability">
+                                    </div>
+                                    <div class="field" id="ollamaImageGenComfyEndpointField" style="display:none">
+                                        <label class="name" id="ollamaImageGenComfyEndpointLabel">ComfyUI adresi</label>
+                                        <input type="text" id="ollamaImageGenComfyEndpoint" placeholder="http://127.0.0.1:8188">
+                                    </div>
+                                    <div class="field" id="ollamaImageGenComfyModelField" style="display:none">
+                                        <label class="name" id="ollamaImageGenComfyModelLabel">ComfyUI modeli</label>
+                                        <select id="ollamaImageGenComfyModel"></select>
+                                        <div class="hint warn" id="ollamaImageGenComfyModelError" style="display:none"></div>
+                                    </div>
+                                    <div class="field" id="ollamaImageGenComfyWorkflowField" style="display:none">
+                                        <label class="name" id="ollamaImageGenComfyWorkflowLabel">Özel iş akışı (isteğe bağlı)</label>
+                                        <textarea id="ollamaImageGenComfyWorkflow" rows="4" spellcheck="false"></textarea>
+                                        <div class="hint" id="ollamaImageGenComfyWorkflowHint"></div>
                                     </div>
                                 </div>
                             </div>
@@ -2670,6 +2685,12 @@
             ollamaImageGenProviderStability: 'Stability AI — API anahtarı gerekir',
             ollamaImageGenApiKeyOpenaiLabel: 'OpenAI API anahtarı',
             ollamaImageGenApiKeyStabilityLabel: 'Stability AI API anahtarı',
+            ollamaImageGenProviderComfy: 'ComfyUI — kendi bilgisayarında, yerel modellerle',
+            ollamaImageGenComfyEndpointLabel: 'ComfyUI adresi',
+            ollamaImageGenComfyModelLabel: 'ComfyUI modeli',
+            ollamaImageGenComfyAuto: 'Otomatik (ilk görsel modeli)',
+            ollamaImageGenComfyWorkflowLabel: 'Özel iş akışı (isteğe bağlı)',
+            ollamaImageGenComfyWorkflowHint: 'Flux, SD3 ya da LoRA\'lı bir kurulum gibi checkpoint dışı modeller için: ComfyUI\'de Workflow → Export (API) ile aldığın JSON\'u yapıştır, istem kutusuna %prompt% yaz. Doluysa yukarıdaki model yerine bu kullanılır.',
             ollamaChatSelectLabel: 'Sohbet seç',
             ollamaChatSelectPlaceholder: '— sohbet seç —',
             ollamaChatSelectNone: 'Henüz bir NeRoChAt sohbeti yok — önce NeRoChAt\'te bir mesaj gönder.',
@@ -2992,6 +3013,12 @@
             ollamaImageGenProviderStability: 'Stability AI — needs an API key',
             ollamaImageGenApiKeyOpenaiLabel: 'OpenAI API key',
             ollamaImageGenApiKeyStabilityLabel: 'Stability AI API key',
+            ollamaImageGenProviderComfy: 'ComfyUI — on your own computer, with local models',
+            ollamaImageGenComfyEndpointLabel: 'ComfyUI address',
+            ollamaImageGenComfyModelLabel: 'ComfyUI model',
+            ollamaImageGenComfyAuto: 'Auto (first image model)',
+            ollamaImageGenComfyWorkflowLabel: 'Custom workflow (optional)',
+            ollamaImageGenComfyWorkflowHint: 'For models a plain checkpoint can\'t drive (Flux, SD3, a LoRA setup …): paste the JSON from ComfyUI\'s Workflow → Export (API) with %prompt% in the prompt box. When filled, it is used instead of the model above.',
             ollamaChatSelectLabel: 'Select conversation',
             ollamaChatSelectPlaceholder: '— select conversation —',
             ollamaChatSelectNone: "No NeRoChAt conversations yet — send a message in NeRoChAt first.",
@@ -3377,6 +3404,12 @@
         document.getElementById('ollamaImageGenProviderStability').textContent = t('ollamaImageGenProviderStability');
         document.getElementById('ollamaImageGenApiKeyOpenaiLabel').textContent = t('ollamaImageGenApiKeyOpenaiLabel');
         document.getElementById('ollamaImageGenApiKeyStabilityLabel').textContent = t('ollamaImageGenApiKeyStabilityLabel');
+        for (const id of ['ollamaImageGenProviderComfy', 'ollamaImageGenComfyEndpointLabel', 'ollamaImageGenComfyModelLabel',
+            'ollamaImageGenComfyWorkflowLabel', 'ollamaImageGenComfyWorkflowHint']) {
+            document.getElementById(id).textContent = t(id);
+        }
+        const comfyAuto = document.querySelector('#ollamaImageGenComfyModel option[value=""]');
+        if (comfyAuto) comfyAuto.textContent = t('ollamaImageGenComfyAuto');
         document.getElementById('ollamaChatSelectLabel').textContent = t('ollamaChatSelectLabel');
         const ollamaChatPlaceholderOpt = document.querySelector('#ollamaChatSelect option[value=""]');
         if (ollamaChatPlaceholderOpt) ollamaChatPlaceholderOpt.textContent = t('ollamaChatSelectPlaceholder');
@@ -5371,6 +5404,7 @@
                       ['pollinations', 'Pollinations (ücretsiz, API anahtarı gerekmez)'],
                       ['openai', 'OpenAI (DALL·E) — API anahtarı gerekir'],
                       ['stability', 'Stability AI — API anahtarı gerekir'],
+                      ['comfyui', 'ComfyUI — kendi bilgisayarında, yerel modellerle'],
                   ],
                   showIf: v => !!v.imageGenEnabled },
                 // Each provider's key is its own field/state key, so
@@ -5381,6 +5415,25 @@
                   showIf: v => !!v.imageGenEnabled && v.imageGenProvider === 'openai' },
                 { key: 'imageGenApiKeyStability', type: 'password', label: { tr: 'Stability AI API anahtarı', en: 'Stability AI API key' },
                   showIf: v => !!v.imageGenEnabled && v.imageGenProvider === 'stability' },
+                { key: 'imageGenComfyEndpoint', type: 'text', label: { tr: 'ComfyUI adresi', en: 'ComfyUI address' },
+                  hint: { tr: 'ComfyUI masaüstü uygulaması ve python main.py ikisi de varsayılan olarak http://127.0.0.1:8188 kullanır.',
+                          en: 'Both the ComfyUI desktop app and python main.py default to http://127.0.0.1:8188.' },
+                  showIf: v => !!v.imageGenEnabled && v.imageGenProvider === 'comfyui' },
+                // Options come live from the user's ComfyUI (its
+                // models/checkpoints folder), re-asked whenever the address
+                // changes — see loadOptions in createSettingsForm.
+                { key: 'imageGenComfyModel', type: 'select', label: { tr: 'ComfyUI modeli', en: 'ComfyUI model' },
+                  options: [], emptyOption: { tr: 'Otomatik (ilk görsel modeli)', en: 'Auto (first image model)' },
+                  loadOptions: async (v) => {
+                      const res = await window.nerobot.listComfyModels(v.imageGenComfyEndpoint);
+                      return { options: res.models.map(m => [m, m]), error: res.ok ? null : res.error };
+                  },
+                  reloadOn: ['imageGenProvider', 'imageGenComfyEndpoint'],
+                  showIf: v => !!v.imageGenEnabled && v.imageGenProvider === 'comfyui' && !(v.imageGenComfyWorkflow || '').trim() },
+                { key: 'imageGenComfyWorkflow', type: 'textarea', label: { tr: 'Özel iş akışı (isteğe bağlı)', en: 'Custom workflow (optional)' },
+                  hint: { tr: 'Flux, SD3 ya da LoRA\'lı bir kurulum gibi checkpoint dışı modeller için: ComfyUI\'de Workflow → Export (API) ile aldığın JSON\'u yapıştır, istem kutusuna %prompt% yaz. Doluysa yukarıdaki model yerine bu kullanılır.',
+                          en: 'For models a plain checkpoint can\'t drive (Flux, SD3, a LoRA setup …): paste the JSON from ComfyUI\'s Workflow → Export (API) with %prompt% in the prompt box. When filled, it is used instead of the model above.' },
+                  showIf: v => !!v.imageGenEnabled && v.imageGenProvider === 'comfyui' },
             ],
         },
         {
@@ -5459,13 +5512,8 @@
                             input.value = values[f.key] ?? '';
                         } else if (f.type === 'select') {
                             input = document.createElement('select');
-                            for (const [val, text] of f.options) {
-                                const opt = document.createElement('option');
-                                opt.value = val;
-                                opt.textContent = text;
-                                input.appendChild(opt);
-                            }
-                            input.value = values[f.key] ?? f.options[0][0];
+                            fillSelect(input, f, f.options, values[f.key]);
+                            input.value = values[f.key] ?? f.options[0]?.[0] ?? '';
                         } else {
                             input = document.createElement('input');
                             input.type = f.type; // text | number | password (API keys)
@@ -5491,6 +5539,69 @@
                 container.appendChild(sec);
             }
             applyVisibility();
+            for (const section of getSections()) {
+                for (const f of section.fields) {
+                    if (!f.loadOptions) continue;
+                    loadSelectOptions(f);
+                    for (const dep of f.reloadOn || []) {
+                        formInputs[dep]?.addEventListener('change', () => loadSelectOptions(f));
+                    }
+                }
+            }
+        }
+
+        // `emptyOption` is a "nothing picked" choice that always stays on
+        // top; the current value is kept as an option even when the source
+        // doesn't list it (server offline, model since renamed) so opening
+        // the form never silently changes a saved pick.
+        function fillSelect(select, f, options, current) {
+            select.innerHTML = '';
+            const all = [
+                ...(f.emptyOption ? [['', f.emptyOption[lang]]] : []),
+                ...options,
+            ];
+            if (current && !all.some(([val]) => val === current)) all.push([current, current]);
+            for (const [val, text] of all) {
+                const opt = document.createElement('option');
+                opt.value = val;
+                opt.textContent = text;
+                select.appendChild(opt);
+            }
+        }
+
+        // Fields with loadOptions(values) → { options, error } ask for their
+        // choices at runtime (e.g. the checkpoints of the user's ComfyUI).
+        // Only while the field is visible — no reason to probe a local
+        // server for a provider that isn't selected.
+        const optionLoads = {}; // key → latest request id, so a slow answer can't overwrite a newer one
+        async function loadSelectOptions(f) {
+            const select = formInputs[f.key];
+            const values = collect();
+            if (!select || (f.showIf && !f.showIf(values))) return;
+            const reqId = (optionLoads[f.key] || 0) + 1;
+            optionLoads[f.key] = reqId;
+            const current = select.value;
+            let result;
+            try {
+                result = await f.loadOptions(values);
+            } catch (err) {
+                result = { options: [], error: err.message || String(err) };
+            }
+            if (optionLoads[f.key] !== reqId || !select.isConnected) return;
+            fillSelect(select, f, result.options, current);
+            select.value = current;
+            const wrap = fieldWraps[f.key];
+            let err = wrap.querySelector('.hint.optionsError');
+            if (result.error) {
+                if (!err) {
+                    err = document.createElement('div');
+                    err.className = 'hint warn optionsError';
+                    wrap.appendChild(err);
+                }
+                err.textContent = result.error;
+            } else if (err) {
+                err.remove();
+            }
         }
 
         function collect() {
@@ -6222,6 +6333,13 @@
     const ollamaImageGenApiKeyOpenaiField = document.getElementById('ollamaImageGenApiKeyOpenaiField');
     const ollamaImageGenApiKeyStability = document.getElementById('ollamaImageGenApiKeyStability');
     const ollamaImageGenApiKeyStabilityField = document.getElementById('ollamaImageGenApiKeyStabilityField');
+    const ollamaImageGenComfyEndpoint = document.getElementById('ollamaImageGenComfyEndpoint');
+    const ollamaImageGenComfyEndpointField = document.getElementById('ollamaImageGenComfyEndpointField');
+    const ollamaImageGenComfyModel = document.getElementById('ollamaImageGenComfyModel');
+    const ollamaImageGenComfyModelField = document.getElementById('ollamaImageGenComfyModelField');
+    const ollamaImageGenComfyModelError = document.getElementById('ollamaImageGenComfyModelError');
+    const ollamaImageGenComfyWorkflow = document.getElementById('ollamaImageGenComfyWorkflow');
+    const ollamaImageGenComfyWorkflowField = document.getElementById('ollamaImageGenComfyWorkflowField');
 
     // A curated one-click shortlist — Ollama has no lightweight "search the
     // registry" endpoint to browse from, so this is a static pick of
@@ -6308,6 +6426,33 @@
         ollamaImageGenProviderField.style.display = on ? '' : 'none';
         ollamaImageGenApiKeyOpenaiField.style.display = on && ollamaImageGenProvider.value === 'openai' ? '' : 'none';
         ollamaImageGenApiKeyStabilityField.style.display = on && ollamaImageGenProvider.value === 'stability' ? '' : 'none';
+        const comfy = on && ollamaImageGenProvider.value === 'comfyui';
+        ollamaImageGenComfyEndpointField.style.display = comfy ? '' : 'none';
+        ollamaImageGenComfyModelField.style.display = comfy && !ollamaImageGenComfyWorkflow.value.trim() ? '' : 'none';
+        ollamaImageGenComfyWorkflowField.style.display = comfy ? '' : 'none';
+    }
+
+    // Same idea as the profile form's loadOptions: the checkpoint list is
+    // asked live from the user's ComfyUI, and the saved pick stays in the
+    // list even when the server is offline right now.
+    let comfyModelsReq = 0;
+    async function loadOllamaComfyModels(saved) {
+        if (!ollamaImageGenEnabled.checked || ollamaImageGenProvider.value !== 'comfyui') return;
+        const reqId = ++comfyModelsReq;
+        const res = await window.nerobot.listComfyModels(ollamaImageGenComfyEndpoint.value.trim());
+        if (reqId !== comfyModelsReq) return;
+        const models = [...res.models];
+        if (saved && !models.includes(saved)) models.push(saved);
+        ollamaImageGenComfyModel.innerHTML = '';
+        for (const [val, text] of [['', t('ollamaImageGenComfyAuto')], ...models.map(m => [m, m])]) {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = text;
+            ollamaImageGenComfyModel.appendChild(opt);
+        }
+        ollamaImageGenComfyModel.value = saved || '';
+        ollamaImageGenComfyModelError.textContent = res.ok ? '' : res.error;
+        ollamaImageGenComfyModelError.style.display = res.ok ? 'none' : '';
     }
 
     async function loadOllamaGeneralTab() {
@@ -6320,7 +6465,10 @@
         ollamaImageGenProvider.value = status.imageGenProvider || 'pollinations';
         ollamaImageGenApiKeyOpenai.value = status.imageGenApiKeyOpenai || '';
         ollamaImageGenApiKeyStability.value = status.imageGenApiKeyStability || '';
+        ollamaImageGenComfyEndpoint.value = status.imageGenComfyEndpoint || 'http://127.0.0.1:8188';
+        ollamaImageGenComfyWorkflow.value = status.imageGenComfyWorkflow || '';
         updateOllamaImageGenVisibility();
+        loadOllamaComfyModels(status.imageGenComfyModel || '');
         await updateOllamaConnectionSection(status);
     }
 
@@ -6518,10 +6666,26 @@
     ollamaImageGenEnabled.addEventListener('change', async () => {
         await window.nerobot.setOllamaImageGenEnabled(ollamaImageGenEnabled.checked);
         updateOllamaImageGenVisibility();
+        loadOllamaComfyModels(ollamaImageGenComfyModel.value);
         showSaved();
     });
     ollamaImageGenProvider.addEventListener('change', async () => {
         await window.nerobot.setOllamaImageGenProvider(ollamaImageGenProvider.value);
+        updateOllamaImageGenVisibility();
+        loadOllamaComfyModels(ollamaImageGenComfyModel.value);
+        showSaved();
+    });
+    ollamaImageGenComfyEndpoint.addEventListener('change', async () => {
+        await window.nerobot.setOllamaImageGenComfy({ imageGenComfyEndpoint: ollamaImageGenComfyEndpoint.value });
+        loadOllamaComfyModels(ollamaImageGenComfyModel.value);
+        showSaved();
+    });
+    ollamaImageGenComfyModel.addEventListener('change', async () => {
+        await window.nerobot.setOllamaImageGenComfy({ imageGenComfyModel: ollamaImageGenComfyModel.value });
+        showSaved();
+    });
+    ollamaImageGenComfyWorkflow.addEventListener('change', async () => {
+        await window.nerobot.setOllamaImageGenComfy({ imageGenComfyWorkflow: ollamaImageGenComfyWorkflow.value });
         updateOllamaImageGenVisibility();
         showSaved();
     });

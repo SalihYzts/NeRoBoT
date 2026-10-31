@@ -79,7 +79,7 @@ NeRoBoT is a Windows desktop app that runs local-AI-powered bots on top of **Wha
 - Local AI Support — use any model pulled through Ollama, including vision models
 - Chat Memory — separate context per chat/user, with optional shared-memory group mode
 - Image & File Reading — reads images (vision), PDF, Word, and plain-text/code files and feeds them to the model
-- AI Image Generation — generates images on request and sends them back into the chat
+- AI Image Generation — generates images on request and sends them back into the chat (Pollinations, OpenAI, Stability AI, or your own local ComfyUI: pick any of its checkpoints, or paste an exported API workflow for Flux/SD3/LoRA setups)
 - Whitelist / Blacklist — allow or block specific chats from using the bot
 - Admin Panel — only authorized users can run management commands, with a confirmation gate on destructive actions
 - Personality — change the bot's system prompt globally or per chat

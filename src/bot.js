@@ -7,7 +7,7 @@ import { createProfileStore } from './config.js';
 import { createUtils } from './utils.js';
 import { createRateLimiter } from './ratelimit.js';
 import { createAi } from './ai.js';
-import { generateImage } from './imagegen.js';
+import { generateImage, imageGenOptions } from './imagegen.js';
 import { createCommands, AI_GATED_COMMANDS } from './commands.js';
 
 // Message types that carry no question by themselves (see handleAiMessage).
@@ -305,13 +305,10 @@ export function createBot({ profileId, profileDir, puppeteer: puppeteerOptions, 
                         await sendText(chatId, state.thinkMessage);
                     }
                     try {
-                        const apiKey = state.imageGenProvider === 'openai' ? state.imageGenApiKeyOpenai
-                            : state.imageGenProvider === 'stability' ? state.imageGenApiKeyStability
-                            : undefined;
                         const genPrompt = images.length > 0
                             ? await describeImageForGeneration(images[0], intent.prompt || rawPrompt)
                             : (intent.prompt || rawPrompt);
-                        const { buffer, mimetype } = await generateImage(genPrompt, { provider: state.imageGenProvider, apiKey });
+                        const { buffer, mimetype } = await generateImage(genPrompt, imageGenOptions(state));
                         // A failing caption must not throw away the image
                         // that was already generated.
                         const caption = await describeGeneratedImage(memoryKey, rawPrompt, chatId)
