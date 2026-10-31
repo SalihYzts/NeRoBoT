@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('nerobot', {
     // before that view collapses, so the modal can show it blurred behind
     // itself instead of just going black — see main.js's 'modal:toggle'.
     setModalOpen: (open) => ipcRenderer.invoke('modal:toggle', open),
+    // Live frames of the view behind an open modal (JPEG bytes) — see
+    // main.js's startBackdropStream.
+    onModalBackdropFrame: (cb) => ipcRenderer.on('modal:backdropFrame', (_e, jpeg) => cb(jpeg)),
 
     // Profiles (Home screen + tab strip)
     listProfiles: () => ipcRenderer.invoke('profiles:list'),

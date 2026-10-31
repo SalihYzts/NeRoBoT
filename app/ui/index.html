@@ -457,45 +457,33 @@
     .profileTile.ollamaTile.disabled { opacity: .5; }
     .profileTile.ollamaTile.disabled:hover { border-color: var(--border); }
 
-    /* Frosted backdrop shared by every modal below — a screenshot of the
-       window (see main.js's 'modal:toggle' / openModal() in the script)
-       taken right before the active WA/Telegram/NeRoChAt view collapses to
-       0×0, since that view is a separate native layer this page's own CSS
-       can't reach. Sits just under .modalOverlay's z-index so its own dim
-       tint layers on top. */
+    /* Live frosted backdrop shared by every modal. The page's own chrome is
+       blurred live by .modalOverlay's backdrop-filter. The WA/Telegram/
+       NeRoChAt view is a separate native layer CSS can't reach, so its LIVE
+       frames (main.js's startBackdropStream) are painted here, exactly over
+       #middle where that view sits, and fall under the same blur. */
     #modalBackdrop {
         position: fixed;
         inset: 0;
         z-index: 49;
         display: none;
         overflow: hidden;
+        pointer-events: none;
     }
     #modalBackdrop.show { display: block; }
-    #modalBackdropImg {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        filter: blur(4px) brightness(.65);
-        transform: scale(1.03); /* hides the blur's soft edge */
-    }
-    /* The WA/Telegram/Ollama layer of the composited backdrop (see
-       main.js's 'modal:toggle'/getVisibleContentView and openModal below) —
-       positioned/sized in JS to exactly cover #middle, the same area that
-       view actually occupies on screen, then blurred the same as the base
-       chrome layer underneath it so the seam between the two doesn't show. */
+    #modalBackdropImg { display: none; }
     #modalBackdropContentImg {
         position: absolute;
         display: none;
-        object-fit: cover;
-        filter: blur(4px) brightness(.65);
-        transform: scale(1.03);
+        object-fit: fill;
     }
 
     /* ===== Modals (new profile / profile settings) ===== */
     .modalOverlay {
         position: fixed;
         inset: 0;
-        background: rgba(0,0,0,.55);
+        background: rgba(0,0,0,.4);
+        backdrop-filter: blur(6px) brightness(.8);
         display: none;
         align-items: safe center;
         justify-content: safe center;
@@ -1453,9 +1441,21 @@
                  its own view below; a "← Oyunlar" back button returns here. -->
             <div id="gamesMenu" class="gamesMenu">
                 <div class="gamesMenuGrid">
-                    <div class="profileTile gameMenuTile" id="gameTileSnake">
+                    <div class="profileTile gameMenuTile" id="gameTileSnake" data-game="snake">
                         <div class="tileIcon"><span style="font-size:22px;">🐍</span></div>
                         <div class="tileName" id="gameSnakeName">Yılan</div>
+                    </div>
+                    <div class="profileTile gameMenuTile" id="gameTilePaddle" data-game="paddle">
+                        <div class="tileIcon"><span style="font-size:22px;">🏓</span></div>
+                        <div class="tileName" id="gamePaddleName">Raket Düellosu</div>
+                    </div>
+                    <div class="profileTile gameMenuTile" id="gameTileBricks" data-game="bricks">
+                        <div class="tileIcon"><span style="font-size:22px;">🧱</span></div>
+                        <div class="tileName" id="gameBricksName">Tuğla Kırıcı</div>
+                    </div>
+                    <div class="profileTile gameMenuTile" id="gameTileMemory" data-game="memory">
+                        <div class="tileIcon"><span style="font-size:22px;">🃏</span></div>
+                        <div class="tileName" id="gameMemoryName">Hafıza</div>
                     </div>
                 </div>
             </div>
@@ -2291,9 +2291,21 @@
             <div id="gamesPopupBody">
                 <div id="gamesPopupMenu" class="gamesMenu">
                     <div class="gamesMenuGrid">
-                        <div class="profileTile gameMenuTile" id="gamesPopupTileSnake">
+                        <div class="profileTile gameMenuTile" id="gamesPopupTileSnake" data-game="snake">
                             <div class="tileIcon"><span style="font-size:22px;">🐍</span></div>
                             <div class="tileName" id="gamesPopupSnakeName">Yılan</div>
+                        </div>
+                        <div class="profileTile gameMenuTile" id="gamesPopupTilePaddle" data-game="paddle">
+                            <div class="tileIcon"><span style="font-size:22px;">🏓</span></div>
+                            <div class="tileName" id="gamesPopupPaddleName">Raket Düellosu</div>
+                        </div>
+                        <div class="profileTile gameMenuTile" id="gamesPopupTileBricks" data-game="bricks">
+                            <div class="tileIcon"><span style="font-size:22px;">🧱</span></div>
+                            <div class="tileName" id="gamesPopupBricksName">Tuğla Kırıcı</div>
+                        </div>
+                        <div class="profileTile gameMenuTile" id="gamesPopupTileMemory" data-game="memory">
+                            <div class="tileIcon"><span style="font-size:22px;">🃏</span></div>
+                            <div class="tileName" id="gamesPopupMemoryName">Hafıza</div>
                         </div>
                     </div>
                 </div>
@@ -2693,6 +2705,13 @@
             gamesShortcutHintStr: 'Uygulama açıkken, herhangi bir sekmedeyken bu kısayola basınca küçük bir oyun penceresi açılır.',
             gamesShortcutLabelStr: 'Kısayol',
             gameSnakeName: 'Yılan',
+            gamePaddleName: 'Raket Düellosu', gameBricksName: 'Tuğla Kırıcı', gameMemoryName: 'Hafıza',
+            gamePaddleHint: 'W/S, ↑/↓ ya da fare ile raketini oynat — 7 sayı alan kazanır',
+            gameBricksHint: '←/→, A/D ya da fare ile hareket et — Boşluk/tık ile topu at',
+            gameMemoryHint: 'Kartlara tıkla ya da oklar + Enter — eşleri bul',
+            gameWinText: 'Kazandın! 🎉', gameLoseText: 'Bilgisayar kazandı',
+            gameLevelText: 'Seviye', gameLaunchHint: 'Boşluk / tık: topu at',
+            gameMemoryDone: moves => `Tebrikler! ${moves} hamlede bitti`,
             gameStartHint: 'Başlamak için bir tuşa bas',
             newProfileTitle: 'Yeni Profil', renameFieldLabel: 'İsim',
             defaultProfileName: 'NeRoBoT',
@@ -2915,6 +2934,13 @@
             gamesShortcutHintStr: 'While the app is open, on any tab, pressing this shortcut opens a small game window.',
             gamesShortcutLabelStr: 'Shortcut',
             gameSnakeName: 'Snake',
+            gamePaddleName: 'Paddle Duel', gameBricksName: 'Brick Breaker', gameMemoryName: 'Memory',
+            gamePaddleHint: 'W/S, ↑/↓ or the mouse moves your paddle — first to 7 wins',
+            gameBricksHint: '←/→, A/D or the mouse to move — Space/click launches the ball',
+            gameMemoryHint: 'Click the cards or use arrows + Enter — find the pairs',
+            gameWinText: 'You win! 🎉', gameLoseText: 'The computer wins',
+            gameLevelText: 'Level', gameLaunchHint: 'Space / click: launch',
+            gameMemoryDone: moves => `Well done! Finished in ${moves} moves`,
             gameStartHint: 'Press any key to start',
             newProfileTitle: 'New Profile', renameFieldLabel: 'Name',
             defaultProfileName: 'NeRoBoT',
@@ -3016,11 +3042,16 @@
         document.getElementById('gamesShortcutLabel').textContent = t('gamesShortcutLabelStr');
         document.getElementById('gamesPopupTitle').textContent = t('gamesPopupTitle');
         document.getElementById('gameScoreLabelText').textContent = t('gameScoreLabelText');
-        document.getElementById('gameHintText').textContent = t('gameHintText');
+        document.getElementById('gameHintText').textContent = t(window.gameTabHintKey || 'gameHintText');
         document.getElementById('gamesPopupScoreLabelText').textContent = t('gameScoreLabelText');
-        document.getElementById('gamesPopupHintText').textContent = t('gameHintText');
+        document.getElementById('gamesPopupHintText').textContent = t(window.gamePopupHintKey || 'gameHintText');
         document.getElementById('gameSnakeName').textContent = t('gameSnakeName');
         document.getElementById('gamesPopupSnakeName').textContent = t('gameSnakeName');
+        for (const pre of ['game', 'gamesPopup']) {
+            document.getElementById(pre + 'PaddleName').textContent = t('gamePaddleName');
+            document.getElementById(pre + 'BricksName').textContent = t('gameBricksName');
+            document.getElementById(pre + 'MemoryName').textContent = t('gameMemoryName');
+        }
         document.getElementById('gamesBackBtnText').textContent = t('gamesTileName');
         document.getElementById('gamesPopupBackBtnText').textContent = t('gamesTileName');
         document.getElementById('connectionModeTitle').textContent = t('connectionModeTitle');
@@ -4272,14 +4303,19 @@
         // tab or its quick popup; arrow keys otherwise fall through
         // untouched (e.g. scrolling), and pressing one while the menu shows
         // doesn't silently arm a game the player isn't even looking at.
-        if (gamesTabActive && gamesCurrentView === 'snake' && gameTabInstance.handleKey(e)) {
+        if (gamesTabActive && gamesCurrentView !== 'menu' && gameTabInstance.handleKey(e)) {
             e.preventDefault();
             return;
         }
-        if (gamesPopupOverlay.classList.contains('open') && gamesPopupCurrentView === 'snake' && gamesPopupInstance.handleKey(e)) {
+        if (gamesPopupOverlay.classList.contains('open') && gamesPopupCurrentView !== 'menu' && gamesPopupInstance.handleKey(e)) {
             e.preventDefault();
             return;
         }
+    });
+    // Held-key games (Raket Düellosu, Tuğla Kırıcı) need the release too.
+    document.addEventListener('keyup', (e) => {
+        if (gamesTabActive && gamesCurrentView !== 'menu') gameTabInstance.handleKeyUp(e);
+        if (gamesPopupOverlay.classList.contains('open') && gamesPopupCurrentView !== 'menu') gamesPopupInstance.handleKeyUp(e);
     });
 
     // Main process pings this whenever the shortcut fires while a WA/
@@ -6561,8 +6597,491 @@
         return { start, stop, resume, reset, handleKey };
     }
 
-    const gameTabInstance = createSnakeGame(document.getElementById('gameTabCanvas'), document.getElementById('gameScoreValue'));
-    const gamesPopupInstance = createSnakeGame(document.getElementById('gamesPopupCanvas'), document.getElementById('gamesPopupScoreValue'));
+
+    // ----------------------------
+    // Shared bits for the canvas games below.
+    // ----------------------------
+    function drawGameOverlay(ctx, canvas, title, sub) {
+        ctx.fillStyle = 'rgba(0,0,0,.6)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ececec';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
+        ctx.font = (sub ? '16px' : '13px') + ' "Segoe UI", sans-serif';
+        ctx.fillText(title, canvas.width / 2, canvas.height / 2 - (sub ? 8 : 0));
+        if (sub) {
+            ctx.font = '12px "Segoe UI", sans-serif';
+            ctx.fillText(sub, canvas.width / 2, canvas.height / 2 + 14);
+        }
+    }
+    function roundRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+    }
+    // rAF loop with a capped delta (a backgrounded tab must not teleport the
+    // ball when it comes back).
+    function createGameLoop(step) {
+        let id = null, last = 0;
+        function frame(now) {
+            const dt = Math.min(0.033, (now - last) / 1000);
+            last = now;
+            step(dt);
+            if (id !== null) id = requestAnimationFrame(frame);
+        }
+        return {
+            running: () => id !== null,
+            start() { if (id === null) { last = performance.now(); id = requestAnimationFrame(frame); } },
+            stop() { if (id !== null) cancelAnimationFrame(id); id = null; },
+        };
+    }
+
+    // ----------------------------
+    // Raket Düellosu — you (left) vs. the computer (right), first to 7.
+    // The ball speeds up on every return; where it hits the racket sets the
+    // angle and a racket that's moving at impact adds spin.
+    // ----------------------------
+    function createPaddleGame(canvas, scoreEl) {
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width, H = canvas.height;
+        const PW = 8, PH = Math.round(H * 0.2), R = 6, WIN = 7;
+        const PLAYER_SPEED = H * 1.25, CPU_SPEED = H * 0.78;
+        let player, cpu, ball, pScore, cScore, started, over, serveTimer, keys;
+        const loop = createGameLoop(step);
+
+        function updateScore() { if (scoreEl) scoreEl.textContent = `${pScore} : ${cScore}`; }
+        function serve(dirX) {
+            const speed = W * 0.55;
+            const ang = (Math.random() * 0.6 - 0.3);
+            ball = { x: W / 2, y: H / 2, vx: Math.cos(ang) * speed * dirX, vy: Math.sin(ang) * speed, live: false };
+            clearTimeout(serveTimer);
+            serveTimer = setTimeout(() => { ball.live = true; }, 650);
+        }
+        function reset() {
+            loop.stop();
+            clearTimeout(serveTimer);
+            player = { y: H / 2 - PH / 2, vy: 0 };
+            cpu = { y: H / 2 - PH / 2 };
+            pScore = 0; cScore = 0; started = false; over = false;
+            keys = { up: false, down: false };
+            updateScore();
+            serve(Math.random() < 0.5 ? -1 : 1);
+            draw();
+        }
+        function bounceOff(paddleY, paddleVy, dir) {
+            const offset = ((ball.y - (paddleY + PH / 2)) / (PH / 2));
+            const speed = Math.min(W * 1.6, Math.hypot(ball.vx, ball.vy) * 1.06);
+            const ang = Math.max(-1, Math.min(1, offset)) * (Math.PI / 3);
+            ball.vx = Math.cos(ang) * speed * dir;
+            ball.vy = Math.sin(ang) * speed + paddleVy * 0.25;
+        }
+        function step(dt) {
+            // Player racket — keys; the mouse sets y directly (see handlePointer).
+            const before = player.y;
+            if (keys.up) player.y -= PLAYER_SPEED * dt;
+            if (keys.down) player.y += PLAYER_SPEED * dt;
+            player.y = Math.max(0, Math.min(H - PH, player.y));
+            if (keys.up || keys.down) player.vy = (player.y - before) / Math.max(dt, 1e-3);
+            else player.vy *= 0.8;
+
+            // CPU: chases the ball only while it's coming its way, with a
+            // capped speed and a small aim error so it can be beaten.
+            const target = ball.vx > 0 ? ball.y - PH / 2 + Math.sin(ball.x * 0.05) * PH * 0.3 : H / 2 - PH / 2;
+            const diff = target - cpu.y;
+            cpu.y += Math.sign(diff) * Math.min(Math.abs(diff), CPU_SPEED * dt);
+            cpu.y = Math.max(0, Math.min(H - PH, cpu.y));
+
+            if (ball.live) {
+                ball.x += ball.vx * dt;
+                ball.y += ball.vy * dt;
+                if (ball.y < R) { ball.y = R; ball.vy = Math.abs(ball.vy); }
+                if (ball.y > H - R) { ball.y = H - R; ball.vy = -Math.abs(ball.vy); }
+                if (ball.vx < 0 && ball.x - R <= 12 + PW && ball.x > 12 && ball.y > player.y - R && ball.y < player.y + PH + R) {
+                    ball.x = 12 + PW + R; bounceOff(player.y, player.vy, 1);
+                }
+                if (ball.vx > 0 && ball.x + R >= W - 12 - PW && ball.x < W - 12 && ball.y > cpu.y - R && ball.y < cpu.y + PH + R) {
+                    ball.x = W - 12 - PW - R; bounceOff(cpu.y, 0, -1);
+                }
+                if (ball.x < -R * 2 || ball.x > W + R * 2) {
+                    if (ball.x < 0) cScore++; else pScore++;
+                    updateScore();
+                    if (pScore >= WIN || cScore >= WIN) { over = true; loop.stop(); draw(); return; }
+                    serve(ball.x < 0 ? 1 : -1);
+                }
+            }
+            draw();
+        }
+        function draw() {
+            ctx.fillStyle = '#101013';
+            ctx.fillRect(0, 0, W, H);
+            ctx.strokeStyle = '#2a2a30';
+            ctx.setLineDash([6, 8]);
+            ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#3a3a42';
+            ctx.font = 'bold 36px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(String(pScore), W / 4, 46);
+            ctx.fillText(String(cScore), (W * 3) / 4, 46);
+            ctx.fillStyle = '#ff8c1a';
+            roundRect(ctx, 12, player.y, PW, PH, 3); ctx.fill();
+            ctx.fillStyle = '#9a9aa2';
+            roundRect(ctx, W - 12 - PW, cpu.y, PW, PH, 3); ctx.fill();
+            ctx.fillStyle = '#25d366';
+            ctx.beginPath(); ctx.arc(ball.x, ball.y, R, 0, Math.PI * 2); ctx.fill();
+            if (!started && !over) drawGameOverlay(ctx, canvas, t('gameStartHint'));
+            else if (over) drawGameOverlay(ctx, canvas, t(pScore > cScore ? 'gameWinText' : 'gameLoseText'), t('gameRestartHint'));
+        }
+        function start() { if (over) return; started = true; loop.start(); }
+        function stop() { loop.stop(); keys.up = keys.down = false; }
+        function resume() { if (started && !over) loop.start(); }
+        function handleKey(e) {
+            const k = e.key;
+            if (over) { if (k === 'Enter' || k === ' ') { reset(); start(); return true; } return false; }
+            if (k === 'ArrowUp' || k === 'w' || k === 'W') { keys.up = true; if (!started) start(); return true; }
+            if (k === 'ArrowDown' || k === 's' || k === 'S') { keys.down = true; if (!started) start(); return true; }
+            if (!started && (k === 'Enter' || k === ' ')) { start(); return true; }
+            return false;
+        }
+        function handleKeyUp(e) {
+            const k = e.key;
+            if (k === 'ArrowUp' || k === 'w' || k === 'W') { keys.up = false; return true; }
+            if (k === 'ArrowDown' || k === 's' || k === 'S') { keys.down = false; return true; }
+            return false;
+        }
+        function handlePointer(_x, y) {
+            if (!started || over) return;
+            const ny = Math.max(0, Math.min(H - PH, y - PH / 2));
+            player.vy = (ny - player.y) * 30;
+            player.y = ny;
+        }
+        function handleClick() {
+            if (over) { reset(); start(); } else if (!started) start();
+        }
+        reset();
+        return { start, stop, resume, reset, handleKey, handleKeyUp, handlePointer, handleClick };
+    }
+
+    // ----------------------------
+    // Tuğla Kırıcı — clear the wall with the ball; 3 lives, every cleared
+    // wall comes back one row taller and a bit faster.
+    // ----------------------------
+    function createBricksGame(canvas, scoreEl) {
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width, H = canvas.height;
+        const COLS = 8, PAD_H = 8, R = 5, TOP = 34, GAP = 4;
+        const ROW_COLORS = ['#e5484d', '#ff8c1a', '#f5c518', '#25d366', '#2ea8ff', '#8e6cff', '#ff5fa2', '#ececec'];
+        const BW = (W - GAP * (COLS + 1)) / COLS, BH = Math.max(10, Math.round(H * 0.035));
+        let padW, padX, ball, bricks, score, lives, level, started, over, keys;
+        const loop = createGameLoop(step);
+
+        function buildWall() {
+            const rows = Math.min(8, 3 + level);
+            bricks = [];
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    bricks.push({ x: GAP + c * (BW + GAP), y: TOP + r * (BH + GAP), color: ROW_COLORS[r], points: (rows - r) * 10, alive: true });
+                }
+            }
+        }
+        function stickBall() {
+            ball = { x: padX + padW / 2, y: H - 20 - R, vx: 0, vy: 0, stuck: true };
+        }
+        function launch() {
+            if (!ball.stuck) return;
+            const speed = H * (0.55 + level * 0.06);
+            const ang = -Math.PI / 2 + (Math.random() * 0.6 - 0.3);
+            ball.vx = Math.cos(ang) * speed;
+            ball.vy = Math.sin(ang) * speed;
+            ball.stuck = false;
+        }
+        function reset() {
+            loop.stop();
+            padW = Math.round(W * 0.2);
+            padX = W / 2 - padW / 2;
+            score = 0; lives = 3; level = 1; started = false; over = false;
+            keys = { left: false, right: false };
+            if (scoreEl) scoreEl.textContent = '0';
+            buildWall();
+            stickBall();
+            draw();
+        }
+        function step(dt) {
+            const speed = W * 1.1;
+            if (keys.left) padX -= speed * dt;
+            if (keys.right) padX += speed * dt;
+            padX = Math.max(0, Math.min(W - padW, padX));
+            const padY = H - 20;
+
+            if (ball.stuck) {
+                ball.x = padX + padW / 2;
+            } else {
+                ball.x += ball.vx * dt;
+                ball.y += ball.vy * dt;
+                if (ball.x < R) { ball.x = R; ball.vx = Math.abs(ball.vx); }
+                if (ball.x > W - R) { ball.x = W - R; ball.vx = -Math.abs(ball.vx); }
+                if (ball.y < R) { ball.y = R; ball.vy = Math.abs(ball.vy); }
+                // Racket: angle from where it lands, like the paddle game.
+                if (ball.vy > 0 && ball.y + R >= padY && ball.y + R <= padY + PAD_H + 6 && ball.x > padX - R && ball.x < padX + padW + R) {
+                    const speedNow = Math.hypot(ball.vx, ball.vy);
+                    const off = Math.max(-1, Math.min(1, (ball.x - (padX + padW / 2)) / (padW / 2)));
+                    const ang = -Math.PI / 2 + off * (Math.PI / 3);
+                    ball.vx = Math.cos(ang) * speedNow;
+                    ball.vy = Math.sin(ang) * speedNow;
+                    ball.y = padY - R;
+                }
+                for (const b of bricks) {
+                    if (!b.alive) continue;
+                    const nx = Math.max(b.x, Math.min(ball.x, b.x + BW));
+                    const ny = Math.max(b.y, Math.min(ball.y, b.y + BH));
+                    const dx = ball.x - nx, dy = ball.y - ny;
+                    if (dx * dx + dy * dy > R * R) continue;
+                    b.alive = false;
+                    score += b.points;
+                    if (scoreEl) scoreEl.textContent = String(score);
+                    // Bounce on the axis of shallower penetration.
+                    if (Math.abs(dx) > Math.abs(dy)) ball.vx = -ball.vx; else ball.vy = -ball.vy;
+                    break;
+                }
+                if (!bricks.some(b => b.alive)) {
+                    level++;
+                    buildWall();
+                    stickBall();
+                }
+                if (ball.y > H + R * 2) {
+                    lives--;
+                    if (lives <= 0) { over = true; loop.stop(); draw(); return; }
+                    stickBall();
+                }
+            }
+            draw();
+        }
+        function draw() {
+            ctx.fillStyle = '#101013';
+            ctx.fillRect(0, 0, W, H);
+            for (const b of bricks) {
+                if (!b.alive) continue;
+                ctx.fillStyle = b.color;
+                roundRect(ctx, b.x, b.y, BW, BH, 3); ctx.fill();
+            }
+            ctx.fillStyle = '#ff8c1a';
+            roundRect(ctx, padX, H - 20, padW, PAD_H, 4); ctx.fill();
+            ctx.fillStyle = '#ececec';
+            ctx.beginPath(); ctx.arc(ball.x, ball.y, R, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#9a9aa2';
+            ctx.font = '12px "Segoe UI", sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('♥'.repeat(lives), 8, 20);
+            ctx.textAlign = 'right';
+            ctx.fillText(`${t('gameLevelText')} ${level}`, W - 8, 20);
+            if (!started && !over) drawGameOverlay(ctx, canvas, t('gameStartHint'));
+            else if (over) drawGameOverlay(ctx, canvas, t('gameOverText'), t('gameRestartHint'));
+            else if (ball.stuck) {
+                ctx.fillStyle = '#9a9aa2';
+                ctx.textAlign = 'center';
+                ctx.fillText(t('gameLaunchHint'), W / 2, H / 2 + 40);
+            }
+        }
+        function start() { if (over) return; started = true; loop.start(); }
+        function stop() { loop.stop(); keys.left = keys.right = false; }
+        function resume() { if (started && !over) loop.start(); }
+        function handleKey(e) {
+            const k = e.key;
+            if (over) { if (k === 'Enter' || k === ' ') { reset(); start(); return true; } return false; }
+            if (k === 'ArrowLeft' || k === 'a' || k === 'A') { keys.left = true; if (!started) start(); return true; }
+            if (k === 'ArrowRight' || k === 'd' || k === 'D') { keys.right = true; if (!started) start(); return true; }
+            if (k === ' ' || k === 'Enter' || k === 'ArrowUp' || k === 'w' || k === 'W') {
+                if (!started) start();
+                launch();
+                return true;
+            }
+            return false;
+        }
+        function handleKeyUp(e) {
+            const k = e.key;
+            if (k === 'ArrowLeft' || k === 'a' || k === 'A') { keys.left = false; return true; }
+            if (k === 'ArrowRight' || k === 'd' || k === 'D') { keys.right = false; return true; }
+            return false;
+        }
+        function handlePointer(x) {
+            if (!started || over) return;
+            padX = Math.max(0, Math.min(W - padW, x - padW / 2));
+        }
+        function handleClick() {
+            if (over) { reset(); start(); return; }
+            if (!started) start();
+            launch();
+        }
+        reset();
+        return { start, stop, resume, reset, handleKey, handleKeyUp, handlePointer, handleClick };
+    }
+
+    // ----------------------------
+    // Hafıza — 4×4 face-down cards, find the 8 pairs. Mouse or arrows +
+    // Enter/Space. +10 per pair, −2 per miss (never below 0).
+    // ----------------------------
+    function createMemoryGame(canvas, scoreEl) {
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width, H = canvas.height, N = 4, GAP = 8;
+        const SYMBOLS = ['🍉', '🚀', '🎧', '🌵', '🐙', '⚡', '🍩', '🎲'];
+        const CW = (W - GAP * (N + 1)) / N, CH = (H - GAP * (N + 1)) / N;
+        let cards, open, score, moves, cursor, busy, over, flipTimer;
+
+        function reset() {
+            clearTimeout(flipTimer);
+            const deck = [...SYMBOLS, ...SYMBOLS];
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            cards = deck.map(s => ({ s, up: false, done: false }));
+            open = []; score = 0; moves = 0; cursor = 0; busy = false; over = false;
+            if (scoreEl) scoreEl.textContent = '0';
+            draw();
+        }
+        function flip(i) {
+            if (over || busy) return;
+            const c = cards[i];
+            if (!c || c.up || c.done) return;
+            c.up = true;
+            open.push(i);
+            if (open.length === 2) {
+                moves++;
+                const [a, b] = open.map(k => cards[k]);
+                if (a.s === b.s) {
+                    a.done = b.done = true;
+                    score += 10;
+                    open = [];
+                    if (cards.every(k => k.done)) over = true;
+                } else {
+                    score = Math.max(0, score - 2);
+                    busy = true;
+                    flipTimer = setTimeout(() => {
+                        a.up = b.up = false;
+                        open = []; busy = false;
+                        draw();
+                    }, 750);
+                }
+                if (scoreEl) scoreEl.textContent = String(score);
+            }
+            draw();
+        }
+        function cellAt(x, y) {
+            const c = Math.floor((x - GAP / 2) / (CW + GAP));
+            const r = Math.floor((y - GAP / 2) / (CH + GAP));
+            return (c >= 0 && c < N && r >= 0 && r < N) ? r * N + c : -1;
+        }
+        function draw() {
+            ctx.fillStyle = '#101013';
+            ctx.fillRect(0, 0, W, H);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `${Math.round(CH * 0.5)}px "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+            cards.forEach((c, i) => {
+                const x = GAP + (i % N) * (CW + GAP), y = GAP + Math.floor(i / N) * (CH + GAP);
+                ctx.fillStyle = c.done ? '#1b2a20' : c.up ? '#24242a' : '#2a2320';
+                roundRect(ctx, x, y, CW, CH, 8); ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = i === cursor ? '#ff8c1a' : (c.done ? '#25d366' : '#2a2a30');
+                ctx.stroke();
+                if (c.up || c.done) {
+                    ctx.globalAlpha = c.done ? 0.7 : 1;
+                    ctx.fillText(c.s, x + CW / 2, y + CH / 2 + 2);
+                    ctx.globalAlpha = 1;
+                } else {
+                    ctx.fillStyle = '#ff8c1a55';
+                    ctx.fillText('?', x + CW / 2, y + CH / 2 + 2);
+                }
+            });
+            ctx.textBaseline = 'alphabetic';
+            if (over) drawGameOverlay(ctx, canvas, t('gameMemoryDone')(moves), t('gameRestartHint'));
+        }
+        function handleKey(e) {
+            const k = e.key;
+            if (over) { if (k === 'Enter' || k === ' ') { reset(); return true; } return false; }
+            const move = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -N, ArrowDown: N, a: -1, d: 1, w: -N, s: N, A: -1, D: 1, W: -N, S: N }[k];
+            if (move !== undefined) {
+                const next = cursor + move;
+                if (next >= 0 && next < N * N && !(Math.abs(move) === 1 && Math.floor(next / N) !== Math.floor(cursor / N))) cursor = next;
+                draw();
+                return true;
+            }
+            if (k === 'Enter' || k === ' ') { flip(cursor); return true; }
+            return false;
+        }
+        function handleClick(x, y) {
+            if (over) { reset(); return; }
+            const i = cellAt(x, y);
+            if (i >= 0) { cursor = i; flip(i); }
+        }
+        // Turn-based — nothing runs in the background, so these are no-ops.
+        function start() {}
+        function stop() {}
+        function resume() {}
+        reset();
+        return { start, stop, resume, reset, handleKey, handleClick };
+    }
+
+    const GAME_FACTORIES = {
+        snake: createSnakeGame,
+        paddle: createPaddleGame,
+        bricks: createBricksGame,
+        memory: createMemoryGame,
+    };
+    const GAME_HINT_KEYS = {
+        snake: 'gameHintText',
+        paddle: 'gamePaddleHint',
+        bricks: 'gameBricksHint',
+        memory: 'gameMemoryHint',
+    };
+
+    // One "game slot" per canvas (the Oyunlar tab, the quick popup): holds
+    // one instance per game, lazily created, and forwards the generic
+    // start/stop/resume/reset/handleKey calls to whichever game is picked —
+    // so the code around it treats it like a single game.
+    function createGameHost(canvas, scoreEl, hintEl, hintKeyVar) {
+        const instances = {};
+        let current = 'snake';
+        const inst = () => (instances[current] ||= GAME_FACTORIES[current](canvas, scoreEl));
+        function select(key) {
+            if (!GAME_FACTORIES[key]) return;
+            if (key !== current) {
+                instances[current]?.stop();
+                current = key;
+                inst().reset(); // fresh round and redraw on the shared canvas
+            }
+            refreshHint();
+        }
+        function refreshHint() {
+            window[hintKeyVar] = GAME_HINT_KEYS[current];
+            if (hintEl) hintEl.textContent = t(GAME_HINT_KEYS[current]);
+        }
+        function canvasPoint(e) {
+            const r = canvas.getBoundingClientRect();
+            return [(e.clientX - r.left) * (canvas.width / r.width), (e.clientY - r.top) * (canvas.height / r.height)];
+        }
+        canvas.addEventListener('mousemove', (e) => inst().handlePointer?.(...canvasPoint(e)));
+        canvas.addEventListener('click', (e) => inst().handleClick?.(...canvasPoint(e)));
+        return {
+            select,
+            refreshHint,
+            current: () => current,
+            start: () => inst().start(),
+            stop: () => inst().stop(),
+            resume: () => inst().resume(),
+            reset: () => inst().reset(),
+            handleKey: (e) => inst().handleKey(e),
+            handleKeyUp: (e) => inst().handleKeyUp?.(e) || false,
+        };
+    }
+
+    var gameTabHintKey, gamePopupHintKey; // read by applyLanguage (see createGameHost)
+    const gameTabInstance = createGameHost(document.getElementById('gameTabCanvas'), document.getElementById('gameScoreValue'), document.getElementById('gameHintText'), 'gameTabHintKey');
+    const gamesPopupInstance = createGameHost(document.getElementById('gamesPopupCanvas'), document.getElementById('gamesPopupScoreValue'), document.getElementById('gamesPopupHintText'), 'gamePopupHintKey');
 
     // Which of the Oyunlar tab's own two screens is showing — the game
     // picker (menu) or Yılan's own view (snake). Every fresh "+"-created tab
@@ -6575,13 +7094,16 @@
         document.getElementById('gamesMenu').classList.remove('hidden');
         document.getElementById('gamesSnakeView').classList.remove('visible');
     }
-    function showGamesSnake() {
-        gamesCurrentView = 'snake';
+    // gamesSnakeView is the shared play view for every game (one canvas).
+    function showGamesSnake(game = gameTabInstance.current()) {
+        gameTabInstance.select(game);
+        gamesCurrentView = game;
         document.getElementById('gamesMenu').classList.add('hidden');
         document.getElementById('gamesSnakeView').classList.add('visible');
         gameTabInstance.resume();
     }
-    document.getElementById('gameTileSnake').addEventListener('click', showGamesSnake);
+    document.querySelectorAll('#gamesMenu .gameMenuTile').forEach(tile =>
+        tile.addEventListener('click', () => showGamesSnake(tile.dataset.game)));
     document.getElementById('gamesBackToMenuBtn').addEventListener('click', () => {
         gameTabInstance.stop();
         showGamesMenu();
@@ -6597,12 +7119,14 @@
         document.getElementById('gamesPopupMenu').classList.remove('hidden');
         document.getElementById('gamesPopupSnakeView').classList.remove('visible');
     }
-    function showGamesPopupSnake() {
-        gamesPopupCurrentView = 'snake';
+    function showGamesPopupSnake(game = gamesPopupInstance.current()) {
+        gamesPopupInstance.select(game);
+        gamesPopupCurrentView = game;
         document.getElementById('gamesPopupMenu').classList.add('hidden');
         document.getElementById('gamesPopupSnakeView').classList.add('visible');
     }
-    document.getElementById('gamesPopupTileSnake').addEventListener('click', showGamesPopupSnake);
+    document.querySelectorAll('#gamesPopupMenu .gameMenuTile').forEach(tile =>
+        tile.addEventListener('click', () => showGamesPopupSnake(tile.dataset.game)));
     document.getElementById('gamesPopupBackToMenuBtn').addEventListener('click', () => {
         gamesPopupInstance.stop();
         showGamesPopupMenu();
@@ -6624,7 +7148,7 @@
         // Re-ticks Yılan if it was already under way when the tab was last
         // left (resume() no-ops on a never-started or already-running game)
         // — never auto-starts a fresh one, that still needs a real keypress.
-        if (gamesCurrentView === 'snake') gameTabInstance.resume();
+        if (gamesCurrentView !== 'menu') gameTabInstance.resume();
     }
 
     // Leaving the Oyunlar tab for a WA/Telegram profile, NeRoChAt, or Home —
@@ -7330,28 +7854,48 @@
         // layoutViews' activeBounds in main.js, which #middle's own layout
         // mirrors).
         const snapshot = await window.nerobot.setModalOpen(true);
-        if (snapshot?.base) modalBackdropImg.src = snapshot.base;
-        if (snapshot?.content) {
-            const rect = middleEl.getBoundingClientRect();
-            modalBackdropContentImg.style.left = rect.left + 'px';
-            modalBackdropContentImg.style.top = rect.top + 'px';
-            modalBackdropContentImg.style.width = rect.width + 'px';
-            modalBackdropContentImg.style.height = rect.height + 'px';
-            modalBackdropContentImg.src = snapshot.content;
+        // Closed again while main was capturing — don't resurrect it.
+        if (!document.querySelector('.modalOverlay.open')) return;
+        backdropLive = !!snapshot?.live;
+        if (snapshot?.content || backdropLive) {
+            placeBackdropContent();
+            if (snapshot?.content) modalBackdropContentImg.src = snapshot.content;
             modalBackdropContentImg.style.display = 'block';
+            modalBackdrop.classList.add('show');
         }
-        if (snapshot?.base || snapshot?.content) modalBackdrop.classList.add('show');
     }
     function closeModal(overlayId) {
         document.getElementById(overlayId).classList.remove('open');
         if (!document.querySelector('.modalOverlay.open')) {
             window.nerobot.setModalOpen(false);
+            backdropLive = false;
             modalBackdrop.classList.remove('show');
-            modalBackdropImg.src = '';
-            modalBackdropContentImg.src = '';
+            setBackdropSrc('');
             modalBackdropContentImg.style.display = 'none';
         }
     }
+
+    // Live backdrop frames (see #modalBackdrop) — kept over #middle even if
+    // the window is resized while a modal is open.
+    let backdropLive = false;
+    let backdropObjectUrl = null;
+    function placeBackdropContent() {
+        const rect = middleEl.getBoundingClientRect();
+        modalBackdropContentImg.style.left = rect.left + 'px';
+        modalBackdropContentImg.style.top = rect.top + 'px';
+        modalBackdropContentImg.style.width = rect.width + 'px';
+        modalBackdropContentImg.style.height = rect.height + 'px';
+    }
+    function setBackdropSrc(src) {
+        modalBackdropContentImg.src = src;
+        if (backdropObjectUrl && backdropObjectUrl !== src) URL.revokeObjectURL(backdropObjectUrl);
+        backdropObjectUrl = src && src.startsWith('blob:') ? src : null;
+    }
+    window.nerobot.onModalBackdropFrame((jpeg) => {
+        if (!backdropLive) return;
+        setBackdropSrc(URL.createObjectURL(new Blob([jpeg], { type: 'image/jpeg' })));
+    });
+    window.addEventListener('resize', () => { if (backdropLive) placeBackdropContent(); });
 
     // In-app replacement for window.confirm() — resolves true/false exactly
     // like confirm() would, just via a styled panel instead of a native

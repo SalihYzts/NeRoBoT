@@ -628,6 +628,13 @@ function layoutViews() {
         if (session.splashView) session.splashView.setBounds(isActive ? activeBounds : zero);
     }
     if (ollamaView) ollamaView.setBounds(ollamaActive && !modalOpen ? activeBounds : zero);
+
+    // While a modal is open, the view that was on screen keeps rendering at
+    // its real size just outside the window, so its frames can be streamed
+    // behind the modal as a LIVE blurred backdrop (see startBackdropStream).
+    if (modalOpen && backdropView && !backdropView.webContents.isDestroyed()) {
+        backdropView.setBounds(offscreen);
+    }
 }
 
 // Windows-specific GPU-compositor gap: after a WebContentsView's bounds grow
@@ -1909,20 +1916,77 @@ function getVisibleContentView() {
     return null;
 }
 
+// Live modal backdrop. The page's own chrome (topbar, home screen…) is
+// blurred live by CSS (backdrop-filter on .modalOverlay). The WA/Telegram/
+// NeRoChAt view is a separate native layer CSS can't reach, so while a modal
+// is open that view is moved just outside the window (still full size, still
+// rendering — see layoutViews) and its frames are streamed to the renderer,
+// which paints them where the view was, under the same blur. The first frame
+// is a capturePage() so there's no empty gap before the stream starts.
+let backdropView = null;
+let backdropLastSent = 0;
+let backdropTrailing = null;
+let backdropRestoreThrottling = false;
+const BACKDROP_FRAME_MS = 66; // ~15 fps — it's blurred, more is wasted work
+
+function sendBackdropFrame(image) {
+    if (!win || win.isDestroyed() || image.isEmpty()) return;
+    const { width } = image.getSize();
+    // Half resolution (and physical→logical on HiDPI): invisible under blur.
+    const small = width > 640 ? image.resize({ width: Math.round(width / 2), quality: 'good' }) : image;
+    win.webContents.send('modal:backdropFrame', small.toJPEG(70));
+    backdropLastSent = Date.now();
+}
+
+function startBackdropStream(view) {
+    stopBackdropStream();
+    if (!view || view.webContents.isDestroyed()) return;
+    backdropView = view;
+    // A view moved outside the window counts as hidden: with Chromium's
+    // background throttling on (NeRoChAt, splash) it stops painting after one
+    // frame. WA/Telegram views already run unthrottled; others are switched
+    // only for the modal's lifetime.
+    backdropRestoreThrottling = view.webContents.getBackgroundThrottling();
+    if (backdropRestoreThrottling) view.webContents.setBackgroundThrottling(false);
+    try {
+        view.webContents.beginFrameSubscription(false, (image) => {
+            if (backdropView !== view) return;
+            const wait = BACKDROP_FRAME_MS - (Date.now() - backdropLastSent);
+            clearTimeout(backdropTrailing);
+            if (wait <= 0) sendBackdropFrame(image);
+            // Keep the newest frame for the end of a burst, so the last
+            // state (e.g. a message that just arrived) always lands.
+            else backdropTrailing = setTimeout(() => { if (backdropView === view) sendBackdropFrame(image); }, wait);
+        });
+    } catch (err) {
+        console.error('[NeRoBoT] Canlı arka plan başlatılamadı:', err.message || err);
+    }
+}
+
+function stopBackdropStream() {
+    clearTimeout(backdropTrailing);
+    backdropTrailing = null;
+    const view = backdropView;
+    backdropView = null;
+    try {
+        if (view && !view.webContents.isDestroyed()) {
+            view.webContents.endFrameSubscription();
+            if (backdropRestoreThrottling) view.webContents.setBackgroundThrottling(true);
+        }
+    } catch (_) {}
+    backdropRestoreThrottling = false;
+}
+
 async function captureModalBackdrop() {
     if (!win || win.isDestroyed()) return null;
+    const contentView = getVisibleContentView();
+    if (!contentView) return null;
     try {
-        const [baseImg, contentView] = [await win.webContents.capturePage(), getVisibleContentView()];
-        const base = baseImg.isEmpty() ? null : baseImg.toDataURL();
-        let content = null;
-        if (contentView) {
-            const contentImg = await contentView.webContents.capturePage();
-            if (!contentImg.isEmpty()) content = contentImg.toDataURL();
-        }
-        return (base || content) ? { base, content } : null;
+        const img = await contentView.webContents.capturePage();
+        return { view: contentView, content: img.isEmpty() ? null : img.toDataURL() };
     } catch (err) {
         console.error('[NeRoBoT] Modal arka plan görüntüsü alınamadı:', err.message || err);
-        return null;
+        return { view: contentView, content: null };
     }
 }
 
@@ -1938,9 +2002,11 @@ ipcMain.handle('modal:toggle', async (_e, open) => {
         const snapshot = await captureModalBackdrop();
         if (gen !== modalToggleGen) return null;
         modalOpen = true;
+        if (snapshot?.view) startBackdropStream(snapshot.view);
         layoutViews();
-        return snapshot;
+        return snapshot ? { content: snapshot.content, live: !!snapshot.view } : null;
     }
+    stopBackdropStream();
     modalOpen = false;
     layoutViews();
     return null;
