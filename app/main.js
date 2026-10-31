@@ -625,6 +625,23 @@ function computeActiveBounds() {
     };
 }
 
+// WhatsApp Web's own layout needs about 748×512 CSS px; below that it
+// scrolls sideways and the bottom (compose box, send button) drops out of
+// view. A smaller view zooms the page out instead, so the whole thing just
+// gets proportionally smaller. Everything we inject into the page is
+// positioned in its own CSS px, so it follows along.
+const WA_MIN_CSS_W = 760;
+const WA_MIN_CSS_H = 520;
+function fitWaZoom(session, bounds) {
+    const wc = session.waView?.webContents;
+    if (!wc || wc.isDestroyed() || !bounds.width || !bounds.height) return; // collapsed: keep the last factor
+    const fit = Math.min(1, bounds.width / WA_MIN_CSS_W, bounds.height / WA_MIN_CSS_H);
+    const factor = Math.max(0.4, Math.floor(fit * 100) / 100);
+    if (session.waZoom === factor) return;
+    session.waZoom = factor;
+    wc.setZoomFactor(factor);
+}
+
 function layoutViews() {
     if (!win || win.isDestroyed()) return;
     const activeBounds = computeActiveBounds();
@@ -663,6 +680,7 @@ function layoutViews() {
         const hideForBotMode = session.mode === 'bot' && session.currentStatus?.key !== 'qr';
         if (session.waView) {
             session.waView.setBounds(!isActive ? zero : hideForBotMode ? offscreen : activeBounds);
+            if (isActive) fitWaZoom(session, activeBounds);
         }
         if (session.tgView) session.tgView.setBounds(isActive ? activeBounds : zero);
         // Same bounds as the profile's own view (not the whole window) — the
@@ -959,6 +977,10 @@ async function setupWaView(session) {
     // on every navigation — WhatsApp Web reloading the page would otherwise
     // wipe the patch out.
     session.waView.webContents.on('dom-ready', () => { injectMediaDevicePrefs(session); });
+    // A reload can come back at 100% — re-apply fitWaZoom's factor.
+    session.waView.webContents.on('dom-ready', () => {
+        try { if (session.waZoom && !session.waView.webContents.isDestroyed()) session.waView.webContents.setZoomFactor(session.waZoom); } catch (_) {}
+    });
     // Forces a full repaint right after this view actually navigates (the
     // real web.whatsapp.com load, not the initial about:blank) — see
     // invalidateActiveViews' own doc for the missing-repaint bug this works
@@ -1271,8 +1293,13 @@ async function createWindow() {
     win = new BrowserWindow({
         width: 1280,
         height: 800,
-        minWidth: 900,
-        minHeight: 600,
+        // Kept small on purpose: tiling compositors (Hyprland, sway…) size a
+        // tiled window below its minimum anyway, and Chromium then keeps
+        // painting at the minimum — the right/bottom edge (window controls,
+        // part of WhatsApp, the status bar) got cut off instead of the
+        // layout shrinking to fit.
+        minWidth: 360,
+        minHeight: 300,
         // Test mode keeps the window invisible — no popping windows on screen.
         show: !TEST_MODE,
         title: 'NeRoBoT',

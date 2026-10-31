@@ -243,12 +243,17 @@
            flex-shrink stays 1 so a crowded strip still yields to the window
            controls and scrolls (see overflow-x) instead of overflowing. */
         flex: 0 1 auto;
-        min-width: 0;
+        min-width: 26px; /* the Home button always stays reachable */
         overflow-x: auto;
         overflow-y: hidden;
         scrollbar-width: none;
     }
     #tabStrip::-webkit-scrollbar { display: none; }
+    /* Narrow window (a tiled one, usually): the wordmark doesn't shrink, so
+       it was eating the tabs' room — the logo alone stays. */
+    @media (max-width: 640px) {
+        #brand { display: none; }
+    }
     #profileTabs {
         display: flex;
         align-items: center;
