@@ -1,3 +1,26 @@
+## v4.4.37 - 2026-10-31
+
+### Yeni Özellikler
+
+- **ComfyUI ile görsel üretimi.** Görsel servisi listesine "ComfyUI — kendi
+  bilgisayarında, yerel modellerle" eklendi. Resim isteyen mesajlar artık
+  kendi bilgisayarındaki ComfyUI'de, kendi modellerinle üretilebiliyor;
+  API anahtarı gerekmiyor.
+  - **Model seçimi:** ComfyUI'deki checkpoint'ler listeleniyor, istediğini
+    seçiyorsun. Liste ComfyUI'ye canlı soruluyor, klasöre yeni model atınca
+    hemen görünüyor. "Otomatik" ilk görsel modelini kullanıyor (ses/poz
+    modellerini atlıyor).
+  - **Özel iş akışı:** Flux, SD3 ya da LoRA'lı bir kurulum gibi checkpoint
+    dışı modeller için ComfyUI'de *Workflow → Export (API)* ile aldığın
+    JSON'u yapıştır, istem kutusuna `%prompt%` yaz. Seed her seferinde
+    değişiyor.
+  - Adres değiştirilebilir (varsayılan `http://127.0.0.1:8188`).
+  - Her WhatsApp/Telegram profilinin AI ayarlarında ve NeRoChAt
+    ayarlarında ayrı ayrı seçilebiliyor; her profil farklı model kullanabilir.
+  - ComfyUI kapalıysa, model bulunamazsa ya da iş akışı hatalıysa ne
+    yapılacağını söyleyen açık bir hata veriliyor. Zaman aşımında NeRoBoT
+    yalnızca kendi işini kuyruktan kaldırıyor.
+
 ## v4.4.36 - 2026-10-31
 
 ### Düzeltmeler
