@@ -1,3 +1,20 @@
+## v4.4.36 - 2026-10-31
+
+### Düzeltmeler
+
+- **Pencere küçülünce artık kesilmiyor.** Pencere 900×600'den küçük olunca
+  (Hyprland gibi döşeyen pencere yöneticilerinde sık olur) sağdaki
+  küçült/büyüt/kapat düğmeleri, WhatsApp'ın sağ tarafı ve alttaki durum
+  çubuğu pencerenin dışında kalıyordu. Artık her şey pencerenin gerçek
+  boyutuna göre küçülüyor.
+- **WhatsApp küçük pencerede orantılı küçülüyor.** WhatsApp Web'in kendi
+  düzeni belli bir boyutun altında kaydırma çubuğu çıkarıp yazı kutusunu,
+  gönder düğmesini ve mesajları ekran dışında bırakıyordu. Artık alan
+  daraldıkça WhatsApp'ın tamamı aynı oranda küçülüyor; pencere büyüyünce
+  normal boyutuna dönüyor.
+- **Dar pencerede üst çubuk.** Pencere çok darken "NeRoBoT" yazısı gizlenip
+  yalnızca logo kalıyor; sekmelere yer açılıyor, ev düğmesi hep görünür.
+
 ## v4.4.35 - 2026-10-31
 
 ### Yeni Özellikler
