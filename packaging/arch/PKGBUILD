@@ -8,7 +8,7 @@
 # değişikliği gerekiyorsa (ör. o adım zaman aşımına uğradıysa) diye:
 # pkgver'i güncelleyip "updpkgsums" çalıştırman yeterli.
 pkgname=nerobot
-pkgver=4.4.32
+pkgver=4.4.33
 pkgrel=1
 pkgdesc="NeRoBoT masaüstü uygulaması"
 arch=('x86_64')
@@ -19,7 +19,7 @@ options=('!strip')
 source=("https://github.com/SalihYzts/NeRoBoT/releases/download/v${pkgver}/NeRoBoT-${pkgver}.AppImage"
         "nerobot.desktop"
         "nerobot.png")
-sha256sums=('e6b4728250d73cff458d15d9d2703e82c0a05337889c57a53c61891b5561b54f'
+sha256sums=('72303eaed5e6824402e44d4e40ec705a48b0cb3469f897eb33205d53945fdb49'
             '7208ea73d3b304af1f301ec8138e30734dcdc0efff48c33b9e71e884cc58eb7c'
             'afc914406a601cba70724975eef5fcd8b9efb7f6e2f885b677f69fc64a5baadb')
 noextract=("NeRoBoT-${pkgver}.AppImage")
