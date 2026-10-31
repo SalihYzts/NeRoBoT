@@ -1,3 +1,48 @@
+## v4.4.34 - 2026-10-31
+
+### Düzeltmeler — Bot
+
+- **Kendi yazdığın mesajlar artık kara liste ve sabit sohbet ayarlarına
+  uyuyor.** "Önek olmadan herkese cevap ver" açıkken AI, senin yazdığın her
+  sohbette devreye giriyordu. Kendi mesajların artık karşı tarafın hız
+  limitini de harcamıyor.
+- **Gruplarda `!model chat` ve `!personality chat` çalışıyor.** Sohbete özel
+  kişilik artık kalıcı: yeniden başlatınca ya da `!clear` ile kaybolmuyor,
+  çok satırlı metin tek satıra düşmüyor.
+- **`!blacklist add` artık sohbeti ekliyor**, komutu yazanı değil (admin kendi
+  DM'inden kilitlenebiliyordu).
+- **Önek gerektirmeyen sohbetlerde** sesli mesajlara "desteklenmiyor" cevabı
+  gitmiyor, çıkartmalar AI'a tarif ettirilmiyor.
+- **Çakışan önekler** (`!ai` gibi) artık kabul edilmiyor; AI'ı susturuyordu.
+- **Hız limiti** ayarlanandan yavaş doluyordu, düzeldi.
+- **Görsel üretimi:** açıklama başarısız olsa da görsel gönderiliyor.
+
+### Düzeltmeler — Ayarlar
+
+- **Boş komut öneki ya da boşaltılmış sayı alanları** artık reddediliyor ve
+  hangi alanın eski değerinde kaldığı söyleniyor (önceden bot susuyor ya da
+  herkes sonsuza kadar hız limitine takılıyordu).
+- **NeRoChAt / API anahtarı alt sekmeleri** profil ayarları panelini
+  boşaltmıyor.
+- **Genel sekmesinde tek Kaydet** artık AI bölümündeki değişiklikleri de
+  kaydediyor.
+- **"Kaydedildi ✓"** her bölümde görünüyor.
+- **Yeni profiller Türkçe başlıyor**; İngilizce modda Türkçe kalan ~80 metin
+  çevrildi.
+- **Kısayol kaydedici:** Esc ile iptal, Ctrl ya da Alt zorunlu, çakışma
+  kontrolü.
+
+### Düzeltmeler — Güvenlik ve kararlılık
+
+- **Uygulama kilidi** artık ana süreçte uygulanıyor: kilitliyken arkadaki
+  düğmelere klavyeyle ulaşılamıyor, profil dışa aktarma gibi işlemler
+  reddediliyor.
+- **Güncelleme indirmesi** takılırsa gerçekten iptal ediliyor (önceden
+  "indirilemedi" deyip arkada inmeye devam ediyor, bitince uyarmadan
+  kuruyordu).
+- **NeRoChAt:** cevap gelirken sohbet değiştirilemiyor (cevap yanlış sohbete
+  yazılıyordu); seçtiğin model sekmeye dönünce korunuyor.
+
 ## v4.4.33 - 2026-10-31
 
 ### Yeni Özellikler
