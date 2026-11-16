@@ -1818,7 +1818,7 @@
                                      accepts any typed name, cloud tag included — no
                                      separate "cloud model" input needed here. -->
                                 <div class="section" id="ollamaCloudModelHint" style="display:none">
-                                    <div class="hint" data-i18n="ui_ollamaCloudModelHintText">Cloud modunda model "indirilmez" — hangi modeli kullanacağını her profilin kendi Ayarlar → AI sekmesindeki "Model (Ollama)" alanına yazarsın (örn. minimax-m3:cloud, gpt-oss:120b-cloud).</div>
+                                    <div class="hint" data-i18n="ui_ollamaCloudModelHintText">Cloud modunda model "indirilmez" — hangi modeli kullanacağını her profilin kendi Ayarlar → Genel → AI bölümündeki "Model" alanına yazarsın (örn. minimax-m3:cloud, gpt-oss:120b-cloud).</div>
                                 </div>
                                 <div class="section">
                                     <div class="sectionTitle" id="ollamaPersonalityTitle">Kişilik</div>
@@ -2428,7 +2428,7 @@
                 <span id="ollamaModeChoiceTitle" data-i18n="ui_ollamaModeChoiceTitle">AI Nasıl Çalışsın?</span>
             </div>
             <div class="modalBody">
-                <div class="hint" id="ollamaModeChoiceHint" data-i18n="ui_ollamaModeChoiceHint">AI özellikleri Ollama kullanıyor — bilgisayarına kurabilir, ya da hiçbir şey kurmadan Ollama'nın bulut API'sine bir anahtarla bağlanabilirsin. İstediğin zaman Ayarlar'dan değiştirebilirsin.</div>
+                <div class="hint" id="ollamaModeChoiceHint" data-i18n="ui_ollamaModeChoiceHint">AI özellikleri için bir sağlayıcı seç: bilgisayarına yerel bir model sunucusu kurabilir (varsayılan Ollama), ya da hiçbir şey kurmadan bir bulut sağlayıcısına API anahtarıyla bağlanabilirsin. LM Studio, llama.cpp gibi diğer yerel sunucuları ya da Claude Code gibi kurulu bir AI aracını Ayarlar → Bağlantı'dan seçebilirsin.</div>
                 <button id="ollamaModeChoiceLocalBtn" data-i18n="ui_ollamaModeChoiceLocalBtn" class="miniBtn" style="width:100%; margin-top:12px;">💻 Yerel Ollama Kur</button>
                 <button id="ollamaModeChoiceApiBtn" data-i18n="ui_ollamaModeChoiceApiBtn" class="miniBtn" style="width:100%; margin-top:8px;">☁️ API Anahtarı Kullan</button>
                 <button id="ollamaModeChoiceCancelBtn" data-i18n="ui_ollamaModeChoiceCancelBtn" class="miniBtn" style="width:100%; margin-top:8px; opacity:.7;">Şimdi Değil</button>
@@ -2781,7 +2781,7 @@
             ui_neroPopupRangeLoadBtn: "Yükle",
             ui_neroPopupSendBtn: "Gönder",
             ui_ollamaModeChoiceTitle: "AI Nasıl Çalışsın?",
-            ui_ollamaModeChoiceHint: "AI özellikleri Ollama kullanıyor — bilgisayarına kurabilir, ya da hiçbir şey kurmadan Ollama'nın bulut API'sine bir anahtarla bağlanabilirsin. İstediğin zaman Ayarlar'dan değiştirebilirsin.",
+            ui_ollamaModeChoiceHint: "AI özellikleri için bir sağlayıcı seç: bilgisayarına yerel bir model sunucusu kurabilir (varsayılan Ollama), ya da hiçbir şey kurmadan bir bulut sağlayıcısına API anahtarıyla bağlanabilirsin. LM Studio, llama.cpp gibi diğer yerel sunucuları ya da Claude Code gibi kurulu bir AI aracını Ayarlar → Bağlantı'dan seçebilirsin.",
             ui_ollamaModeChoiceLocalBtn: "💻 Yerel Ollama Kur",
             ui_ollamaModeChoiceApiBtn: "☁️ API Anahtarı Kullan",
             ui_ollamaModeChoiceCancelBtn: "Şimdi Değil",
@@ -3108,7 +3108,7 @@
             ui_neroPopupRangeLoadBtn: "Load",
             ui_neroPopupSendBtn: "Send",
             ui_ollamaModeChoiceTitle: "How Should AI Run?",
-            ui_ollamaModeChoiceHint: "AI features use Ollama — you can install it on your computer, or connect to Ollama's cloud API with a key without installing anything. You can change this any time in Settings.",
+            ui_ollamaModeChoiceHint: "Pick a provider for the AI features: install a local model server on your computer (Ollama by default), or connect to a cloud provider with an API key without installing anything. Other local servers like LM Studio or llama.cpp, or an installed AI tool like Claude Code, can be picked from Settings → Connection.",
             ui_ollamaModeChoiceLocalBtn: "💻 Install Local Ollama",
             ui_ollamaModeChoiceApiBtn: "☁️ Use an API Key",
             ui_ollamaModeChoiceCancelBtn: "Not Now",
@@ -5364,7 +5364,7 @@
         {
             title: { tr: 'AI', en: 'AI' },
             fields: [
-                { key: 'aiModel', type: 'text', label: { tr: 'Model (Ollama)', en: 'Model (Ollama)' } },
+                { key: 'aiModel', type: 'text', label: { tr: 'Model', en: 'Model' } },
                 { key: 'systemPrompt', type: 'textarea', label: { tr: 'Sistem promptu (genel kişilik)', en: 'System prompt (global personality)' } },
                 { key: 'replyMode', type: 'toggle', label: { tr: 'Alıntılı yanıt modu', en: 'Quoted-reply mode' } },
                 { key: 'vectorMemoryEnabled', type: 'toggle', label: { tr: 'Vektör tabanlı hafıza', en: 'Vector-based memory' },

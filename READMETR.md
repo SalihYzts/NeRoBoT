@@ -26,7 +26,7 @@
                                                                                                     
 ```
 
-**NeRoBoT**, **WhatsApp** ve **Telegram** üzerinde yerel yapay zeka destekli botlar çalıştıran bir Windows masaüstü uygulamasıdır — aynı anda birden fazla hesap/platform, her biri tamamen izole — ayrıca hiçbir sohbet hesabına bağlı olmayan bağımsız bir AI sohbeti (**NeRoChAt**) de içerir. Her şey kendi bilgisayarındaki [Ollama](https://ollama.com/) modelleri üzerinde çalışır.
+**NeRoBoT**, **WhatsApp** ve **Telegram** üzerinde yapay zeka destekli botlar çalıştıran bir Windows ve Linux masaüstü uygulamasıdır — aynı anda birden fazla hesap/platform, her biri tamamen izole — ayrıca hiçbir sohbet hesabına bağlı olmayan bağımsız bir AI sohbeti (**NeRoChAt**) de içerir. Dilediğiniz AI sağlayıcısıyla çalışır: kendi bilgisayarınızda bir yerel sunucu (Ollama, LM Studio, llama.cpp, vLLM ya da OpenAI uyumlu herhangi biri), bir bulut API (OpenAI, OpenRouter, Groq, Together AI, Ollama Cloud ya da OpenAI uyumlu herhangi biri) veya zaten kullandığınız bir CLI ajanı (Claude Code, Codex, Gemini CLI, OpenCode, Hermes) — bkz. [AI Sağlayıcıları](#ai-sağlayıcıları).
 
 Geliştirici: **Salih Yazıtaş**
 
@@ -39,6 +39,7 @@ Geliştirici: **Salih Yazıtaş**
 ## İçindekiler
 
 - [Özellikler](#özellikler)
+- [AI Sağlayıcıları](#ai-sağlayıcıları)
 - [Gereksinimler](#gereksinimler)
 - [Proje Yapısı](#proje-yapısı)
 - [Kurulum](#kurulum)
@@ -66,7 +67,7 @@ Geliştirici: **Salih Yazıtaş**
 - Kalıcı Oturumlar — her profilin QR kodunu bir kez okutun; girişler yeniden başlatmalarda korunur
 
 **Bot (her WhatsApp/Telegram profili için)**
-- Yerel YZ Desteği — Ollama üzerinden çektiğiniz istediğiniz modeli (görsel destekli modeller dahil) kullanın
+- Her AI Sağlayıcısı — yerel sunucular, bulut API'ler ya da kurulu bir CLI ajanı (bkz. [AI Sağlayıcıları](#ai-sağlayıcıları)); sağlayıcı destekliyorsa görsel destekli modeller de çalışır
 - Sohbet Hafızası — her sohbet/kullanıcı için ayrı bağlam, isteğe bağlı ortak hafızalı grup modu
 - Görsel & Dosya Okuma — görselleri (vision), PDF, Word ve düz metin/kod dosyalarını okuyup modele aktarır
 - AI Görsel Üretimi — istek üzerine görsel üretip sohbete geri gönderir (Pollinations, OpenAI, Stability AI ya da kendi bilgisayarındaki ComfyUI: checkpoint'lerinden birini seç veya Flux/SD3/LoRA kurulumları için dışa aktardığın API iş akışını yapıştır)
@@ -83,15 +84,29 @@ Geliştirici: **Salih Yazıtaş**
 
 ---
 
+## AI Sağlayıcıları
+
+NeRoBoT tek bir AI sağlayıcısına bağlı değil. AI özelliklerini ilk açtığınızda AI'ın nasıl çalışacağını seçersiniz; istediğiniz zaman NeRoChAt ayarlarındaki **Bağlantı** bölümünden değiştirebilirsiniz. Aynı seçim WhatsApp/Telegram botlarında, NeRoChAt'ta, hızlı popup'ta ve yazı düzeltme kısayolunda kullanılır.
+
+| Mod | Sağlayıcılar | Notlar |
+|---|---|---|
+| **Yerel sunucu** | Ollama, LM Studio, llama.cpp (`llama-server`), vLLM, OpenAI uyumlu başka herhangi bir sunucu | Anahtar gerekmez, adres değiştirilebilir. Uygulama içinden model indirmek yalnızca Ollama'da var; diğerlerinde modelleri kendi arayüzlerinden yönetirsiniz. |
+| **Bulut API** | OpenAI, OpenRouter, Groq, Together AI, Ollama Cloud, OpenAI uyumlu başka herhangi bir adres | O sağlayıcının API anahtarı gerekir. Anahtarlar sağlayıcı başına ayrı saklanır; sağlayıcı değiştirince bir sağlayıcının anahtarı diğerine gönderilmez. |
+| **CLI ajanı** | Claude Code, OpenAI Codex, Gemini CLI, OpenCode, Hermes | Bilgisayarınızda zaten kurulu ve giriş yapılmış bir ajanı kullanır, ayrıca anahtar girmezsiniz. Bu modda görsel okuma, vektör hafıza ve model indirme yok. |
+
+Görsel üretimi ayrı ayarlanır: Pollinations (anahtarsız), OpenAI, Stability AI ya da kendi bilgisayarınızdaki ComfyUI.
+
+---
+
 ## Gereksinimler
 
-**Sadece uygulamayı kullanmak mı istiyorsunuz?** Uygulamanın kendisi dışında hiçbir şey kurmanıza gerek yok — aşağıdaki [Kurulum](#kurulum) bölümüne bakın. [Ollama](https://ollama.com/) sadece AI özelliklerini açtığınızda gerekiyor ve installer sizin için kurmayı teklif ediyor.
+**Sadece uygulamayı kullanmak mı istiyorsunuz?** Uygulamanın kendisi dışında hiçbir şey kurmanıza gerek yok — aşağıdaki [Kurulum](#kurulum) bölümüne bakın. AI özelliklerini ilk açtığınızda bir sağlayıcı seçersiniz: yerel sunucu, bulut API anahtarı ya da kurulu bir CLI ajanı (bkz. [AI Sağlayıcıları](#ai-sağlayıcıları)). Modelleri yerelde çalıştırmak isteyip henüz hiçbir şey kurmadıysanız uygulama sizin için [Ollama](https://ollama.com/) kurabilir.
 
 **Kaynak koddan çalıştırma/derleme:**
 
 - **Node.js** >= 18.x
 - **npm** >= 9.x
-- **Windows** (paketlenmiş installer/otomatik güncelleme şu an sadece Windows'ta çalışıyor; kaynak koddan çalıştırmak platformlar arası çalışır)
+- Paketlenmiş sürümler için **Windows** ya da **Linux** (`.exe` installer, `.AppImage`, Arch paketi); kaynak koddan çalıştırmak platformlar arası çalışır
 
 > Chrome **gerekmez** — uygulama kendi tarayıcı motoruyla (Electron) gelir.
 
@@ -117,7 +132,10 @@ nerobot/
 ├── src/
 │   ├── bot.js                      # WhatsApp istemcisi & mesaj yönlendirme
 │   ├── telegram-bot.js             # Telegram istemcisi & mesaj yönlendirme (bot.js'in yansıması)
-│   ├── ai.js                       # Ollama entegrasyonu (sohbet, görsel anlama, görsel-niyet sınıflandırma)
+│   ├── ai.js                       # AI mantığı (sohbet, görsel anlama, görsel-niyet sınıflandırma), sağlayıcıdan bağımsız
+│   ├── ai-provider.js              # Sağlayıcı kaydı: yerel çalışma zamanları, bulut API'ler, bağlantı çözümleme
+│   ├── ai-client.js                # Tüm sağlayıcılar için tek istemci (Ollama API, OpenAI uyumlu API, CLI ajanları)
+│   ├── ai-agents.js                # Kurulu CLI ajanlarını bulur ve çalıştırır (Claude Code, Codex, Gemini CLI …)
 │   ├── imagegen.js                 # AI görsel üretim altyapısı
 │   ├── config.js                   # Profil bazlı durum/ayar kalıcılığı
 │   ├── profiles.js                 # Çoklu profil kayıt defteri (oluştur/yeniden adlandır/sil/dışa-içe aktar)
@@ -126,11 +144,11 @@ nerobot/
 │   ├── ratelimit.js                # Token-bucket hız sınırlayıcı
 │   ├── utils.js / telegram-utils.js
 │   ├── file-extract.js             # AI'ın okuyabilmesi için PDF/Word/metin çıkarımı
-│   └── ollama-installer.js         # Windows'ta Ollama'yı algılar/sessizce kurar
+│   └── ollama-installer.js         # İsteğe bağlı: Windows'ta Ollama'yı algılar/sessizce kurar
 ├── scripts/                        # Sadece geliştirme sırasında kullanılan araçlar, pakete dahil edilmez
 │   ├── release.js                  # `npm run release`'in arkasındaki betik — kurulum + derleme + yayın, hepsi bir arada
 │   └── gen-icons.js                # logo.svg'den app/ui/icon.ico + icon.png'yi yeniden üretir
-└── build/installer.nsh             # Özel NSIS kurulum-zamanı kancası (en iyi çaba Ollama kurulumu)
+└── build/installer.nsh             # Özel NSIS kurulum-zamanı kancası (isteğe bağlı, en iyi çaba Ollama kurulumu)
 ```
 
 Tüm profil verisi (WhatsApp/Telegram oturumları, profil bazlı ayarlar, NeRoChAt konuşmaları, uygulama config'i) bu klasörün **dışında**, `Documents/NeRoBoT/NeRoBoT_db` altında saklanır — yani uygulamayı kaldırmak/taşımak ona hiç dokunmaz. Altındaki hiçbir şey git'e commit edilmez (bkz. `.gitignore`).
@@ -141,7 +159,7 @@ Tüm profil verisi (WhatsApp/Telegram oturumları, profil bazlı ayarlar, NeRoCh
 
 ### Windows: Installer (önerilen)
 
-[GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) sayfasından `NeRoBoT Setup x.y.z.exe` dosyasını indirip çalıştırın. NeRoBoT normal bir Windows uygulaması olarak kurulur (Start Menu kısayolu, Windows arama kutusundan bulunabilir, "Program Ekle/Kaldır"da kendi uninstaller'ıyla listelenir) — `git clone`/`npm install` gerekmez. [Ollama](https://ollama.com/) kurulu değilse installer onu arka planda sessizce indirip kurmayı dener (bu, kurulumun kendisini asla beklemez/geciktirmez); bu adım atlanır veya başarısız olursa (örn. kurulum sırasında internet yoksa) NeRoBoT, AI Bot'u ilk açtığınızda kurulumu tekrar teklif eder. Bundan sonra uygulama her açılışta güncelleme kontrolü yapıp kendini otomatik günceller.
+[GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) sayfasından `NeRoBoT Setup x.y.z.exe` dosyasını indirip çalıştırın. NeRoBoT normal bir Windows uygulaması olarak kurulur (Start Menu kısayolu, Windows arama kutusundan bulunabilir, "Program Ekle/Kaldır"da kendi uninstaller'ıyla listelenir) — `git clone`/`npm install` gerekmez. [Ollama](https://ollama.com/) kurulu değilse installer onu arka planda sessizce indirip kurmayı dener (bu, kurulumun kendisini asla beklemez/geciktirmez); bu adım atlanır veya başarısız olursa (örn. kurulum sırasında internet yoksa) AI özelliklerini ilk açtığınızda yerel kurulumu seçerseniz NeRoBoT kurulumu tekrar teklif eder. Bulut API ya da CLI ajanı kullanıyorsanız Ollama'ya hiç gerek yok. Bundan sonra uygulama her açılışta güncelleme kontrolü yapıp kendini otomatik günceller.
 
 ### Linux: pacman paketi (Arch tabanlı dağıtımlar, önerilen)
 
@@ -186,9 +204,9 @@ npm install
 npm run gen-icons
 ```
 
-### 3. Ollama'yı Kurun ve Bir Model İndirin
+### 3. Bir AI Sağlayıcısı Ayarlayın
 
-[Ollama](https://ollama.com/) sitesinden uygulamayı indirip kurun, ardından kullanmak istediğiniz modeli/modelleri indirin — bunlardan birini, ya da Ollama'nın desteklediği başka herhangi bir modeli seçebilirsiniz:
+[AI Sağlayıcıları](#ai-sağlayıcıları) bölümündeki herhangi biri çalışır; seçimi AI özelliklerini ilk açtığınızda uygulamanın içinden yaparsınız. Bulut API için yalnızca anahtar yeterli, CLI ajanının da kurulu ve giriş yapılmış olması yeterli. Modelleri Ollama ile yerelde çalıştırmak için [ollama.com](https://ollama.com/) sitesinden Ollama'yı kurup istediğiniz modelleri indirin, örneğin:
 
 ```bash
 ollama pull llama3.2
@@ -276,7 +294,11 @@ Tüm komutlar **debug prefix** (varsayılan `!`) ile başlar ve çoğu alt-komut
 | Komut | Açıklama |
 |---|---|
 | `!aichat` | AI sohbetini aç/kapat. |
-| `!model [isim]` | Mevcut modeli ve yüklü Ollama modellerini gösterir; isim verilirse modeli değiştirir. |
+| `!model list` | Global modeli ve sohbet bazlı tüm override'ları gösterir. |
+| `!model global <isim>` | Ana (global) modeli değiştirir. |
+| `!model chat [ID] <isim>` | Bu sohbetin (ya da verilen sohbetin) modelini değiştirir. |
+| `!model chat reset [ID]` | Sohbetin override'ını kaldırır, global modele döner. |
+| `!model installed` | Seçili AI sağlayıcısındaki modelleri listeler. |
 | `!personality` | Bu sohbetin aktif kişiliğini ve global kişiliği gösterir. |
 | `!personality chat <metin>` | Sadece bu sohbet için kişiliği günceller. |
 | `!personality global <metin>` | Global kişiliği günceller (yeni/temizlenmiş sohbetlere uygulanır). |
@@ -423,7 +445,7 @@ Numara ayrıştırma ve hız mantığı `src/broadcast.js`'te ve testleri `test/
 | Ana Prefix | `.` |
 | Debug Prefix | `!` |
 | Yoksayma Prefix | `/` |
-| AI Model | sabit bir varsayılan yok — çektiğiniz herhangi bir Ollama modelini seçebilirsiniz (sohbet bazlı ya da global, `!model` veya NeRoChAt ayarlarıyla) |
+| AI Model | sabit bir varsayılan yok — AI sağlayıcınızın sunduğu herhangi bir modeli seçebilirsiniz (sohbet bazlı ya da global, `!model` veya NeRoChAt ayarlarıyla) |
 | Sistem Promptu | `Your name is NeRoBoT. You were created by Salih Yazıtaş.` |
 | Yardım Dili | `en` (İngilizce) |
 | AI Chat | **Kapalı** — `!aichat` ya da uygulamanın AI Bot anahtarıyla açın |
@@ -453,7 +475,7 @@ whatsapp-web.js, Puppeteer'a bağımlı — o da sadece `npm install`'ın başar
 <details>
 <summary><b>ECONNREFUSED 127.0.0.1:11434</b></summary>
 
-Ollama çalışmıyor. Terminalde `ollama serve` komutunu çalıştırın, ya da NeRoChAt/AI Bot anahtarının onu sizin için başlatmasına izin verin.
+11434 Ollama'nın portu, yani Ollama çalışmıyor. Terminalde `ollama serve` komutunu çalıştırın, ya da NeRoChAt/AI Bot anahtarının onu sizin için başlatmasına izin verin. Başka bir yerel sunucu (LM Studio, llama.cpp, vLLM …) kullanıyorsanız aynı hata o sunucunun portuyla çıkar: sunucuyu başlatın ve adresini NeRoChAt ayarlarındaki **Bağlantı** bölümünden kontrol edin.
 
 </details>
 

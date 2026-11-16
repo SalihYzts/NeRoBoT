@@ -1,7 +1,7 @@
 {
   "name": "nerobot",
   "version": "4.4.37",
-  "description": "NeRoBoT masaüstü uygulaması",
+  "description": "Multi-account WhatsApp & Telegram AI bots plus a standalone AI chat — works with local servers (Ollama, LM Studio, llama.cpp, vLLM), cloud APIs (OpenAI, OpenRouter, Groq, Together AI) or installed CLI agents (Claude Code, Codex, Gemini CLI)",
   "main": "app/main.js",
   "scripts": {
     "start": "electron .",
@@ -17,6 +17,9 @@
     "whatsapp-bot",
     "telegram-bot",
     "ollama",
+    "lm-studio",
+    "openai",
+    "openrouter",
     "local-llm",
     "ai-chatbot",
     "electron",

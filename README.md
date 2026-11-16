@@ -37,7 +37,7 @@
 ---
 
 ## What is NeRoBoT?
-NeRoBoT is a Windows desktop app that runs local-AI-powered bots on top of **WhatsApp** and **Telegram** — multiple accounts/platforms at once, each fully isolated — plus a standalone AI chat (**NeRoChAt**) that isn't tied to any chat account at all. Everything runs on [Ollama](https://ollama.com/) models on your own machine.
+NeRoBoT is a desktop app for Windows and Linux that runs AI-powered bots on top of **WhatsApp** and **Telegram** — multiple accounts/platforms at once, each fully isolated — plus a standalone AI chat (**NeRoChAt**) that isn't tied to any chat account at all. It works with the AI provider of your choice: a local server on your own machine (Ollama, LM Studio, llama.cpp, vLLM, or anything OpenAI-compatible), a cloud API (OpenAI, OpenRouter, Groq, Together AI, Ollama Cloud, or anything OpenAI-compatible), or a CLI agent you already use (Claude Code, Codex, Gemini CLI, OpenCode, Hermes) — see [AI Providers](#ai-providers).
 
 > Developer: **Salih Yazıtaş**
 
@@ -49,6 +49,7 @@ NeRoBoT is a Windows desktop app that runs local-AI-powered bots on top of **Wha
 ## Table of Contents
 
 - [Features](#features)
+- [AI Providers](#ai-providers)
 - [Requirements](#requirements)
 - [Project Structure](#project-structure)
 - [Installation](#installation)
@@ -76,7 +77,7 @@ NeRoBoT is a Windows desktop app that runs local-AI-powered bots on top of **Wha
 - Persistent Sessions — scan each profile's QR code once; logins survive restarts
 
 **Bot (per WhatsApp/Telegram profile)**
-- Local AI Support — use any model pulled through Ollama, including vision models
+- Any AI Provider — local servers, cloud APIs, or an installed CLI agent (see [AI Providers](#ai-providers)); vision models work wherever the provider supports them
 - Chat Memory — separate context per chat/user, with optional shared-memory group mode
 - Image & File Reading — reads images (vision), PDF, Word, and plain-text/code files and feeds them to the model
 - AI Image Generation — generates images on request and sends them back into the chat (Pollinations, OpenAI, Stability AI, or your own local ComfyUI: pick any of its checkpoints, or paste an exported API workflow for Flux/SD3/LoRA setups)
@@ -93,15 +94,29 @@ NeRoBoT is a Windows desktop app that runs local-AI-powered bots on top of **Wha
 
 ---
 
+## AI Providers
+
+NeRoBoT isn't tied to one AI vendor. You pick how the AI runs the first time you turn on AI features, and can switch any time from the **Connection** section of NeRoChAt's settings. The same choice drives the WhatsApp/Telegram bots, NeRoChAt, the quick popup, and the fix-text shortcut.
+
+| Mode | Providers | Notes |
+|---|---|---|
+| **Local server** | Ollama, LM Studio, llama.cpp (`llama-server`), vLLM, any other OpenAI-compatible server | No key needed; the address is editable. Only Ollama can download models from inside the app; with the others you manage models in their own UI. |
+| **Cloud API** | OpenAI, OpenRouter, Groq, Together AI, Ollama Cloud, any other OpenAI-compatible endpoint | Needs that provider's API key. Keys are stored per provider, so switching providers never sends one provider's key to another. |
+| **CLI agent** | Claude Code, OpenAI Codex, Gemini CLI, OpenCode, Hermes | Uses an agent that's already installed and signed in on your machine, so no extra key. No image reading, vector memory, or model downloads in this mode. |
+
+Image generation is configured separately: Pollinations (no key), OpenAI, Stability AI, or your own local ComfyUI.
+
+---
+
 ## Requirements
 
-**Just want to use the app?** Nothing to install beyond the app itself — see [Installation](#installation) below. [Ollama](https://ollama.com/) is only needed once you turn on AI features, and the installer offers to set it up for you.
+**Just want to use the app?** Nothing to install beyond the app itself — see [Installation](#installation) below. The first time you turn on AI features, you choose a provider — a local server, a cloud API key, or an installed CLI agent (see [AI Providers](#ai-providers)). If you want to run models locally and have nothing set up yet, the app can install [Ollama](https://ollama.com/) for you.
 
 **Building/running from source:**
 
 - **Node.js** >= 18.x
 - **npm** >= 9.x
-- **Windows** (the packaged installer/auto-update are Windows-only for now; running from source works cross-platform)
+- **Windows** or **Linux** for the packaged builds (`.exe` installer, `.AppImage`, Arch package); running from source works cross-platform
 
 > Chrome is **not** required — the app ships with its own browser engine (Electron).
 
@@ -127,7 +142,10 @@ nerobot/
 ├── src/
 │   ├── bot.js                      # WhatsApp client & message routing
 │   ├── telegram-bot.js             # Telegram client & message routing (mirrors bot.js)
-│   ├── ai.js                       # Ollama integration (chat, vision, image-intent classification)
+│   ├── ai.js                       # AI logic (chat, vision, image-intent classification), provider-agnostic
+│   ├── ai-provider.js              # Provider registry: local runtimes, cloud APIs, connection resolution
+│   ├── ai-client.js                # One client for every provider (Ollama API, OpenAI-compatible API, CLI agents)
+│   ├── ai-agents.js                # Finds and runs installed CLI agents (Claude Code, Codex, Gemini CLI …)
 │   ├── imagegen.js                 # AI image generation backend
 │   ├── config.js                   # Per-profile state/settings persistence
 │   ├── profiles.js                 # Multi-profile registry (create/rename/delete/export/import)
@@ -136,11 +154,11 @@ nerobot/
 │   ├── ratelimit.js                # Token-bucket rate limiter
 │   ├── utils.js / telegram-utils.js
 │   ├── file-extract.js             # PDF/Word/text extraction for the AI to read
-│   └── ollama-installer.js         # Detects/silently installs Ollama on Windows
+│   └── ollama-installer.js         # Optional: detects/silently installs Ollama on Windows
 ├── scripts/                        # Dev-only tooling, not shipped in the packaged app
 │   ├── release.js                  # Behind `npm run release` — setup + build + publish, all in one
 │   └── gen-icons.js                # Regenerates app/ui/icon.ico + icon.png from logo.svg
-└── build/installer.nsh             # Custom NSIS install-time hook (best-effort Ollama install)
+└── build/installer.nsh             # Custom NSIS install-time hook (optional, best-effort Ollama install)
 ```
 
 All profile data (WhatsApp/Telegram sessions, per-profile settings, NeRoChAt conversations, app config) is stored **outside** this folder, under `Documents/NeRoBoT/NeRoBoT_db` — so uninstalling/moving the app never touches it. Nothing under it is committed to git (see `.gitignore`).
@@ -151,7 +169,7 @@ All profile data (WhatsApp/Telegram sessions, per-profile settings, NeRoChAt con
 
 ### Windows: Installer (recommended)
 
-Download `NeRoBoT Setup x.y.z.exe` from the [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) page and run it. It installs NeRoBoT as a normal Windows app (Start Menu shortcut, findable from the Windows search box, with its own uninstaller listed in "Add or Remove Programs") — no `git clone`/`npm install` needed. If [Ollama](https://ollama.com/) isn't already installed, the installer attempts to fetch and install it silently in the background (this never blocks or delays the install itself); if that's skipped or fails (e.g. no internet at install time), NeRoBoT will offer to install it the first time you turn on the AI Bot. From then on, the app checks for updates on every launch and updates itself automatically.
+Download `NeRoBoT Setup x.y.z.exe` from the [GitHub Releases](https://github.com/SalihYzts/NeRoBoT/releases) page and run it. It installs NeRoBoT as a normal Windows app (Start Menu shortcut, findable from the Windows search box, with its own uninstaller listed in "Add or Remove Programs") — no `git clone`/`npm install` needed. If [Ollama](https://ollama.com/) isn't already installed, the installer attempts to fetch and install it silently in the background (this never blocks or delays the install itself); if that's skipped or fails (e.g. no internet at install time), NeRoBoT will offer to install it if you pick a local setup when you first turn on AI features. You don't need Ollama at all if you use a cloud API or a CLI agent instead. From then on, the app checks for updates on every launch and updates itself automatically.
 
 ### Linux: pacman package (Arch-based distros, recommended)
 
@@ -196,9 +214,9 @@ npm install
 npm run gen-icons
 ```
 
-### 3. Install Ollama and Pull a Model
+### 3. Set Up an AI Provider
 
-Download and install Ollama from [ollama.com](https://ollama.com/), then pull whichever model(s) you want to use — pick any of these, or any other model Ollama supports:
+Any provider from [AI Providers](#ai-providers) works; you pick it inside the app the first time you turn on AI features. For a cloud API you only need the key, and for a CLI agent it just has to be installed and signed in. To run models locally with Ollama, install it from [ollama.com](https://ollama.com/) and pull whichever model(s) you want, for example:
 
 ```bash
 ollama pull llama3.2
@@ -286,7 +304,11 @@ All commands use the **debug prefix** (`!` by default) followed by the command n
 | Command | Description |
 |---|---|
 | `!aichat` | Enables/disables AI chat. |
-| `!model [name]` | Shows current model + installed Ollama models, or changes the model. |
+| `!model list` | Shows the global model and every per-chat override. |
+| `!model global <name>` | Changes the main (global) model. |
+| `!model chat [ID] <name>` | Changes this chat's (or the given chat's) model. |
+| `!model chat reset [ID]` | Removes a chat's override so it falls back to the global model. |
+| `!model installed` | Lists the models your current AI provider offers. |
 | `!personality` | Shows this chat's active personality and the global personality. |
 | `!personality chat <text>` | Sets this chat's personality only. |
 | `!personality global <text>` | Sets the global personality (applies to new/cleared chats). |
@@ -433,7 +455,7 @@ The parsing and pacing logic lives in `src/broadcast.js` with tests in `test/bro
 | Main Prefix | `.` |
 | Debug Prefix | `!` |
 | Ignore Prefix | `/` |
-| AI Model | none fixed — pick any Ollama model you've pulled (per-chat or global, via `!model` or NeRoChAt settings) |
+| AI Model | none fixed — pick any model your AI provider offers (per-chat or global, via `!model` or NeRoChAt settings) |
 | System Prompt | `Your name is NeRoBoT. You were created by Salih Yazıtaş.` |
 | Help Language | `en` (English) |
 | AI Chat | **Disabled** — turn on with `!aichat` or the app's AI Bot toggle |
@@ -463,7 +485,7 @@ whatsapp-web.js depends on Puppeteer, which caches a copy of Chrome under your u
 <details>
 <summary><b>ECONNREFUSED 127.0.0.1:11434</b></summary>
 
-Ollama is not running. Run `ollama serve` in your terminal, or let NeRoChAt/the AI Bot toggle start it for you.
+Port 11434 is Ollama's, so Ollama is not running. Run `ollama serve` in your terminal, or let NeRoChAt/the AI Bot toggle start it for you. With another local server (LM Studio, llama.cpp, vLLM …) the same error shows that server's port: start it, and check its address in the **Connection** section of NeRoChAt's settings.
 
 </details>
 

@@ -28,7 +28,7 @@ AI Yönetimi
 - model chat [isim]        → Bu sohbetin modelini değiştirir.
 - model chat [ID] [isim]   → Belirtilen sohbetin modelini değiştirir.
 - model chat reset [ID]    → Sohbetin override'ını kaldırır, global'e döner.
-- model installed          → Yüklü Ollama modellerini listeler.
+- model installed          → Seçili AI sağlayıcısındaki modelleri listeler.
 - personality             → Bu sohbetin aktif kişiliğini ve global kişiliği gösterir.
 - personality chat [metin]→ Sadece bu sohbet için kişiliği günceller.
 - personality global [metin]→ Global kişiliği günceller.
@@ -121,7 +121,7 @@ AI Management
 - model chat [name]        → Changes this chat's model.
 - model chat [ID] [name]   → Changes a specific chat's model.
 - model chat reset [ID]    → Removes a chat's override, falls back to global.
-- model installed          → Lists installed Ollama models.
+- model installed          → Lists the models your AI provider offers.
 - personality             → Shows this chat's active personality and the global personality.
 - personality chat [text] → Sets this chat's personality only.
 - personality global [text]→ Sets the global personality.

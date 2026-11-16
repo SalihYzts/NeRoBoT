@@ -3820,7 +3820,7 @@ async function runFixTextCorrections(session) {
     if (!draft) { await removeFixTextOverlay(session); return; }
     await injectLoadingOverlay(session, 'Düzeltmeler hazırlanıyor…');
     const variants = await getTextCorrections(session, draft);
-    if (!variants) { await injectFixTextError(session, 'Öneriler alınamadı — Ollama bağlantısını/modelini kontrol et (ayrıntı: Loglar paneli).'); return; }
+    if (!variants) { await injectFixTextError(session, 'Öneriler alınamadı — AI bağlantısını/modelini kontrol et (ayrıntı: Loglar paneli).'); return; }
     const currentDraft = await readComposeBoxText(session);
     if (!currentDraft) { await removeFixTextOverlay(session); return; }
     const rows = FIX_TEXT_VARIANT_LABELS
@@ -3852,7 +3852,7 @@ async function handleFixTextAction(session, action) {
         if (!draft) { await removeFixTextOverlay(session); return; }
         await injectLoadingOverlay(session, `${lang.label}'ye çevriliyor…`);
         const translated = await getTranslation(session, draft, lang.label);
-        if (!translated) { await injectFixTextError(session, 'Çeviri alınamadı — Ollama bağlantısını/modelini kontrol et (ayrıntı: Loglar paneli).'); return; }
+        if (!translated) { await injectFixTextError(session, 'Çeviri alınamadı — AI bağlantısını/modelini kontrol et (ayrıntı: Loglar paneli).'); return; }
         const currentDraft = await readComposeBoxText(session);
         if (!currentDraft) { await removeFixTextOverlay(session); return; }
         await injectSuggestionRowsOverlay(session, [{ label: lang.label, text: translated }]);
